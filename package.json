@@ -1,0 +1,19 @@
+{
+  "name": "sena-guia-aprendizaje-app",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build:frontend": "npm --workspace frontend run build",
+    "lint:frontend": "npm --workspace frontend run lint",
+    "typecheck:frontend": "npm --workspace frontend run typecheck",
+    "dev:backend": "cd backend && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
+    "lint:backend": "cd backend && uv run ruff check . && uv run mypy src",
+    "test:backend": "cd backend && uv run pytest",
+    "format": "npm --workspace frontend run format && cd backend && uv run ruff format .",
+    "format:check": "npm --workspace frontend run format:check && cd backend && uv run ruff format --check ."
+  }
+}

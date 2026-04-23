@@ -1,0 +1,1 @@
+"""Programa domain module placeholder."""

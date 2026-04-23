@@ -1,0 +1,11 @@
+frontend/.next
+frontend/node_modules
+backend/.venv
+backend/.mypy_cache
+backend/.pytest_cache
+backend/.ruff_cache
+coverage
+dist
+build
+package-lock.json
+backend/uv.lock

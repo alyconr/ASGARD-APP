@@ -1,0 +1,1 @@
+"""Proyecto domain module placeholder."""

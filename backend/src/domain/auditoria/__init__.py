@@ -1,0 +1,1 @@
+"""Auditoria domain module placeholder."""

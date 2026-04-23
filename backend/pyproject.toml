@@ -1,0 +1,48 @@
+[project]
+name = "sena-guia-aprendizaje-backend"
+version = "0.1.0"
+description = "Backend base de la Fase 1 para la aplicacion de guias de aprendizaje SENA."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "alembic>=1.18.4",
+  "asyncpg>=0.29.0,<1.0.0",
+  "fastapi>=0.115.0,<1.0.0",
+  "psycopg[binary]>=3.3.3",
+  "pydantic-settings>=2.8.0,<3.0.0",
+  "sqlalchemy>=2.0.36,<3.0.0",
+  "uvicorn[standard]>=0.32.0,<1.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0,<1.0.0",
+  "mypy>=1.14.0,<2.0.0",
+  "pytest>=8.3.0,<9.0.0",
+  "ruff>=0.11.0,<1.0.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+packages = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
