@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, func
+from sqlalchemy import CheckConstraint, DateTime, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,11 @@ class BorradorSesion(UUIDPrimaryKeyMixin, Base):
 
     __tablename__ = "borradores_sesion"
     __table_args__ = (
+        UniqueConstraint(
+            "tipo_bloque",
+            "referencia_id",
+            name="uq_borradores_sesion_tipo_bloque_referencia_id",
+        ),
         CheckConstraint(
             "btrim(tipo_bloque) <> ''",
             name="tipo_bloque_not_blank",

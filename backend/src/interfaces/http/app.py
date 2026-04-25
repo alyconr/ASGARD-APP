@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.infrastructure.config.settings import get_settings
+from src.interfaces.http.controllers.drafts import router as drafts_router
 from src.interfaces.http.controllers.health import router as health_router
 
 
@@ -25,6 +26,7 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(health_router)
+    application.include_router(drafts_router)
 
     return application
 
