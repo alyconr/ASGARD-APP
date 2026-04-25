@@ -53,6 +53,18 @@ La base local queda disponible en:
 postgresql://postgres:postgres@localhost:5432/sena_guias_db
 ```
 
+Para administrar la base con pgAdmin:
+
+```bash
+docker compose up -d postgres pgadmin
+```
+
+Acceso local:
+
+- URL: `http://localhost:5050`
+- Email: `admin@example.com`
+- Password: `admin123`
+
 ## Probar conexion real
 
 Desde `backend/`:

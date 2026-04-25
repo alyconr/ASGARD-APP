@@ -85,6 +85,23 @@ docker compose up -d postgres
 
 El servicio crea la base `sena_guias_db` en `localhost:5432`.
 
+### pgAdmin
+
+```bash
+docker compose up -d postgres pgadmin
+```
+
+pgAdmin queda disponible en `http://localhost:5050`.
+
+Credenciales por defecto:
+
+- Email: `admin@example.com`
+- Password: `admin123`
+
+Si necesitas cambiarlas sin modificar el compose, define
+`PGADMIN_DEFAULT_EMAIL` y `PGADMIN_DEFAULT_PASSWORD` antes de levantar el
+servicio.
+
 ### Frontend
 
 ```bash

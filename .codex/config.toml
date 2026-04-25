@@ -1,0 +1,15 @@
+# BEGIN RAPID OS MCP
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "G:\\APPS SENA\\sena-guia-aprendizaje-app"]
+
+[mcp_servers.postgres]
+command = "docker"
+args = ["run", "-i", "--rm", "-e", "POSTGRES_CONNECTION_STRING=postgresql://postgres:postgres@host.docker.internal:5432/sena_guias_db", "mcp/postgres"]
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+env = { CONTEXT7_API_KEY = "ctx7sk-5833125b-4c6f-4ed4-b55a-0851cf188baa" }
+# END RAPID OS MCP
+
