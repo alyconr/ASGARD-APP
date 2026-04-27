@@ -30,6 +30,13 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:5432/sena_guias_db",
     )
     cors_allow_origins: str = Field(default="http://localhost:3000")
+    storage_provider: str = Field(default="minio")
+    storage_bucket_name: str = Field(default="sena-programa-documentos")
+    storage_endpoint: str = Field(default="localhost:9000")
+    storage_access_key: str = Field(default="admin")
+    storage_secret_key: str = Field(default="admin123")
+    storage_secure: bool = Field(default=False)
+    storage_region: str | None = Field(default=None)
 
     @property
     def cors_allow_origin_list(self) -> list[str]:

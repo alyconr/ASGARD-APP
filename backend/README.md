@@ -28,6 +28,13 @@ Valores minimos para desarrollo local:
 ```env
 DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/sena_guias_db"
 ALEMBIC_DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/sena_guias_db"
+STORAGE_PROVIDER="minio"
+STORAGE_BUCKET_NAME="sena-programa-documentos"
+STORAGE_ENDPOINT="localhost:9000"
+STORAGE_ACCESS_KEY="admin"
+STORAGE_SECRET_KEY="admin123"
+STORAGE_SECURE=false
+STORAGE_REGION=
 ```
 
 `DATABASE_URL` usa `asyncpg` para SQLAlchemy async. `ALEMBIC_DATABASE_URL`
@@ -64,6 +71,27 @@ Acceso local:
 - URL: `http://localhost:5050`
 - Email: `admin@example.com`
 - Password: `admin123`
+
+## Levantar MinIO para documentos PDF
+
+TASK-06 usa MinIO local como almacenamiento S3-compatible para los PDF del
+programa. Desde la raiz del repositorio:
+
+```bash
+docker compose up -d minio
+```
+
+Acceso local:
+
+- API S3-compatible: `http://localhost:9000`
+- Consola: `http://localhost:9001`
+- Usuario: `admin`
+- Password: `admin123`
+
+El bucket configurado por defecto es `sena-programa-documentos`. El backend lo
+crea automaticamente en el primer cargue de PDF si no existe. Para verificarlo
+manualmente, entrar a la consola de MinIO y confirmar que el bucket aparece
+despues de subir un documento desde el wizard.
 
 ## Probar conexion real
 

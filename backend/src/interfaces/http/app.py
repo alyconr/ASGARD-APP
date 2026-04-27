@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.infrastructure.config.settings import get_settings
 from src.interfaces.http.controllers.drafts import router as drafts_router
 from src.interfaces.http.controllers.health import router as health_router
+from src.interfaces.http.controllers.programa_documentos import (
+    router as programa_documentos_router,
+)
 
 
 def create_application() -> FastAPI:
@@ -27,6 +30,7 @@ def create_application() -> FastAPI:
     )
     application.include_router(health_router)
     application.include_router(drafts_router)
+    application.include_router(programa_documentos_router)
 
     return application
 
