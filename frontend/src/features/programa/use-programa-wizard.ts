@@ -13,6 +13,8 @@ import { DraftApiError, type DraftResponse } from "@/features/drafts/types";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import {
   clearActiveProgramaDraftReference,
+  clearKnownProgramaDrafts,
+  forgetProgramaDraft,
   getActiveProgramaDraftReference,
   listKnownProgramaDrafts,
   rememberProgramaDraft,
@@ -165,6 +167,8 @@ export interface ProgramaWizardController {
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
+  forgetKnownDraft: (referenceId: string) => void;
+  clearKnownDrafts: () => void;
   setEntryMode: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
   resetFlow: () => void;
 }
@@ -536,6 +540,14 @@ export function useProgramaWizard(): ProgramaWizardController {
     [currentStepId],
   );
 
+  const forgetKnownDraft = useCallback((referenceId: string): void => {
+    setKnownDrafts(forgetProgramaDraft(referenceId));
+  }, []);
+
+  const clearKnownDrafts = useCallback((): void => {
+    setKnownDrafts(clearKnownProgramaDrafts());
+  }, []);
+
   const resetFlow = useCallback((): void => {
     clearActiveProgramaDraftReference();
     lastPersistedSnapshotRef.current = null;
@@ -577,6 +589,8 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateStepNote,
     updateProgramaPdfResult,
     updateContinueReferenceInput,
+    forgetKnownDraft,
+    clearKnownDrafts,
     setEntryMode,
     resetFlow,
   };

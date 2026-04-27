@@ -84,7 +84,9 @@ export function listKnownProgramaDrafts(): KnownDraftSummary[] {
   }
 }
 
-export function rememberProgramaDraft(summary: KnownDraftSummary): KnownDraftSummary[] {
+export function rememberProgramaDraft(
+  summary: KnownDraftSummary,
+): KnownDraftSummary[] {
   const nextDrafts = [
     summary,
     ...listKnownProgramaDrafts().filter(
@@ -102,4 +104,9 @@ export function forgetProgramaDraft(referenceId: string): KnownDraftSummary[] {
   );
   writeLocalStorage(KNOWN_PROGRAMA_DRAFTS_KEY, JSON.stringify(nextDrafts));
   return nextDrafts;
+}
+
+export function clearKnownProgramaDrafts(): KnownDraftSummary[] {
+  removeLocalStorage(KNOWN_PROGRAMA_DRAFTS_KEY);
+  return [];
 }

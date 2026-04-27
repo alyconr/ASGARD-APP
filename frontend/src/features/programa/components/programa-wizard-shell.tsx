@@ -9,11 +9,13 @@ import {
   FileText,
   FolderOpen,
   Landmark,
+  ListX,
   NotebookText,
   RefreshCcw,
   Route,
   Save,
   ScanLine,
+  Trash2,
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
@@ -472,29 +474,72 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
 
             <div className="mt-5 border-t border-[var(--line)] pt-5">
-              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-                Borradores locales
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
+                  Borradores locales
+                </p>
+                {controller.knownDrafts.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Esto solo quitara las referencias locales de este navegador. Los borradores del servidor no se eliminan.",
+                        )
+                      ) {
+                        controller.clearKnownDrafts();
+                      }
+                    }}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  >
+                    <ListX className="h-4 w-4" />
+                    Limpiar lista
+                  </button>
+                ) : null}
+              </div>
               {controller.knownDrafts.length > 0 ? (
                 <div className="mt-3 grid gap-2">
                   {controller.knownDrafts.map((draft) => (
-                    <button
+                    <article
                       key={draft.referenciaId}
-                      type="button"
-                      onClick={() =>
-                        void controller.recoverDraftByReference(
-                          draft.referenciaId,
-                        )
-                      }
-                      className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                      className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-3 transition hover:border-[var(--accent)] sm:grid-cols-[1fr_auto]"
                     >
-                      <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
-                        {draft.label}
-                      </span>
-                      <span className="mt-1 block text-xs text-[var(--muted)]">
-                        {formatReferenceId(draft.referenciaId)} / {draft.estado}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void controller.recoverDraftByReference(
+                            draft.referenciaId,
+                          )
+                        }
+                        className="min-w-0 text-left focus-visible:rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                      >
+                        <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+                          {draft.label}
+                        </span>
+                        <span className="mt-1 block text-xs text-[var(--muted)]">
+                          {formatReferenceId(draft.referenciaId)} /{" "}
+                          {draft.estado}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Quitar ${draft.label} de la lista local`}
+                        title="Quitar de esta lista local"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Esto solo quitara esta referencia local. El borrador del servidor no se elimina.",
+                            )
+                          ) {
+                            controller.forgetKnownDraft(draft.referenciaId);
+                          }
+                        }}
+                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Quitar
+                      </button>
+                    </article>
                   ))}
                 </div>
               ) : (
