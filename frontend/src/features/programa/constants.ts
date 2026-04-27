@@ -1,4 +1,6 @@
 import type {
+  ProgramaPdfDiagnostic,
+  ProgramaStoredDocument,
   ProgramaWizardPayload,
   ProgramaWizardStepDefinition,
   ProgramaWizardStepId,
@@ -77,6 +79,9 @@ export function createEmptyProgramaPayload(
     wizard: {
       notesByStep: {},
     },
+    documental: {
+      programa_pdf: null,
+    },
   };
 }
 
@@ -92,6 +97,67 @@ function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeStoredDocument(
+  value: unknown,
+): ProgramaStoredDocument | null {
+  const document = asRecord(value);
+  if (document === null) {
+    return null;
+  }
+
+  const originalFilename = asString(document.original_filename);
+  const storageKey = asString(document.storage_key);
+  const checksum = asString(document.checksum_sha256);
+  if (!originalFilename || !storageKey || !checksum) {
+    return null;
+  }
+
+  return {
+    original_filename: originalFilename,
+    storage_key: storageKey,
+    size_bytes: asNumber(document.size_bytes),
+    content_type: asString(document.content_type, "application/pdf"),
+    checksum_sha256: checksum,
+    etag: typeof document.etag === "string" ? document.etag : null,
+  };
+}
+
+function normalizeDiagnostic(value: unknown): ProgramaPdfDiagnostic | null {
+  const diagnostic = asRecord(value);
+  if (diagnostic === null) {
+    return null;
+  }
+
+  const status = diagnostic.estado_legibilidad;
+  if (
+    status !== "LEGIBLE" &&
+    status !== "PARCIALMENTE_LEGIBLE" &&
+    status !== "NO_LEGIBLE"
+  ) {
+    return null;
+  }
+
+  return {
+    estado_legibilidad: status,
+    motivo: typeof diagnostic.motivo === "string" ? diagnostic.motivo : null,
+    resumen: asString(diagnostic.resumen),
+    has_text_layer: asBoolean(diagnostic.has_text_layer),
+    analyzed_pages: asNumber(diagnostic.analyzed_pages),
+    pages_with_text: asNumber(diagnostic.pages_with_text),
+    text_character_count: asNumber(diagnostic.text_character_count),
+    can_attempt_extraction: asBoolean(diagnostic.can_attempt_extraction),
+    requires_manual_entry: asBoolean(diagnostic.requires_manual_entry),
+  };
+}
+
 export function normalizeProgramaPayload(
   value: Record<string, unknown>,
   referenciaId: string,
@@ -100,6 +166,11 @@ export function normalizeProgramaPayload(
   const meta = asRecord(value.meta);
   const programa = asRecord(value.programa);
   const wizard = asRecord(value.wizard);
+  const documental = asRecord(value.documental);
+  const programaPdf = asRecord(documental?.programa_pdf);
+  const storedDocument = normalizeStoredDocument(programaPdf?.documento);
+  const diagnostic = normalizeDiagnostic(programaPdf?.diagnostico);
+  const uploadedAt = programaPdf?.updated_at;
   const notesByStepRecord = asRecord(wizard?.notesByStep);
 
   const touchedStepsCandidate = Array.isArray(meta?.touchedSteps)
@@ -154,6 +225,17 @@ export function normalizeProgramaPayload(
     },
     wizard: {
       notesByStep,
+    },
+    documental: {
+      programa_pdf:
+        storedDocument !== null && diagnostic !== null
+          ? {
+              documento: storedDocument,
+              diagnostico: diagnostic,
+              updated_at:
+                typeof uploadedAt === "string" ? uploadedAt : undefined,
+            }
+          : null,
     },
   };
 }

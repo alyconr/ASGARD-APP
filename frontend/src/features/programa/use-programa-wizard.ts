@@ -30,6 +30,7 @@ import type {
   AutosaveState,
   ProgramaDraftSnapshot,
   ProgramaEntryMode,
+  ProgramaPdfUploadResponse,
   ProgramaWizardPayload,
   ProgramaWizardStepId,
 } from "@/features/programa/types";
@@ -153,21 +154,28 @@ export interface ProgramaWizardController {
   lastSavedAt: string | null;
   payload: ProgramaWizardPayload | null;
   startNewFlow: (entryMode: Exclude<ProgramaEntryMode, null>) => Promise<void>;
-  recoverDraftByReference: (referenceId: string, silent?: boolean) => Promise<void>;
+  recoverDraftByReference: (
+    referenceId: string,
+    silent?: boolean,
+  ) => Promise<void>;
   goToNextStep: () => void;
   goToPreviousStep: () => void;
   goToStep: (stepId: ProgramaWizardStepId) => void;
   updateProgramaBaseField: (field: ProgramaBaseField, value: string) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
+  updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
   setEntryMode: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
   resetFlow: () => void;
 }
 
 export function useProgramaWizard(): ProgramaWizardController {
-  const [activeReferenceId, setActiveReferenceId] = useState<string | null>(null);
-  const [currentStepId, setCurrentStepId] =
-    useState<ProgramaWizardStepId>(DEFAULT_PROGRAMA_STEP_ID);
+  const [activeReferenceId, setActiveReferenceId] = useState<string | null>(
+    null,
+  );
+  const [currentStepId, setCurrentStepId] = useState<ProgramaWizardStepId>(
+    DEFAULT_PROGRAMA_STEP_ID,
+  );
   const [payload, setPayload] = useState<ProgramaWizardPayload | null>(null);
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [continueReferenceInput, setContinueReferenceInput] = useState("");
@@ -217,14 +225,18 @@ export function useProgramaWizard(): ProgramaWizardController {
           message: "Borrador sincronizado.",
         });
         setKnownDrafts((currentDrafts) => {
-          const summary = buildSummaryFromDraftResponse(draft, nextSnapshot.payload);
+          const summary = buildSummaryFromDraftResponse(
+            draft,
+            nextSnapshot.payload,
+          );
           const nextDrafts = rememberProgramaDraft(summary);
           return nextDrafts.length > 0 ? nextDrafts : currentDrafts;
         });
       } catch (error) {
         setAutosave({
           state: "error",
-          message: "No fue posible guardar automaticamente. El flujo sigue abierto.",
+          message:
+            "No fue posible guardar automaticamente. El flujo sigue abierto.",
         });
         setErrorMessage(getDraftErrorMessage(error));
       }
@@ -236,7 +248,9 @@ export function useProgramaWizard(): ProgramaWizardController {
     async (referenceId: string, silent = false): Promise<void> => {
       if (!isUuid(referenceId)) {
         if (!silent) {
-          setErrorMessage("Ingresa un referencia_id UUID valido para continuar.");
+          setErrorMessage(
+            "Ingresa un referencia_id UUID valido para continuar.",
+          );
         }
 
         return;
@@ -361,7 +375,9 @@ export function useProgramaWizard(): ProgramaWizardController {
         }),
       );
 
-      await persistSnapshot(buildSnapshot(nextReferenceId, targetStepId, nextPayload));
+      await persistSnapshot(
+        buildSnapshot(nextReferenceId, targetStepId, nextPayload),
+      );
     },
     [persistSnapshot],
   );
@@ -381,7 +397,10 @@ export function useProgramaWizard(): ProgramaWizardController {
         ...currentPayload,
         meta: {
           ...currentPayload.meta,
-          touchedSteps: addTouchedStep(currentPayload.meta.touchedSteps, stepId),
+          touchedSteps: addTouchedStep(
+            currentPayload.meta.touchedSteps,
+            stepId,
+          ),
           lastInteractionAt: new Date().toISOString(),
         },
       };
@@ -415,7 +434,10 @@ export function useProgramaWizard(): ProgramaWizardController {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
-            touchedSteps: addTouchedStep(currentPayload.meta.touchedSteps, stepId),
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              stepId,
+            ),
             lastInteractionAt: new Date().toISOString(),
           },
           wizard: {
@@ -458,6 +480,38 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
+  const updateProgramaPdfResult = useCallback(
+    (result: ProgramaPdfUploadResponse): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            entryMode: "PDF",
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "origen-documental",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          documental: {
+            ...currentPayload.documental,
+            programa_pdf: {
+              documento: result.documento,
+              diagnostico: result.diagnostico,
+              updated_at: new Date().toISOString(),
+            },
+          },
+        };
+      });
+    },
+    [],
+  );
+
   const setEntryMode = useCallback(
     (entryMode: Exclude<ProgramaEntryMode, null>): void => {
       setPayload((currentPayload) => {
@@ -470,7 +524,10 @@ export function useProgramaWizard(): ProgramaWizardController {
           meta: {
             ...currentPayload.meta,
             entryMode,
-            touchedSteps: addTouchedStep(currentPayload.meta.touchedSteps, currentStepId),
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              currentStepId,
+            ),
             lastInteractionAt: new Date().toISOString(),
           },
         };
@@ -518,6 +575,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     goToStep,
     updateProgramaBaseField,
     updateStepNote,
+    updateProgramaPdfResult,
     updateContinueReferenceInput,
     setEntryMode,
     resetFlow,

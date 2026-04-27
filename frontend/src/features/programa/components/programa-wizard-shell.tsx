@@ -19,11 +19,14 @@ import {
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
+import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { cn } from "@/lib/utils";
 import type {
   ProgramaEntryMode,
+  ProgramaPdfUploadResponse,
+  ProgramaPdfUploadResult,
   ProgramaWizardStepDefinition,
   ProgramaWizardStepId,
 } from "@/features/programa/types";
@@ -39,7 +42,8 @@ const ENTRY_MODE_COPY: Record<
 > = {
   MANUAL: {
     label: "Manual",
-    description: "Captura directa para iniciar el programa desde datos propios.",
+    description:
+      "Captura directa para iniciar el programa desde datos propios.",
     icon: NotebookText,
   },
   PDF: {
@@ -74,13 +78,9 @@ const STEP_CONTENT: Record<
   "origen-documental": {
     label: "Origen de informacion",
     description:
-      "La modalidad del cargue queda asociada al borrador sin activar extraccion.",
-    slotLabel: "Slot del cargue documental",
-    checks: [
-      "Ruta manual disponible",
-      "Ruta PDF reservada",
-      "Sin validacion automatica",
-    ],
+      "El PDF se almacena y se diagnostica sin activar extraccion de campos.",
+    slotLabel: "Cargue documental",
+    checks: ["PDF valido", "Diagnostico estructurado", "Fallback manual"],
     icon: ScanLine,
   },
   "estructura-curricular": {
@@ -88,11 +88,7 @@ const STEP_CONTENT: Record<
     description:
       "El contenedor ya separa el trabajo curricular de la captura inicial.",
     slotLabel: "Slot curricular",
-    checks: [
-      "Competencias",
-      "Resultados",
-      "Saberes, procesos y criterios",
-    ],
+    checks: ["Competencias", "Resultados", "Saberes, procesos y criterios"],
     icon: FolderOpen,
   },
   "revision-programa": {
@@ -202,18 +198,24 @@ function StepWorkspace({
   entryMode,
   programaValue,
   onEntryModeChange,
+  onProgramaPdfUploaded,
   onProgramaFieldChange,
   onNoteChange,
+  programaPdfResult,
+  referenceId,
 }: Readonly<{
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
   entryMode: ProgramaEntryMode;
+  programaPdfResult: ProgramaPdfUploadResult | null;
+  referenceId: string;
   programaValue: {
     codigo_programa: string;
     nombre_programa: string;
     version_programa: string;
   };
   onEntryModeChange: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
+  onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
   onNoteChange: (value: string) => void;
 }>): React.JSX.Element {
@@ -224,10 +226,10 @@ function StepWorkspace({
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] pb-5">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-strong)]">
+          <p className="text-xs font-semibold tracking-[0.16em] text-[var(--accent-strong)] uppercase">
             {currentStep.shortLabel} / {currentStep.label}
           </p>
-          <h2 className="mt-2 font-[family:var(--font-display)] text-2xl font-semibold text-[var(--foreground)]">
+          <h2 className="mt-2 text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
             {content.label}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
@@ -272,9 +274,15 @@ function StepWorkspace({
               value={programaValue}
               onFieldChange={onProgramaFieldChange}
             />
+          ) : currentStep.id === "origen-documental" ? (
+            <ProgramaDocumentUpload
+              currentResult={programaPdfResult}
+              referenciaId={referenceId}
+              onUploaded={onProgramaPdfUploaded}
+            />
           ) : (
             <>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
                 {content.slotLabel}
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -292,7 +300,7 @@ function StepWorkspace({
         </div>
 
         <label className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+          <span className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
             Notas del paso
           </span>
           <textarea
@@ -300,7 +308,7 @@ function StepWorkspace({
             onChange={(event) => onNoteChange(event.target.value)}
             rows={7}
             placeholder="Pendientes o decisiones de este paso."
-            className="mt-3 min-h-36 w-full resize-none rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+            className="mt-3 min-h-36 w-full resize-none rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm leading-6 text-[var(--foreground)] transition outline-none placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
           />
         </label>
       </div>
@@ -322,7 +330,9 @@ function DraftSummary({
       <div>
         <dt className="text-[var(--muted)]">Referencia</dt>
         <dd className="mt-1 font-semibold text-[var(--foreground)]">
-          {referenceId === null ? "Sin borrador activo" : formatReferenceId(referenceId)}
+          {referenceId === null
+            ? "Sin borrador activo"
+            : formatReferenceId(referenceId)}
         </dd>
       </div>
       <div>
@@ -369,11 +379,11 @@ export function ProgramaWizardShell(): React.JSX.Element {
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[var(--accent-strong)]">
               <Landmark className="h-5 w-5" />
-              <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+              <p className="text-xs font-semibold tracking-[0.18em] uppercase">
                 SENA / Fase 1
               </p>
             </div>
-            <h1 className="mt-2 font-[family:var(--font-display)] text-3xl font-semibold text-[var(--foreground)] lg:text-4xl">
+            <h1 className="mt-2 text-3xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)] lg:text-4xl">
               Wizard base del programa
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
@@ -407,7 +417,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
           <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
             <div className="flex items-center gap-2">
               <Route className="h-5 w-5 text-[var(--accent-strong)]" />
-              <h2 className="font-[family:var(--font-display)] text-2xl font-semibold text-[var(--foreground)]">
+              <h2 className="text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
                 Iniciar proceso
               </h2>
             </div>
@@ -430,12 +440,12 @@ export function ProgramaWizardShell(): React.JSX.Element {
           </section>
 
           <aside className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
-            <h2 className="font-[family:var(--font-display)] text-2xl font-semibold text-[var(--foreground)]">
+            <h2 className="text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
               Continuar borrador
             </h2>
 
             <label className="mt-4 block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              <span className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
                 referencia_id
               </span>
               <input
@@ -444,7 +454,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                   controller.updateContinueReferenceInput(event.target.value)
                 }
                 placeholder="UUID del borrador"
-                className="mt-2 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+                className="mt-2 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] transition outline-none placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
               />
             </label>
 
@@ -462,7 +472,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
 
             <div className="mt-5 border-t border-[var(--line)] pt-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
                 Borradores locales
               </p>
               {controller.knownDrafts.length > 0 ? (
@@ -472,7 +482,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
                       key={draft.referenciaId}
                       type="button"
                       onClick={() =>
-                        void controller.recoverDraftByReference(draft.referenciaId)
+                        void controller.recoverDraftByReference(
+                          draft.referenciaId,
+                        )
                       }
                       className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-3 text-left transition hover:border-[var(--accent)]"
                     >
@@ -509,7 +521,10 @@ export function ProgramaWizardShell(): React.JSX.Element {
 
             <DraftSummary
               entryMode={controller.payload.meta.entryMode}
-              referenceId={controller.activeReferenceId}
+              referenceId={
+                controller.activeReferenceId ??
+                controller.payload.meta.referenciaId
+              }
               stepLabel={currentStep.label}
             />
 
@@ -522,11 +537,19 @@ export function ProgramaWizardShell(): React.JSX.Element {
             <StepWorkspace
               currentStep={currentStep}
               currentStepNote={
-                controller.payload.wizard.notesByStep[controller.currentStepId] ?? ""
+                controller.payload.wizard.notesByStep[
+                  controller.currentStepId
+                ] ?? ""
               }
               entryMode={controller.payload.meta.entryMode}
+              programaPdfResult={controller.payload.documental.programa_pdf}
+              referenceId={
+                controller.activeReferenceId ??
+                controller.payload.meta.referenciaId
+              }
               programaValue={controller.payload.programa}
               onEntryModeChange={controller.setEntryMode}
+              onProgramaPdfUploaded={controller.updateProgramaPdfResult}
               onProgramaFieldChange={controller.updateProgramaBaseField}
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)

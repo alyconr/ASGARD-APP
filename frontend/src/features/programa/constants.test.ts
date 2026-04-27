@@ -29,6 +29,7 @@ describe("programa constants", () => {
       expect(payload.meta.entryMode).toBeNull();
       expect(payload.meta.touchedSteps).toEqual([DEFAULT_PROGRAMA_STEP_ID]);
       expect(payload.programa.codigo_programa).toBe("");
+      expect(payload.documental.programa_pdf).toBeNull();
       expect(payload.wizard.notesByStep).toEqual({});
       expect(typeof payload.meta.startedAt).toBe("string");
       expect(typeof payload.meta.lastInteractionAt).toBe("string");
@@ -42,6 +43,7 @@ describe("programa constants", () => {
       expect(normalized.meta.entryMode).toBeNull();
       expect(normalized.meta.touchedSteps).toEqual([DEFAULT_PROGRAMA_STEP_ID]);
       expect(normalized.programa.codigo_programa).toBe("");
+      expect(normalized.documental.programa_pdf).toBeNull();
     });
 
     it("preserves valid properties and step notes", () => {
@@ -96,6 +98,44 @@ describe("programa constants", () => {
         "datos-programa",
         "origen-documental",
       ]);
+    });
+
+    it("preserves a valid program PDF diagnosis in the draft payload", () => {
+      const input = {
+        documental: {
+          programa_pdf: {
+            documento: {
+              original_filename: "programa.pdf",
+              storage_key: "programas/ref/documentos/programa.pdf",
+              size_bytes: 2048,
+              content_type: "application/pdf",
+              checksum_sha256: "checksum",
+              etag: "etag",
+            },
+            diagnostico: {
+              estado_legibilidad: "PARCIALMENTE_LEGIBLE",
+              motivo: "ESTRUCTURA_NO_RECONOCIDA",
+              resumen: "Texto parcial",
+              has_text_layer: true,
+              analyzed_pages: 3,
+              pages_with_text: 1,
+              text_character_count: 120,
+              can_attempt_extraction: true,
+              requires_manual_entry: true,
+            },
+            updated_at: "2026-04-27T00:00:00Z",
+          },
+        },
+      };
+
+      const normalized = normalizeProgramaPayload(input, "ref-123");
+
+      expect(normalized.documental.programa_pdf?.documento.storage_key).toBe(
+        "programas/ref/documentos/programa.pdf",
+      );
+      expect(
+        normalized.documental.programa_pdf?.diagnostico.estado_legibilidad,
+      ).toBe("PARCIALMENTE_LEGIBLE");
     });
   });
 });

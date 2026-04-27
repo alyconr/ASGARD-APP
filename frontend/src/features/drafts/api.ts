@@ -4,20 +4,9 @@ import {
   type DraftResponse,
   type DraftSaveRequest,
 } from "@/features/drafts/types";
+import { getApiBaseUrl } from "@/lib/api";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
-
-function getApiBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
-    DEFAULT_API_BASE_URL
-  );
-}
-
-function buildDraftUrl(
-  blockType: DraftBlockType,
-  referenceId: string,
-): string {
+function buildDraftUrl(blockType: DraftBlockType, referenceId: string): string {
   return `${getApiBaseUrl()}/drafts/${blockType}/${referenceId}`;
 }
 

@@ -6,14 +6,14 @@ import { createEmptyProgramaPayload } from "../constants";
 
 describe("ProgramaBaseForm", () => {
   it("should render correctly with empty values", () => {
-    const value = createEmptyProgramaPayload().programa;
+    const value = createEmptyProgramaPayload("ref-123").programa;
     const onFieldChange = vi.fn();
 
     render(<ProgramaBaseForm value={value} onFieldChange={onFieldChange} />);
 
     // Titles
     expect(screen.getByText("Datos minimos del programa")).toBeInTheDocument();
-    
+
     // Labels
     expect(screen.getByText("Codigo del programa")).toBeInTheDocument();
     expect(screen.getByText("Nombre del programa")).toBeInTheDocument();
@@ -30,9 +30,9 @@ describe("ProgramaBaseForm", () => {
   });
 
   it("should reflect filled values and calculate completed fields correctly", () => {
-    const value = createEmptyProgramaPayload().programa;
+    const value = createEmptyProgramaPayload("ref-123").programa;
     value.codigo_programa = "123456";
-    
+
     const onFieldChange = vi.fn();
 
     render(<ProgramaBaseForm value={value} onFieldChange={onFieldChange} />);
@@ -42,7 +42,7 @@ describe("ProgramaBaseForm", () => {
   });
 
   it("should call onFieldChange when input changes", () => {
-    const value = createEmptyProgramaPayload().programa;
+    const value = createEmptyProgramaPayload("ref-123").programa;
     const onFieldChange = vi.fn();
 
     render(<ProgramaBaseForm value={value} onFieldChange={onFieldChange} />);
@@ -54,13 +54,15 @@ describe("ProgramaBaseForm", () => {
   });
 
   it("should show required hint when required input is empty", () => {
-    const value = createEmptyProgramaPayload().programa;
+    const value = createEmptyProgramaPayload("ref-123").programa;
     const onFieldChange = vi.fn();
 
     render(<ProgramaBaseForm value={value} onFieldChange={onFieldChange} />);
 
     // Since it starts empty, the hint should be present for both required fields
-    const hints = screen.getAllByText("Puedes guardar el borrador incompleto; este dato sera necesario para avanzar en tareas posteriores.");
+    const hints = screen.getAllByText(
+      "Puedes guardar el borrador incompleto; este dato sera necesario para avanzar en tareas posteriores.",
+    );
     expect(hints.length).toBe(2);
   });
 });
