@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
-
-import { AppProviders } from "@/lib/providers/app-providers";
+import { Fraunces, Source_Sans_3 } from "next/font/google";
 
 import "./globals.css";
 
+const displayFont = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
+});
+
+const bodyFont = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "SENA Guia Aprendizaje",
+  title: "SENA Guia Aprendizaje | Wizard del programa",
   description:
-    "Base tecnica de la Fase 1 para la construccion de guias de aprendizaje SENA.",
+    "Wizard base del programa con borradores persistentes para la Fase 1 de construccion de guias de aprendizaje SENA.",
 };
 
 type RootLayoutProps = Readonly<{
@@ -19,8 +30,8 @@ export default function RootLayout({
 }: RootLayoutProps): React.JSX.Element {
   return (
     <html lang="es">
-      <body>
-        <AppProviders>{children}</AppProviders>
+      <body className={`${displayFont.variable} ${bodyFont.variable}`}>
+        {children}
       </body>
     </html>
   );

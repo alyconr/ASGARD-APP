@@ -2,13 +2,19 @@
 
 :root {
   color-scheme: light;
-  --background: #f6f4ee;
-  --foreground: #11213a;
-  --card: rgba(255, 255, 255, 0.78);
-  --card-border: rgba(17, 33, 58, 0.12);
-  --accent: #0f766e;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --muted: #5f6b7a;
+  --background: #f6f7f2;
+  --foreground: #17352f;
+  --paper: #ffffff;
+  --paper-strong: #fbfbf7;
+  --card: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(23, 53, 47, 0.14);
+  --accent: #00843d;
+  --accent-strong: #005e34;
+  --accent-soft: rgba(0, 132, 61, 0.1);
+  --ink-blue: #204b78;
+  --gold: #b98524;
+  --muted: #5e6b66;
+  --line: rgba(23, 53, 47, 0.12);
 }
 
 * {
@@ -17,20 +23,32 @@
 
 html {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 32%),
-    linear-gradient(180deg, #fbfaf6 0%, var(--background) 100%);
+  background: var(--background);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   color: var(--foreground);
-  font-family:
-    "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+  font-family: var(--font-sans), "Segoe UI", sans-serif;
+  background-image:
+    linear-gradient(rgba(23, 53, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 53, 47, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: top left;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(13, 95, 82, 0.18);
 }
