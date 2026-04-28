@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { DraftApiError, type DraftResponse } from "@/features/drafts/types";
+import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import {
   clearActiveProgramaDraftReference,
@@ -237,12 +238,16 @@ export function useProgramaWizard(): ProgramaWizardController {
           return nextDrafts.length > 0 ? nextDrafts : currentDrafts;
         });
       } catch (error) {
+        const errorMessage = getDraftErrorMessage(error);
         setAutosave({
           state: "error",
           message:
             "No fue posible guardar automaticamente. El flujo sigue abierto.",
         });
-        setErrorMessage(getDraftErrorMessage(error));
+        setErrorMessage(errorMessage);
+        notify.error("No fue posible guardar el borrador", {
+          description: errorMessage,
+        });
       }
     },
     [],
@@ -252,9 +257,13 @@ export function useProgramaWizard(): ProgramaWizardController {
     async (referenceId: string, silent = false): Promise<void> => {
       if (!isUuid(referenceId)) {
         if (!silent) {
-          setErrorMessage(
-            "Ingresa un referencia_id UUID valido para continuar.",
-          );
+          const validationMessage =
+            "Ingresa un referencia_id UUID valido para continuar.";
+
+          setErrorMessage(validationMessage);
+          notify.warning("Referencia de borrador invalida", {
+            description: validationMessage,
+          });
         }
 
         return;
@@ -298,16 +307,26 @@ export function useProgramaWizard(): ProgramaWizardController {
             buildSummaryFromDraftResponse(draft, nextPayload),
           ),
         );
+        if (!silent) {
+          notify.success("Borrador recuperado", {
+            description: "Puedes continuar desde el ultimo paso guardado.",
+          });
+        }
       } catch (error) {
         if (silent) {
           clearActiveProgramaDraftReference();
         } else {
+          const errorMessage = getDraftErrorMessage(error);
+
           setAutosave({
             state: "error",
             message:
               "No fue posible recuperar el borrador solicitado. Puedes iniciar un nuevo flujo.",
           });
-          setErrorMessage(getDraftErrorMessage(error));
+          setErrorMessage(errorMessage);
+          notify.error("No fue posible recuperar el borrador", {
+            description: errorMessage,
+          });
         }
       } finally {
         setIsRecovering(false);
@@ -382,6 +401,9 @@ export function useProgramaWizard(): ProgramaWizardController {
       await persistSnapshot(
         buildSnapshot(nextReferenceId, targetStepId, nextPayload),
       );
+      notify.success("Borrador iniciado", {
+        description: "Se creo una referencia estable para este flujo.",
+      });
     },
     [persistSnapshot],
   );
@@ -542,10 +564,16 @@ export function useProgramaWizard(): ProgramaWizardController {
 
   const forgetKnownDraft = useCallback((referenceId: string): void => {
     setKnownDrafts(forgetProgramaDraft(referenceId));
+    notify.info("Referencia local retirada", {
+      description: "El borrador del servidor no fue eliminado.",
+    });
   }, []);
 
   const clearKnownDrafts = useCallback((): void => {
     setKnownDrafts(clearKnownProgramaDrafts());
+    notify.info("Lista local limpiada", {
+      description: "Los borradores del servidor se conservan.",
+    });
   }, []);
 
   const resetFlow = useCallback((): void => {

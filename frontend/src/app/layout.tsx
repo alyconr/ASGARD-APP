@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 
+import { AppToaster } from "@/components/feedback/app-toaster";
+
 import "./globals.css";
 
 const displayFont = Fraunces({
@@ -32,6 +34,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         {children}
+        <AppToaster />
       </body>
     </html>
   );

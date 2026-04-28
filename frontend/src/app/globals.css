@@ -52,3 +52,18 @@ textarea {
 ::selection {
   background: rgba(13, 95, 82, 0.18);
 }
+
+.sena-toast {
+  border-radius: 8px !important;
+  border-color: var(--card-border) !important;
+  font-family: var(--font-sans), "Segoe UI", sans-serif !important;
+}
+
+.sena-toast-title {
+  color: var(--foreground) !important;
+  font-weight: 700 !important;
+}
+
+.sena-toast-description {
+  color: var(--muted) !important;
+}

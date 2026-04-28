@@ -14,6 +14,7 @@ import {
   ProgramaPdfUploadError,
   uploadProgramaPdf,
 } from "@/features/programa/document-upload-api";
+import { notify } from "@/components/feedback/notifications";
 import type {
   PdfLegibilityStatus,
   ProgramaPdfUploadResponse,
@@ -149,6 +150,9 @@ export function ProgramaDocumentUpload({
     if (validationError !== null) {
       setState("error");
       setMessage(validationError);
+      notify.warning("No se pudo cargar el PDF", {
+        description: validationError,
+      });
       return;
     }
 
@@ -165,9 +169,16 @@ export function ProgramaDocumentUpload({
       onUploaded(result);
       setState("success");
       setMessage("PDF cargado y diagnosticado.");
+      notify.success("PDF cargado y diagnosticado", {
+        description: result.diagnostico.resumen,
+      });
     } catch (error) {
+      const errorMessage = getErrorMessage(error);
       setState("error");
-      setMessage(getErrorMessage(error));
+      setMessage(errorMessage);
+      notify.error("No fue posible diagnosticar el PDF", {
+        description: errorMessage,
+      });
     }
   };
 
