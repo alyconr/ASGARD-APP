@@ -21,16 +21,16 @@ import {
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
+import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
-import {
-  ProgramaCurricularExtractionPreview,
-  ProgramaExtractionPanel,
-} from "@/features/programa/components/programa-extraction-panel";
+import { ProgramaExtractionPanel } from "@/features/programa/components/programa-extraction-panel";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { cn } from "@/lib/utils";
 import type {
   ProgramaEntryMode,
+  ProgramaCompetencia,
+  ProgramaCompetenciaListResponse,
   ProgramaExtractionResult,
   ProgramaPdfUploadResponse,
   ProgramaPdfUploadResult,
@@ -207,10 +207,12 @@ function StepWorkspace({
   onEntryModeChange,
   onProgramaPdfUploaded,
   onProgramaExtracted,
+  onProgramaCompetenciasSynced,
   onProgramaFieldChange,
   onNoteChange,
   programaExtractionResult,
   programaPdfResult,
+  competencias,
   referenceId,
 }: Readonly<{
   currentStep: ProgramaWizardStepDefinition;
@@ -226,9 +228,13 @@ function StepWorkspace({
   };
   onEntryModeChange: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
   onProgramaExtracted: (result: ProgramaExtractionResult) => void;
+  onProgramaCompetenciasSynced: (
+    result: ProgramaCompetenciaListResponse,
+  ) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
   onNoteChange: (value: string) => void;
+  competencias: ProgramaCompetencia[];
 }>): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
@@ -303,8 +309,14 @@ function StepWorkspace({
               />
             </div>
           ) : currentStep.id === "estructura-curricular" ? (
-            <ProgramaCurricularExtractionPreview
-              extraction={programaExtractionResult}
+            <ProgramaCompetenciasManager
+              competencias={competencias}
+              extractedCompetencias={
+                programaExtractionResult?.estructura_curricular.competencias ??
+                null
+              }
+              referenciaId={referenceId}
+              onCompetenciasSynced={onProgramaCompetenciasSynced}
             />
           ) : (
             <>
@@ -621,6 +633,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 controller.payload.documental.programa_pdf?.extraccion ?? null
               }
               programaPdfResult={controller.payload.documental.programa_pdf}
+              competencias={controller.payload.curricular.competencias}
               referenceId={
                 controller.activeReferenceId ??
                 controller.payload.meta.referenciaId
@@ -628,6 +641,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
               programaValue={controller.payload.programa}
               onEntryModeChange={controller.setEntryMode}
               onProgramaExtracted={controller.updateProgramaExtractionResult}
+              onProgramaCompetenciasSynced={
+                controller.updateProgramaCompetencias
+              }
               onProgramaPdfUploaded={controller.updateProgramaPdfResult}
               onProgramaFieldChange={controller.updateProgramaBaseField}
               onNoteChange={(value) =>

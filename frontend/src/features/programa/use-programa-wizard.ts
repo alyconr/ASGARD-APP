@@ -32,6 +32,7 @@ import {
 import type {
   AutosaveState,
   ProgramaExtractionResult,
+  ProgramaCompetenciaListResponse,
   ProgramaDraftSnapshot,
   ProgramaEntryMode,
   ProgramaPdfUploadResponse,
@@ -169,6 +170,7 @@ export interface ProgramaWizardController {
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
   updateProgramaExtractionResult: (result: ProgramaExtractionResult) => void;
+  updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
@@ -582,6 +584,33 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
+  const updateProgramaCompetencias = useCallback(
+    (result: ProgramaCompetenciaListResponse): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "estructura-curricular",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          curricular: {
+            programa_formacion_id: result.programa_id,
+            competencias: result.competencias,
+          },
+        };
+      });
+    },
+    [],
+  );
+
   const setEntryMode = useCallback(
     (entryMode: Exclude<ProgramaEntryMode, null>): void => {
       setPayload((currentPayload) => {
@@ -661,6 +690,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateStepNote,
     updateProgramaPdfResult,
     updateProgramaExtractionResult,
+    updateProgramaCompetencias,
     updateContinueReferenceInput,
     forgetKnownDraft,
     clearKnownDrafts,

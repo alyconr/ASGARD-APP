@@ -58,6 +58,10 @@ export interface ProgramaWizardPayload {
   documental: {
     programa_pdf: ProgramaPdfUploadResult | null;
   };
+  curricular: {
+    programa_formacion_id: string | null;
+    competencias: ProgramaCompetencia[];
+  };
 }
 
 export interface ProgramaStoredDocument {
@@ -143,6 +147,36 @@ export interface ProgramaExtractionResult {
     version_programa: string;
   };
   updated_at?: string;
+}
+
+export interface ProgramaCompetencia {
+  id: string;
+  programa_id: string;
+  codigo_competencia: string;
+  nombre_competencia: string;
+  orden: number | null;
+  estado: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
+  origen_campo: FieldTraceStatus;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
+export interface ProgramaCompetenciaPayload {
+  codigo_competencia: string;
+  nombre_competencia: string;
+}
+
+export interface ProgramaCompetenciaListResponse {
+  referencia_id: string;
+  programa_id: string | null;
+  competencias: ProgramaCompetencia[];
+}
+
+export interface ProgramaCompetenciaDeleteResponse {
+  referencia_id: string;
+  programa_id: string;
+  competencia_id: string;
+  eliminado: boolean;
 }
 
 export interface ProgramaDraftSnapshot {

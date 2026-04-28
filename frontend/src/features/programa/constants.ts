@@ -3,6 +3,7 @@ import type {
   FieldTraceStatus,
   ProgramaExtractedField,
   ProgramaExtractedListBlock,
+  ProgramaCompetencia,
   ProgramaExtractionResult,
   ProgramaPdfDiagnostic,
   ProgramaStoredDocument,
@@ -87,6 +88,10 @@ export function createEmptyProgramaPayload(
     documental: {
       programa_pdf: null,
     },
+    curricular: {
+      programa_formacion_id: null,
+      competencias: [],
+    },
   };
 }
 
@@ -108,6 +113,10 @@ function asNumber(value: unknown, fallback = 0): number {
 
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function normalizeStoredDocument(
@@ -344,6 +353,50 @@ function normalizeExtraction(
   };
 }
 
+function normalizeCompetencia(value: unknown): ProgramaCompetencia | null {
+  const competencia = asRecord(value);
+  if (competencia === null) {
+    return null;
+  }
+
+  const id = asString(competencia.id);
+  const programaId = asString(competencia.programa_id);
+  const codigo = asString(competencia.codigo_competencia).trim();
+  const nombre = asString(competencia.nombre_competencia).trim();
+  const estado = competencia.estado;
+  const origen = normalizeTraceStatus(competencia.origen_campo);
+
+  if (
+    !id ||
+    !programaId ||
+    !codigo ||
+    !nombre ||
+    origen === null ||
+    (estado !== "BORRADOR" &&
+      estado !== "EN_REVISION" &&
+      estado !== "COMPLETO" &&
+      estado !== "BLOQUEADO")
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    programa_id: programaId,
+    codigo_competencia: codigo,
+    nombre_competencia: nombre,
+    orden:
+      typeof competencia.orden === "number" &&
+      Number.isFinite(competencia.orden)
+        ? competencia.orden
+        : null,
+    estado,
+    origen_campo: origen,
+    fecha_creacion: asString(competencia.fecha_creacion),
+    fecha_actualizacion: asString(competencia.fecha_actualizacion),
+  };
+}
+
 export function normalizeProgramaPayload(
   value: Record<string, unknown>,
   referenciaId: string,
@@ -353,12 +406,19 @@ export function normalizeProgramaPayload(
   const programa = asRecord(value.programa);
   const wizard = asRecord(value.wizard);
   const documental = asRecord(value.documental);
+  const curricular = asRecord(value.curricular);
   const programaPdf = asRecord(documental?.programa_pdf);
   const storedDocument = normalizeStoredDocument(programaPdf?.documento);
   const diagnostic = normalizeDiagnostic(programaPdf?.diagnostico);
   const extraction = normalizeExtraction(programaPdf?.extraccion, referenciaId);
   const uploadedAt = programaPdf?.updated_at;
   const notesByStepRecord = asRecord(wizard?.notesByStep);
+  const competencias = Array.isArray(curricular?.competencias)
+    ? curricular.competencias.flatMap((item) => {
+        const normalized = normalizeCompetencia(item);
+        return normalized === null ? [] : [normalized];
+      })
+    : [];
 
   const touchedStepsCandidate = Array.isArray(meta?.touchedSteps)
     ? meta.touchedSteps.filter(
@@ -424,6 +484,10 @@ export function normalizeProgramaPayload(
                 typeof uploadedAt === "string" ? uploadedAt : undefined,
             }
           : null,
+    },
+    curricular: {
+      programa_formacion_id: asNullableString(curricular?.programa_formacion_id),
+      competencias,
     },
   };
 }
