@@ -4,6 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.infrastructure.config.settings import get_settings
+from src.interfaces.http.controllers.competencias import (
+    router as competencias_router,
+)
 from src.interfaces.http.controllers.drafts import router as drafts_router
 from src.interfaces.http.controllers.health import router as health_router
 from src.interfaces.http.controllers.programa_documentos import (
@@ -31,6 +34,7 @@ def create_application() -> FastAPI:
     application.include_router(health_router)
     application.include_router(drafts_router)
     application.include_router(programa_documentos_router)
+    application.include_router(competencias_router)
 
     return application
 
