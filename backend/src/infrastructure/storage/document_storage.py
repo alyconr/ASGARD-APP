@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 import anyio
 from minio import Minio
+from minio.error import S3Error
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.infrastructure.config.settings import Settings
@@ -28,6 +29,9 @@ class DocumentStorageService(Protocol):
         original_filename: str,
     ) -> StoredDocumentDTO:
         """Store a PDF and return durable object metadata."""
+
+    async def read_pdf(self, *, key: str) -> bytes:
+        """Read a stored PDF object by key."""
 
 
 class MinioDocumentStorageService:
@@ -79,6 +83,26 @@ class MinioDocumentStorageService:
             )
 
         return await anyio.to_thread.run_sync(upload)
+
+    async def read_pdf(self, *, key: str) -> bytes:
+        """Read a stored PDF object by key."""
+
+        def download() -> bytes:
+            try:
+                response = self._client.get_object(
+                    bucket_name=self._bucket_name,
+                    object_name=key,
+                )
+            except S3Error:
+                raise
+
+            try:
+                return response.read()
+            finally:
+                response.close()
+                response.release_conn()
+
+        return await anyio.to_thread.run_sync(download)
 
     def _ensure_bucket(self) -> None:
         """Create the configured bucket on first use when it is missing."""

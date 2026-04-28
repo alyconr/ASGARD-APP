@@ -137,5 +137,121 @@ describe("programa constants", () => {
         normalized.documental.programa_pdf?.diagnostico.estado_legibilidad,
       ).toBe("PARCIALMENTE_LEGIBLE");
     });
+
+    it("preserves a valid extraction result in the draft payload", () => {
+      const input = {
+        programa: {
+          codigo_programa: "228118",
+          nombre_programa: "Analisis y Desarrollo de Software",
+          version_programa: "",
+        },
+        documental: {
+          programa_pdf: {
+            documento: {
+              original_filename: "programa.pdf",
+              storage_key: "programas/ref/documentos/programa.pdf",
+              size_bytes: 2048,
+              content_type: "application/pdf",
+              checksum_sha256: "checksum",
+              etag: "etag",
+            },
+            diagnostico: {
+              estado_legibilidad: "LEGIBLE",
+              motivo: null,
+              resumen: "Texto legible",
+              has_text_layer: true,
+              analyzed_pages: 3,
+              pages_with_text: 3,
+              text_character_count: 1200,
+              can_attempt_extraction: true,
+              requires_manual_entry: false,
+            },
+            extraccion: {
+              referencia_id: "ref-123",
+              estado_legibilidad: "LEGIBLE",
+              resumen: "Extraccion aplicada",
+              requiere_revision_humana: true,
+              programa: {
+                codigo_programa: {
+                  campo: "codigo_programa",
+                  valor: "228118",
+                  estado: "EXTRAIDO",
+                  motivo: null,
+                  requiere_revision: true,
+                  aplicado_al_borrador: true,
+                  valor_actual_borrador: null,
+                },
+                nombre_programa: {
+                  campo: "nombre_programa",
+                  valor: "Analisis y Desarrollo de Software",
+                  estado: "EXTRAIDO",
+                  motivo: null,
+                  requiere_revision: true,
+                  aplicado_al_borrador: true,
+                  valor_actual_borrador: null,
+                },
+              },
+              estructura_curricular: {
+                competencias: {
+                  items: [
+                    {
+                      valor: "Construir software",
+                      estado: "EXTRAIDO",
+                      motivo: null,
+                      requiere_revision: true,
+                    },
+                  ],
+                  estado: "EXTRAIDO",
+                  motivo: null,
+                  requiere_revision: true,
+                },
+                resultados_aprendizaje: {
+                  items: [],
+                  estado: "PENDIENTE",
+                  motivo: "CAMPO_NO_ENCONTRADO",
+                  requiere_revision: true,
+                },
+                conocimientos_saber: {
+                  items: [],
+                  estado: "PENDIENTE",
+                  motivo: "CAMPO_NO_ENCONTRADO",
+                  requiere_revision: true,
+                },
+                conocimientos_proceso: {
+                  items: [],
+                  estado: "PENDIENTE",
+                  motivo: "CAMPO_NO_ENCONTRADO",
+                  requiere_revision: true,
+                },
+                criterios_evaluacion: {
+                  items: [],
+                  estado: "PENDIENTE",
+                  motivo: "CAMPO_NO_ENCONTRADO",
+                  requiere_revision: true,
+                },
+              },
+              programa_actualizado: {
+                codigo_programa: "228118",
+                nombre_programa: "Analisis y Desarrollo de Software",
+                version_programa: "",
+              },
+              updated_at: "2026-04-28T00:00:00Z",
+            },
+            updated_at: "2026-04-28T00:00:00Z",
+          },
+        },
+      };
+
+      const normalized = normalizeProgramaPayload(input, "ref-123");
+
+      expect(
+        normalized.documental.programa_pdf?.extraccion?.programa.codigo_programa
+          .valor,
+      ).toBe("228118");
+      expect(
+        normalized.documental.programa_pdf?.extraccion?.estructura_curricular
+          .competencias.items[0]?.valor,
+      ).toBe("Construir software");
+    });
   });
 });

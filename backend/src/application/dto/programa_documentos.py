@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from src.domain.programa.documentos import EstadoLegibilidadPdf
-from src.domain.shared.enums import MotivoFalloExtraccion
+from src.domain.shared.enums import EstadoCampo, MotivoFalloExtraccion
 
 
 @dataclass(frozen=True)
@@ -43,3 +43,77 @@ class ProgramaPdfUploadResultDTO:
     referencia_id: uuid.UUID
     documento: StoredDocumentDTO
     diagnostico: PdfLegibilityDiagnosticDTO
+
+
+@dataclass(frozen=True)
+class ExtractedFieldDTO:
+    """Traceable extraction result for a single field."""
+
+    campo: str
+    valor: str | None
+    estado: EstadoCampo
+    motivo: MotivoFalloExtraccion | None
+    requiere_revision: bool
+    aplicado_al_borrador: bool
+    valor_actual_borrador: str | None = None
+
+
+@dataclass(frozen=True)
+class ExtractedTextItemDTO:
+    """Traceable extraction result for one preliminary curricular item."""
+
+    valor: str
+    estado: EstadoCampo
+    motivo: MotivoFalloExtraccion | None
+    requiere_revision: bool
+
+
+@dataclass(frozen=True)
+class ExtractedListBlockDTO:
+    """Traceable extraction result for a preliminary curricular collection."""
+
+    items: list[ExtractedTextItemDTO]
+    estado: EstadoCampo
+    motivo: MotivoFalloExtraccion | None
+    requiere_revision: bool
+
+
+@dataclass(frozen=True)
+class ProgramaBaseExtractionDTO:
+    """Program base fields extracted from the PDF."""
+
+    codigo_programa: ExtractedFieldDTO
+    nombre_programa: ExtractedFieldDTO
+
+
+@dataclass(frozen=True)
+class ProgramaCurricularExtractionDTO:
+    """Preliminary curricular structure extracted before CRUD tasks."""
+
+    competencias: ExtractedListBlockDTO
+    resultados_aprendizaje: ExtractedListBlockDTO
+    conocimientos_saber: ExtractedListBlockDTO
+    conocimientos_proceso: ExtractedListBlockDTO
+    criterios_evaluacion: ExtractedListBlockDTO
+
+
+@dataclass(frozen=True)
+class ProgramaDraftFieldsDTO:
+    """Program draft fields after applying the safe extraction merge."""
+
+    codigo_programa: str
+    nombre_programa: str
+    version_programa: str
+
+
+@dataclass(frozen=True)
+class ProgramaExtractionResultDTO:
+    """Structured result returned by the TASK-07 extraction use case."""
+
+    referencia_id: uuid.UUID
+    estado_legibilidad: EstadoLegibilidadPdf
+    resumen: str
+    requiere_revision_humana: bool
+    programa: ProgramaBaseExtractionDTO
+    estructura_curricular: ProgramaCurricularExtractionDTO
+    programa_actualizado: ProgramaDraftFieldsDTO

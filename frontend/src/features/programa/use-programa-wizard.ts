@@ -31,6 +31,7 @@ import {
 } from "@/features/programa/constants";
 import type {
   AutosaveState,
+  ProgramaExtractionResult,
   ProgramaDraftSnapshot,
   ProgramaEntryMode,
   ProgramaPdfUploadResponse,
@@ -167,6 +168,7 @@ export interface ProgramaWizardController {
   updateProgramaBaseField: (field: ProgramaBaseField, value: string) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
+  updateProgramaExtractionResult: (result: ProgramaExtractionResult) => void;
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
@@ -529,7 +531,49 @@ export function useProgramaWizard(): ProgramaWizardController {
             programa_pdf: {
               documento: result.documento,
               diagnostico: result.diagnostico,
+              extraccion: null,
               updated_at: new Date().toISOString(),
+            },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const updateProgramaExtractionResult = useCallback(
+    (result: ProgramaExtractionResult): void => {
+      setPayload((currentPayload) => {
+        if (
+          currentPayload === null ||
+          currentPayload.documental.programa_pdf === null
+        ) {
+          return currentPayload;
+        }
+
+        const now = new Date().toISOString();
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            entryMode: "PDF",
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "origen-documental",
+            ),
+            lastInteractionAt: now,
+          },
+          programa: result.programa_actualizado,
+          documental: {
+            ...currentPayload.documental,
+            programa_pdf: {
+              ...currentPayload.documental.programa_pdf,
+              extraccion: {
+                ...result,
+                updated_at: result.updated_at ?? now,
+              },
+              updated_at: now,
             },
           },
         };
@@ -616,6 +660,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateProgramaBaseField,
     updateStepNote,
     updateProgramaPdfResult,
+    updateProgramaExtractionResult,
     updateContinueReferenceInput,
     forgetKnownDraft,
     clearKnownDrafts,

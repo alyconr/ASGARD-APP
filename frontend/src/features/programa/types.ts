@@ -15,6 +15,22 @@ export type PdfLegibilityStatus =
   | "PARCIALMENTE_LEGIBLE"
   | "NO_LEGIBLE";
 
+export type FieldTraceStatus =
+  | "EXTRAIDO"
+  | "MANUAL"
+  | "CORREGIDO"
+  | "PENDIENTE"
+  | "VALIDADO";
+
+export type ExtractionFailureReason =
+  | "PDF_ESCANEADO"
+  | "DOCUMENTO_ILEGIBLE"
+  | "BAJA_RESOLUCION"
+  | "ESTRUCTURA_NO_RECONOCIDA"
+  | "CAMPO_NO_ENCONTRADO"
+  | "CONTENIDO_AMBIGUO"
+  | "ARCHIVO_PROTEGIDO";
+
 export interface ProgramaWizardStepDefinition {
   id: ProgramaWizardStepId;
   index: number;
@@ -68,6 +84,7 @@ export interface ProgramaPdfDiagnostic {
 export interface ProgramaPdfUploadResult {
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
+  extraccion: ProgramaExtractionResult | null;
   updated_at?: string;
 }
 
@@ -75,6 +92,54 @@ export interface ProgramaPdfUploadResponse {
   referencia_id: string;
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
+}
+
+export interface ProgramaExtractedField {
+  campo: string;
+  valor: string | null;
+  estado: FieldTraceStatus;
+  motivo: ExtractionFailureReason | null;
+  requiere_revision: boolean;
+  aplicado_al_borrador: boolean;
+  valor_actual_borrador: string | null;
+}
+
+export interface ProgramaExtractedTextItem {
+  valor: string;
+  estado: FieldTraceStatus;
+  motivo: ExtractionFailureReason | null;
+  requiere_revision: boolean;
+}
+
+export interface ProgramaExtractedListBlock {
+  items: ProgramaExtractedTextItem[];
+  estado: FieldTraceStatus;
+  motivo: ExtractionFailureReason | null;
+  requiere_revision: boolean;
+}
+
+export interface ProgramaExtractionResult {
+  referencia_id: string;
+  estado_legibilidad: PdfLegibilityStatus;
+  resumen: string;
+  requiere_revision_humana: boolean;
+  programa: {
+    codigo_programa: ProgramaExtractedField;
+    nombre_programa: ProgramaExtractedField;
+  };
+  estructura_curricular: {
+    competencias: ProgramaExtractedListBlock;
+    resultados_aprendizaje: ProgramaExtractedListBlock;
+    conocimientos_saber: ProgramaExtractedListBlock;
+    conocimientos_proceso: ProgramaExtractedListBlock;
+    criterios_evaluacion: ProgramaExtractedListBlock;
+  };
+  programa_actualizado: {
+    codigo_programa: string;
+    nombre_programa: string;
+    version_programa: string;
+  };
+  updated_at?: string;
 }
 
 export interface ProgramaDraftSnapshot {

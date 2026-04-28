@@ -1,4 +1,9 @@
 import type {
+  ExtractionFailureReason,
+  FieldTraceStatus,
+  ProgramaExtractedField,
+  ProgramaExtractedListBlock,
+  ProgramaExtractionResult,
   ProgramaPdfDiagnostic,
   ProgramaStoredDocument,
   ProgramaWizardPayload,
@@ -158,6 +163,184 @@ function normalizeDiagnostic(value: unknown): ProgramaPdfDiagnostic | null {
   };
 }
 
+function normalizeTraceStatus(value: unknown): FieldTraceStatus | null {
+  if (
+    value === "EXTRAIDO" ||
+    value === "MANUAL" ||
+    value === "CORREGIDO" ||
+    value === "PENDIENTE" ||
+    value === "VALIDADO"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeFailureReason(
+  value: unknown,
+): ExtractionFailureReason | null {
+  if (
+    value === "PDF_ESCANEADO" ||
+    value === "DOCUMENTO_ILEGIBLE" ||
+    value === "BAJA_RESOLUCION" ||
+    value === "ESTRUCTURA_NO_RECONOCIDA" ||
+    value === "CAMPO_NO_ENCONTRADO" ||
+    value === "CONTENIDO_AMBIGUO" ||
+    value === "ARCHIVO_PROTEGIDO"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeExtractedField(
+  value: unknown,
+): ProgramaExtractedField | null {
+  const field = asRecord(value);
+  if (field === null) {
+    return null;
+  }
+
+  const status = normalizeTraceStatus(field.estado);
+  if (status === null) {
+    return null;
+  }
+
+  return {
+    campo: asString(field.campo),
+    valor: typeof field.valor === "string" ? field.valor : null,
+    estado: status,
+    motivo: normalizeFailureReason(field.motivo),
+    requiere_revision: asBoolean(field.requiere_revision, true),
+    aplicado_al_borrador: asBoolean(field.aplicado_al_borrador),
+    valor_actual_borrador:
+      typeof field.valor_actual_borrador === "string"
+        ? field.valor_actual_borrador
+        : null,
+  };
+}
+
+function normalizeExtractedListBlock(
+  value: unknown,
+): ProgramaExtractedListBlock | null {
+  const block = asRecord(value);
+  if (block === null) {
+    return null;
+  }
+
+  const status = normalizeTraceStatus(block.estado);
+  if (status === null || !Array.isArray(block.items)) {
+    return null;
+  }
+
+  const items = block.items.flatMap((item) => {
+    const record = asRecord(item);
+    if (record === null) {
+      return [];
+    }
+    const itemStatus = normalizeTraceStatus(record.estado);
+    const value = asString(record.valor).trim();
+    if (itemStatus === null || value.length === 0) {
+      return [];
+    }
+    return [
+      {
+        valor: value,
+        estado: itemStatus,
+        motivo: normalizeFailureReason(record.motivo),
+        requiere_revision: asBoolean(record.requiere_revision, true),
+      },
+    ];
+  });
+
+  return {
+    items,
+    estado: status,
+    motivo: normalizeFailureReason(block.motivo),
+    requiere_revision: asBoolean(block.requiere_revision, true),
+  };
+}
+
+function normalizeExtraction(
+  value: unknown,
+  referenciaId: string,
+): ProgramaExtractionResult | null {
+  const extraction = asRecord(value);
+  if (extraction === null) {
+    return null;
+  }
+
+  const legibility = extraction.estado_legibilidad;
+  if (
+    legibility !== "LEGIBLE" &&
+    legibility !== "PARCIALMENTE_LEGIBLE" &&
+    legibility !== "NO_LEGIBLE"
+  ) {
+    return null;
+  }
+
+  const programa = asRecord(extraction.programa);
+  const estructura = asRecord(extraction.estructura_curricular);
+  const updatedProgram = asRecord(extraction.programa_actualizado);
+  const codigo = normalizeExtractedField(programa?.codigo_programa);
+  const nombre = normalizeExtractedField(programa?.nombre_programa);
+  const competencias = normalizeExtractedListBlock(estructura?.competencias);
+  const resultados = normalizeExtractedListBlock(
+    estructura?.resultados_aprendizaje,
+  );
+  const saber = normalizeExtractedListBlock(estructura?.conocimientos_saber);
+  const proceso = normalizeExtractedListBlock(
+    estructura?.conocimientos_proceso,
+  );
+  const criterios = normalizeExtractedListBlock(
+    estructura?.criterios_evaluacion,
+  );
+
+  if (
+    codigo === null ||
+    nombre === null ||
+    competencias === null ||
+    resultados === null ||
+    saber === null ||
+    proceso === null ||
+    criterios === null
+  ) {
+    return null;
+  }
+
+  return {
+    referencia_id: asString(extraction.referencia_id, referenciaId),
+    estado_legibilidad: legibility,
+    resumen: asString(extraction.resumen),
+    requiere_revision_humana: asBoolean(
+      extraction.requiere_revision_humana,
+      true,
+    ),
+    programa: {
+      codigo_programa: codigo,
+      nombre_programa: nombre,
+    },
+    estructura_curricular: {
+      competencias,
+      resultados_aprendizaje: resultados,
+      conocimientos_saber: saber,
+      conocimientos_proceso: proceso,
+      criterios_evaluacion: criterios,
+    },
+    programa_actualizado: {
+      codigo_programa: asString(updatedProgram?.codigo_programa),
+      nombre_programa: asString(updatedProgram?.nombre_programa),
+      version_programa: asString(updatedProgram?.version_programa),
+    },
+    updated_at:
+      typeof extraction.updated_at === "string"
+        ? extraction.updated_at
+        : undefined,
+  };
+}
+
 export function normalizeProgramaPayload(
   value: Record<string, unknown>,
   referenciaId: string,
@@ -170,6 +353,7 @@ export function normalizeProgramaPayload(
   const programaPdf = asRecord(documental?.programa_pdf);
   const storedDocument = normalizeStoredDocument(programaPdf?.documento);
   const diagnostic = normalizeDiagnostic(programaPdf?.diagnostico);
+  const extraction = normalizeExtraction(programaPdf?.extraccion, referenciaId);
   const uploadedAt = programaPdf?.updated_at;
   const notesByStepRecord = asRecord(wizard?.notesByStep);
 
@@ -232,6 +416,7 @@ export function normalizeProgramaPayload(
           ? {
               documento: storedDocument,
               diagnostico: diagnostic,
+              extraccion: extraction,
               updated_at:
                 typeof uploadedAt === "string" ? uploadedAt : undefined,
             }

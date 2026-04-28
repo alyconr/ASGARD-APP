@@ -9,7 +9,6 @@ import {
   ClipboardList,
   FileText,
   FolderOpen,
-  Landmark,
   ListX,
   NotebookText,
   RefreshCcw,
@@ -23,11 +22,16 @@ import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
+import {
+  ProgramaCurricularExtractionPreview,
+  ProgramaExtractionPanel,
+} from "@/features/programa/components/programa-extraction-panel";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { cn } from "@/lib/utils";
 import type {
   ProgramaEntryMode,
+  ProgramaExtractionResult,
   ProgramaPdfUploadResponse,
   ProgramaPdfUploadResult,
   ProgramaWizardStepDefinition,
@@ -81,9 +85,9 @@ const STEP_CONTENT: Record<
   "origen-documental": {
     label: "Origen de informacion",
     description:
-      "El PDF se almacena y se diagnostica sin activar extraccion de campos.",
+      "El PDF se almacena, diagnostica y habilita extraccion con revision humana.",
     slotLabel: "Cargue documental",
-    checks: ["PDF valido", "Diagnostico estructurado", "Fallback manual"],
+    checks: ["PDF valido", "Diagnostico estructurado", "Extraccion hibrida"],
     icon: ScanLine,
   },
   "estructura-curricular": {
@@ -202,14 +206,17 @@ function StepWorkspace({
   programaValue,
   onEntryModeChange,
   onProgramaPdfUploaded,
+  onProgramaExtracted,
   onProgramaFieldChange,
   onNoteChange,
+  programaExtractionResult,
   programaPdfResult,
   referenceId,
 }: Readonly<{
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
   entryMode: ProgramaEntryMode;
+  programaExtractionResult: ProgramaExtractionResult | null;
   programaPdfResult: ProgramaPdfUploadResult | null;
   referenceId: string;
   programaValue: {
@@ -218,6 +225,7 @@ function StepWorkspace({
     version_programa: string;
   };
   onEntryModeChange: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
+  onProgramaExtracted: (result: ProgramaExtractionResult) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
   onNoteChange: (value: string) => void;
@@ -278,10 +286,25 @@ function StepWorkspace({
               onFieldChange={onProgramaFieldChange}
             />
           ) : currentStep.id === "origen-documental" ? (
-            <ProgramaDocumentUpload
-              currentResult={programaPdfResult}
-              referenciaId={referenceId}
-              onUploaded={onProgramaPdfUploaded}
+            <div className="grid gap-4">
+              <ProgramaDocumentUpload
+                currentResult={programaPdfResult}
+                referenciaId={referenceId}
+                onUploaded={onProgramaPdfUploaded}
+              />
+              <ProgramaExtractionPanel
+                currentResult={programaExtractionResult}
+                hasPdf={programaPdfResult !== null}
+                legibility={
+                  programaPdfResult?.diagnostico.estado_legibilidad ?? null
+                }
+                referenciaId={referenceId}
+                onExtracted={onProgramaExtracted}
+              />
+            </div>
+          ) : currentStep.id === "estructura-curricular" ? (
+            <ProgramaCurricularExtractionPreview
+              extraction={programaExtractionResult}
             />
           ) : (
             <>
@@ -381,12 +404,12 @@ export function ProgramaWizardShell(): React.JSX.Element {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[var(--accent-strong)]">
-              <Image 
-                src="/logo-sena.svg" 
-                alt="Logo SENA" 
-                width={24} 
-                height={24} 
-                className="object-contain shrink-0" 
+              <Image
+                src="/logo-sena.svg"
+                alt="Logo SENA"
+                width={24}
+                height={24}
+                className="shrink-0 object-contain"
               />
               <p className="text-xs font-semibold tracking-[0.18em] uppercase">
                 SENA / Fase 1
@@ -594,6 +617,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 ] ?? ""
               }
               entryMode={controller.payload.meta.entryMode}
+              programaExtractionResult={
+                controller.payload.documental.programa_pdf?.extraccion ?? null
+              }
               programaPdfResult={controller.payload.documental.programa_pdf}
               referenceId={
                 controller.activeReferenceId ??
@@ -601,6 +627,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               programaValue={controller.payload.programa}
               onEntryModeChange={controller.setEntryMode}
+              onProgramaExtracted={controller.updateProgramaExtractionResult}
               onProgramaPdfUploaded={controller.updateProgramaPdfResult}
               onProgramaFieldChange={controller.updateProgramaBaseField}
               onNoteChange={(value) =>
