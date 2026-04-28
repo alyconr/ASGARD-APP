@@ -196,11 +196,23 @@ function BlockPreview({
       )}
 
       <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-        {block.items.length} elemento(s) preliminares.{" "}
+        {block.total_items} elemento(s) identificado(s).{" "}
         {block.requiere_revision
           ? "Requiere revision humana."
           : "Sin revision pendiente."}
       </p>
+      {block.items.length > visibleItems.length ? (
+        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+          Preview reducido: {visibleItems.length} visibles,{" "}
+          {block.items.length - visibleItems.length} conservado(s) en el
+          borrador.
+        </p>
+      ) : null}
+      {block.bloque_parcial ? (
+        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+          Bloque parcial o pendiente de contraste con el documento fuente.
+        </p>
+      ) : null}
       {block.motivo !== null ? (
         <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
           Motivo: {REASON_COPY[block.motivo] ?? block.motivo}

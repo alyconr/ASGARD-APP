@@ -36,6 +36,9 @@ function buildExtractionResult(): ProgramaExtractionResult {
     estado: "PENDIENTE" as const,
     motivo: "CAMPO_NO_ENCONTRADO" as const,
     requiere_revision: true,
+    total_items: 0,
+    bloque_vacio: true,
+    bloque_parcial: true,
   };
 
   return {
@@ -72,10 +75,31 @@ function buildExtractionResult(): ProgramaExtractionResult {
             motivo: null,
             requiere_revision: true,
           },
+          {
+            valor: "Analizar requisitos del cliente",
+            estado: "EXTRAIDO",
+            motivo: null,
+            requiere_revision: true,
+          },
+          {
+            valor: "Ejecutar pruebas tecnicas",
+            estado: "EXTRAIDO",
+            motivo: null,
+            requiere_revision: true,
+          },
+          {
+            valor: "Documentar componentes",
+            estado: "EXTRAIDO",
+            motivo: null,
+            requiere_revision: true,
+          },
         ],
         estado: "EXTRAIDO",
         motivo: null,
         requiere_revision: true,
+        total_items: 4,
+        bloque_vacio: false,
+        bloque_parcial: false,
       },
       resultados_aprendizaje: pendingBlock,
       conocimientos_saber: pendingBlock,
@@ -156,5 +180,7 @@ describe("ProgramaExtractionPanel", () => {
     expect(
       screen.getByText("Construir software de acuerdo con requisitos"),
     ).toBeInTheDocument();
+    expect(screen.getByText(/4 elemento\(s\) identificado\(s\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 conservado\(s\) en el borrador/i)).toBeInTheDocument();
   });
 });

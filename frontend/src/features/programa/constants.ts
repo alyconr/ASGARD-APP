@@ -260,6 +260,9 @@ function normalizeExtractedListBlock(
     estado: status,
     motivo: normalizeFailureReason(block.motivo),
     requiere_revision: asBoolean(block.requiere_revision, true),
+    total_items: asNumber(block.total_items, items.length),
+    bloque_vacio: asBoolean(block.bloque_vacio, items.length === 0),
+    bloque_parcial: asBoolean(block.bloque_parcial),
   };
 }
 

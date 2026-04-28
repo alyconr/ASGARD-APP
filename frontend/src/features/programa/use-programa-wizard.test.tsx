@@ -69,6 +69,9 @@ function buildExtractionResult(): ProgramaExtractionResult {
     estado: "PENDIENTE" as const,
     motivo: "CAMPO_NO_ENCONTRADO" as const,
     requiere_revision: true,
+    total_items: 0,
+    bloque_vacio: true,
+    bloque_parcial: true,
   };
 
   return {

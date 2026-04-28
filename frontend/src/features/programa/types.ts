@@ -116,6 +116,9 @@ export interface ProgramaExtractedListBlock {
   estado: FieldTraceStatus;
   motivo: ExtractionFailureReason | null;
   requiere_revision: boolean;
+  total_items: number;
+  bloque_vacio: boolean;
+  bloque_parcial: boolean;
 }
 
 export interface ProgramaExtractionResult {
