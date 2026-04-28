@@ -92,7 +92,7 @@ def build_pdf_metadata(
     *,
     original_filename: str,
     checksum_sha256: str,
-) -> dict[str, str]:
+) -> dict[str, str | list[str] | tuple[str]]:
     """Build S3-compatible user metadata for a PDF object."""
     return {
         "original-filename": quote(original_filename, safe=""),
