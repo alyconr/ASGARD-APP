@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   AlertCircle,
   ArrowLeft,
@@ -380,7 +381,13 @@ export function ProgramaWizardShell(): React.JSX.Element {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[var(--accent-strong)]">
-              <Landmark className="h-5 w-5" />
+              <Image 
+                src="/logo-sena.svg" 
+                alt="Logo SENA" 
+                width={24} 
+                height={24} 
+                className="object-contain shrink-0" 
+              />
               <p className="text-xs font-semibold tracking-[0.18em] uppercase">
                 SENA / Fase 1
               </p>
