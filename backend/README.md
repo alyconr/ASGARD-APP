@@ -28,6 +28,7 @@ Valores minimos para desarrollo local:
 ```env
 DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/sena_guias_db"
 ALEMBIC_DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/sena_guias_db"
+CORS_ALLOW_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
 STORAGE_PROVIDER="minio"
 STORAGE_BUCKET_NAME="sena-programa-documentos"
 STORAGE_ENDPOINT="localhost:9000"
@@ -39,6 +40,8 @@ STORAGE_REGION=
 
 `DATABASE_URL` usa `asyncpg` para SQLAlchemy async. `ALEMBIC_DATABASE_URL`
 usa `psycopg` para Alembic sync.
+`CORS_ALLOW_ORIGINS` se define como lista separada por comas para permitir el
+frontend local de Next.js sin abrir CORS a cualquier origen.
 
 ## Instalar dependencias
 

@@ -5,12 +5,15 @@ from __future__ import annotations
 import hashlib
 import io
 from typing import Protocol
+from urllib.parse import quote
 
 import anyio
 from minio import Minio
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.infrastructure.config.settings import Settings
+
+PDF_METADATA_FILENAME_ENCODING = "utf-8-percent"
 
 
 class DocumentStorageService(Protocol):
@@ -61,10 +64,10 @@ class MinioDocumentStorageService:
                 data=io.BytesIO(content),
                 length=len(content),
                 content_type=content_type,
-                metadata={
-                    "original-filename": original_filename,
-                    "checksum-sha256": checksum,
-                },
+                metadata=build_pdf_metadata(
+                    original_filename=original_filename,
+                    checksum_sha256=checksum,
+                ),
             )
             return StoredDocumentDTO(
                 original_filename=original_filename,
@@ -83,3 +86,16 @@ class MinioDocumentStorageService:
             return
 
         self._client.make_bucket(self._bucket_name, location=self._region)
+
+
+def build_pdf_metadata(
+    *,
+    original_filename: str,
+    checksum_sha256: str,
+) -> dict[str, str]:
+    """Build S3-compatible user metadata for a PDF object."""
+    return {
+        "original-filename": quote(original_filename, safe=""),
+        "original-filename-encoding": PDF_METADATA_FILENAME_ENCODING,
+        "checksum-sha256": checksum_sha256,
+    }
