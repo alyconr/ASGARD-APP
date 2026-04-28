@@ -182,7 +182,14 @@ class ProgramaExtractionService:
                 raise ProgramaPdfMissingForExtractionError(
                     "El PDF diagnosticado no tiene referencia de almacenamiento",
                 )
-            pdf_content = await self._document_reader.read_pdf(key=storage_key)
+            try:
+                pdf_content = await self._document_reader.read_pdf(key=storage_key)
+            except FileNotFoundError as error:
+                raise ProgramaPdfMissingForExtractionError(
+                    "El borrador conserva la referencia del PDF, pero el archivo "
+                    "ya no existe en el almacenamiento documental. Vuelve a cargar "
+                    "el PDF en este mismo borrador antes de extraer.",
+                ) from error
             text = self._text_extractor.extract_text(pdf_content)
             result = _extract_program_fields(
                 referencia_id=referencia_id,

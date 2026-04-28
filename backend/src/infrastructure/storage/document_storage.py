@@ -93,7 +93,11 @@ class MinioDocumentStorageService:
                     bucket_name=self._bucket_name,
                     object_name=key,
                 )
-            except S3Error:
+            except S3Error as error:
+                if error.code in {"NoSuchKey", "NoSuchBucket"}:
+                    raise FileNotFoundError(
+                        f"No existe el PDF almacenado con key {key}",
+                    ) from error
                 raise
 
             try:

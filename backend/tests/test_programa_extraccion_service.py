@@ -101,6 +101,15 @@ class FakeDocumentReader:
         return b"%PDF fake"
 
 
+class FakeMissingDocumentReader:
+    """Fake storage reader for stale draft metadata."""
+
+    async def read_pdf(self, *, key: str) -> bytes:
+        """Simulate a PDF key that no longer exists in object storage."""
+        assert key == "programas/ref/documentos/programa.pdf"
+        raise FileNotFoundError("missing object")
+
+
 class FakeTextExtractor:
     """Fake PDF text extraction dependency."""
 
@@ -226,6 +235,53 @@ async def test_extract_program_pdf_prefills_empty_base_fields() -> None:
 
 
 @pytest.mark.anyio
+async def test_extract_program_pdf_partial_legibility_marks_missing_fields() -> None:
+    """Partially legible PDFs should preserve extracted data and mark gaps."""
+    referencia_id = uuid.uuid4()
+    draft_repository = FakeDraftRepository(
+        build_draft(
+            referencia_id,
+            legibility=EstadoLegibilidadPdf.PARCIALMENTE_LEGIBLE,
+        ),
+    )
+    service = ProgramaExtractionService(
+        session=FakeSession(),
+        draft_repository=draft_repository,
+        audit_repository=FakeAuditRepository(),
+        document_reader=FakeDocumentReader(),
+        text_extractor=FakeTextExtractor(
+            "Codigo del programa: 228118\n"
+            "Competencia: Construir software de acuerdo con requisitos",
+        ),
+    )
+
+    result = await service.extract_program_from_pdf(referencia_id=referencia_id)
+
+    assert result.referencia_id == referencia_id
+    assert result.estado_legibilidad is EstadoLegibilidadPdf.PARCIALMENTE_LEGIBLE
+    assert result.programa.codigo_programa.estado is EstadoCampo.EXTRAIDO
+    assert result.programa.codigo_programa.aplicado_al_borrador is True
+    assert result.programa.nombre_programa.estado is EstadoCampo.PENDIENTE
+    assert result.estructura_curricular.competencias.estado is EstadoCampo.EXTRAIDO
+    assert (
+        result.estructura_curricular.resultados_aprendizaje.estado
+        is EstadoCampo.PENDIENTE
+    )
+    assert draft_repository.draft is not None
+    assert draft_repository.draft.referencia_id == referencia_id
+    assert (
+        draft_repository.draft.payload_json["programa"]["codigo_programa"]
+        == "228118"
+    )
+    assert (
+        draft_repository.draft.payload_json["documental"]["programa_pdf"][
+            "extraccion"
+        ]["estado_legibilidad"]
+        == "PARCIALMENTE_LEGIBLE"
+    )
+
+
+@pytest.mark.anyio
 async def test_extract_program_pdf_preserves_manual_values() -> None:
     """Extraction must not overwrite existing manual draft values."""
     referencia_id = uuid.uuid4()
@@ -297,3 +353,21 @@ async def test_extract_program_pdf_requires_existing_document() -> None:
 
     with pytest.raises(ProgramaPdfMissingForExtractionError):
         await service.extract_program_from_pdf(referencia_id=referencia_id)
+
+
+@pytest.mark.anyio
+async def test_extract_program_pdf_fails_when_storage_object_is_missing() -> None:
+    """Stale draft metadata should not leak a storage traceback to the API."""
+    referencia_id = uuid.uuid4()
+    service = ProgramaExtractionService(
+        session=FakeSession(),
+        draft_repository=FakeDraftRepository(build_draft(referencia_id)),
+        audit_repository=FakeAuditRepository(),
+        document_reader=FakeMissingDocumentReader(),
+        text_extractor=FakeTextExtractor(""),
+    )
+
+    with pytest.raises(ProgramaPdfMissingForExtractionError) as error:
+        await service.extract_program_from_pdf(referencia_id=referencia_id)
+
+    assert "ya no existe en el almacenamiento documental" in str(error.value)
