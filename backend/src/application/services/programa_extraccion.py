@@ -26,7 +26,36 @@ from src.domain.programa.documentos import EstadoLegibilidadPdf
 from src.domain.shared.enums import EstadoBloque, EstadoCampo, MotivoFalloExtraccion
 from src.infrastructure.db.models.drafts import BorradorSesion
 
-MAX_PRELIMINARY_ITEMS = 8
+CURRICULAR_SECTION_LABELS: dict[str, tuple[str, ...]] = {
+    "competencias": (
+        "competencias",
+        "competencia",
+    ),
+    "resultados_aprendizaje": (
+        "resultados de aprendizaje",
+        "resultado de aprendizaje",
+        "resultados aprendizaje",
+        "resultado aprendizaje",
+    ),
+    "conocimientos_saber": (
+        "conocimientos de saber",
+        "conocimiento de saber",
+        "saberes",
+        "saber",
+    ),
+    "conocimientos_proceso": (
+        "conocimientos de proceso",
+        "conocimiento de proceso",
+        "procesos",
+        "proceso",
+    ),
+    "criterios_evaluacion": (
+        "criterios de evaluacion",
+        "criterio de evaluacion",
+        "criterios evaluacion",
+        "criterio evaluacion",
+    ),
+}
 
 
 class ProgramaExtractionDraftMissingError(Exception):
@@ -238,6 +267,7 @@ def _extract_program_fields(
         if legibility is EstadoLegibilidadPdf.PARCIALMENTE_LEGIBLE
         else MotivoFalloExtraccion.CAMPO_NO_ENCONTRADO
     )
+    source_is_partial = legibility is EstadoLegibilidadPdf.PARCIALMENTE_LEGIBLE
     codigo = _build_field_result(
         campo="codigo_programa",
         extracted_value=_extract_code(lines),
@@ -273,31 +303,33 @@ def _extract_program_fields(
         estructura_curricular=ProgramaCurricularExtractionDTO(
             competencias=_extract_list_block(
                 lines,
-                labels=("competencia", "competencias"),
+                section_key="competencias",
                 missing_reason=reason,
+                source_is_partial=source_is_partial,
             ),
             resultados_aprendizaje=_extract_list_block(
                 lines,
-                labels=("resultado de aprendizaje", "resultados de aprendizaje"),
+                section_key="resultados_aprendizaje",
                 missing_reason=reason,
+                source_is_partial=source_is_partial,
             ),
             conocimientos_saber=_extract_list_block(
                 lines,
-                labels=("conocimiento de saber", "conocimientos de saber"),
+                section_key="conocimientos_saber",
                 missing_reason=reason,
+                source_is_partial=source_is_partial,
             ),
             conocimientos_proceso=_extract_list_block(
                 lines,
-                labels=(
-                    "conocimiento de proceso",
-                    "conocimientos de proceso",
-                ),
+                section_key="conocimientos_proceso",
                 missing_reason=reason,
+                source_is_partial=source_is_partial,
             ),
             criterios_evaluacion=_extract_list_block(
                 lines,
-                labels=("criterio de evaluacion", "criterios de evaluacion"),
+                section_key="criterios_evaluacion",
                 missing_reason=reason,
+                source_is_partial=source_is_partial,
             ),
         ),
         programa_actualizado=updated_program,
@@ -443,34 +475,20 @@ def _extract_name(lines: list[str]) -> str | None:
 def _extract_list_block(
     lines: list[str],
     *,
-    labels: tuple[str, ...],
+    section_key: str,
     missing_reason: MotivoFalloExtraccion,
+    source_is_partial: bool,
 ) -> ExtractedListBlockDTO:
-    """Extract preliminary curricular items without implementing CRUD."""
-    items: list[ExtractedTextItemDTO] = []
-    seen: set[str] = set()
-    for index, line in enumerate(lines):
-        normalized = _plain(line)
-        if not any(label in normalized for label in labels):
-            continue
-        candidates = [_value_after_label(line), *lines[index + 1 : index + 2]]
-        for candidate in candidates:
-            clean = _clean_item(candidate)
-            key = _plain(clean)
-            if clean and key not in seen:
-                seen.add(key)
-                items.append(
-                    ExtractedTextItemDTO(
-                        valor=clean,
-                        estado=EstadoCampo.EXTRAIDO,
-                        motivo=None,
-                        requiere_revision=True,
-                    ),
-                )
-            if len(items) >= MAX_PRELIMINARY_ITEMS:
-                break
-        if len(items) >= MAX_PRELIMINARY_ITEMS:
-            break
+    """Extract all identifiable items from one curricular document section."""
+    items = [
+        ExtractedTextItemDTO(
+            valor=item,
+            estado=EstadoCampo.EXTRAIDO,
+            motivo=None,
+            requiere_revision=True,
+        )
+        for item in _extract_section_items(lines, section_key=section_key)
+    ]
 
     if not items:
         return _empty_list_block(missing_reason)
@@ -480,7 +498,61 @@ def _extract_list_block(
         estado=EstadoCampo.EXTRAIDO,
         motivo=None,
         requiere_revision=True,
+        total_items=len(items),
+        bloque_vacio=False,
+        bloque_parcial=source_is_partial,
     )
+
+
+def _extract_section_items(lines: list[str], *, section_key: str) -> list[str]:
+    """Extract ordered, de-duplicated items from a named section."""
+    active = False
+    current_parts: list[str] = []
+    raw_items: list[str] = []
+
+    def flush_current() -> None:
+        nonlocal current_parts
+        if current_parts:
+            raw_items.append(" ".join(current_parts))
+            current_parts = []
+
+    for line in lines:
+        heading_key = _find_curricular_heading_key(line)
+        if heading_key is not None:
+            if active and heading_key != section_key:
+                flush_current()
+                active = False
+
+            if heading_key == section_key:
+                active = True
+                inline_value = _value_after_section_label(line, section_key)
+                if inline_value:
+                    flush_current()
+                    current_parts = [inline_value]
+                continue
+
+        if not active or _is_section_noise(line):
+            continue
+
+        clean_line = _clean_item_line(line)
+        if not clean_line:
+            continue
+
+        if _starts_new_item(line):
+            flush_current()
+            current_parts = [_strip_item_marker(clean_line)]
+            continue
+
+        if not current_parts:
+            current_parts = [clean_line]
+        elif _looks_like_new_unmarked_item(clean_line, current_parts):
+            flush_current()
+            current_parts = [clean_line]
+        else:
+            current_parts.append(clean_line)
+
+    flush_current()
+    return _dedupe_items(raw_items)
 
 
 def _empty_list_block(reason: MotivoFalloExtraccion) -> ExtractedListBlockDTO:
@@ -490,6 +562,9 @@ def _empty_list_block(reason: MotivoFalloExtraccion) -> ExtractedListBlockDTO:
         estado=EstadoCampo.PENDIENTE,
         motivo=reason,
         requiere_revision=True,
+        total_items=0,
+        bloque_vacio=True,
+        bloque_parcial=True,
     )
 
 
@@ -596,6 +671,9 @@ def _block_to_payload(block: ExtractedListBlockDTO) -> dict[str, object]:
         "estado": block.estado.value,
         "motivo": block.motivo.value if block.motivo is not None else None,
         "requiere_revision": block.requiere_revision,
+        "total_items": block.total_items,
+        "bloque_vacio": block.bloque_vacio,
+        "bloque_parcial": block.bloque_parcial,
     }
 
 
@@ -707,6 +785,103 @@ def _clean_item(value: str) -> str:
     }:
         return ""
     return clean[:500]
+
+
+def _find_curricular_heading_key(line: str) -> str | None:
+    """Return the curricular section key represented by a heading line."""
+    for section_key, labels in CURRICULAR_SECTION_LABELS.items():
+        if any(_matches_section_heading(line, label) for label in labels):
+            return section_key
+    return None
+
+
+def _matches_section_heading(line: str, label: str) -> bool:
+    """Return whether a line starts a known curricular section."""
+    normalized = _plain(line)
+    normalized = re.sub(r"^\s*\d+(?:\.\d+)*[\.)]?\s+", "", normalized)
+    normalized = normalized.strip(" :-\t")
+    return (
+        normalized == label
+        or normalized.startswith(f"{label}:")
+        or normalized.startswith(f"{label} -")
+    )
+
+
+def _value_after_section_label(line: str, section_key: str) -> str:
+    """Return inline content after a section label, preserving original text."""
+    labels = CURRICULAR_SECTION_LABELS[section_key]
+    normalized = _plain(line)
+    normalized = re.sub(r"^\s*\d+(?:\.\d+)*[\.)]?\s+", "", normalized)
+    normalized = normalized.strip()
+    if not any(
+        normalized.startswith(f"{label}:") or normalized.startswith(f"{label} -")
+        for label in labels
+    ):
+        return ""
+
+    value = _value_after_label(line)
+    return _clean_item_line(value)
+
+
+def _is_section_noise(line: str) -> bool:
+    """Return whether a line is document chrome rather than curricular content."""
+    normalized = _plain(line).strip()
+    if not normalized:
+        return True
+    if re.fullmatch(r"(pagina|page)?\s*\d+\s*(de|/)?\s*\d*", normalized):
+        return True
+    return normalized in {"sena", "servicio nacional de aprendizaje"}
+
+
+def _clean_item_line(value: str) -> str:
+    """Clean one physical line before assembling section items."""
+    return re.sub(r"\s+", " ", value).strip(" :-*\t")
+
+
+def _starts_new_item(line: str) -> bool:
+    """Detect numbered, bulleted, coded or prefixed item starts."""
+    return re.match(
+        r"^\s*(?:[-*•–—]+|\d+(?:\.\d+)*[\.)-]|[A-Za-z][\.)-]|"
+        r"(?:RA|RAP|CE|C)\s*[-\d])\s+",
+        line,
+        flags=re.IGNORECASE,
+    ) is not None
+
+
+def _strip_item_marker(line: str) -> str:
+    """Remove a leading list marker from an extracted item line."""
+    return re.sub(
+        r"^\s*(?:[-*•–—]+|\d+(?:\.\d+)*[\.)-]|[A-Za-z][\.)-]|"
+        r"(?:RA|RAP|CE|C)\s*[-\d])\s+",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    ).strip()
+
+
+def _looks_like_new_unmarked_item(line: str, current_parts: list[str]) -> bool:
+    """Detect conservative unmarked item boundaries inside a section."""
+    current = " ".join(current_parts).strip()
+    if not current:
+        return False
+    if not current.endswith("."):
+        return False
+    if len(current) > 180 or len(line) > 180:
+        return False
+    return line[:1].isupper()
+
+
+def _dedupe_items(items: list[str]) -> list[str]:
+    """Clean and de-duplicate extracted items while preserving order."""
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        clean = _clean_item(item)
+        key = _plain(clean)
+        if clean and key not in seen:
+            seen.add(key)
+            deduped.append(clean)
+    return deduped
 
 
 def _as_record(value: object) -> dict[str, object] | None:

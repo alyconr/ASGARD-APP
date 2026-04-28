@@ -235,6 +235,75 @@ async def test_extract_program_pdf_prefills_empty_base_fields() -> None:
 
 
 @pytest.mark.anyio
+async def test_extract_program_pdf_reads_complete_sections() -> None:
+    """The section parser should keep all identifiable items in document order."""
+    referencia_id = uuid.uuid4()
+    competency_lines = [
+        "Competencias",
+        "1. Analizar requisitos del cliente",
+        "para construir una solucion pertinente",
+        "2. Disenar la arquitectura de software",
+        "3. Construir componentes de la solucion",
+        "4. Integrar componentes de software",
+        "5. Probar la solucion construida",
+        "6. Documentar artefactos tecnicos",
+        "7. Desplegar la aplicacion",
+        "8. Mantener la solucion",
+        "9. Gestionar configuracion",
+        "10. Atender incidencias del software",
+    ]
+    service = ProgramaExtractionService(
+        session=FakeSession(),
+        draft_repository=FakeDraftRepository(build_draft(referencia_id)),
+        audit_repository=FakeAuditRepository(),
+        document_reader=FakeDocumentReader(),
+        text_extractor=FakeTextExtractor(
+            "\n".join(
+                [
+                    "Codigo del programa: 228118",
+                    "Denominacion del programa: Analisis y Desarrollo de Software",
+                    *competency_lines,
+                    "Resultados de aprendizaje",
+                    "- Validar requisitos funcionales y no funcionales",
+                    "  con el equipo del proyecto",
+                    "- Implementar componentes siguiendo el diseno",
+                    "Conocimientos de saber",
+                    "1. Arquitectura de software",
+                    "2. Bases de datos relacionales",
+                    "Conocimientos de proceso",
+                    "- Elaborar componentes de software",
+                    "- Ejecutar pruebas tecnicas",
+                    "Criterios de evaluacion",
+                    "CE1 Verifica el cumplimiento de requisitos",
+                    "segun criterios establecidos",
+                    "CE2 Registra evidencias de prueba",
+                ],
+            ),
+        ),
+    )
+
+    result = await service.extract_program_from_pdf(referencia_id=referencia_id)
+
+    competencias = result.estructura_curricular.competencias
+    resultados = result.estructura_curricular.resultados_aprendizaje
+    criterios = result.estructura_curricular.criterios_evaluacion
+    assert competencias.total_items == 10
+    assert len(competencias.items) == 10
+    assert competencias.items[0].valor == (
+        "Analizar requisitos del cliente para construir una solucion pertinente"
+    )
+    assert competencias.items[-1].valor == "Atender incidencias del software"
+    assert resultados.total_items == 2
+    assert resultados.items[0].valor == (
+        "Validar requisitos funcionales y no funcionales con el equipo del proyecto"
+    )
+    assert criterios.items[0].valor == (
+        "Verifica el cumplimiento de requisitos segun criterios establecidos"
+    )
+    assert criterios.items[1].valor == "Registra evidencias de prueba"
+
+
+@pytest.mark.anyio
 async def test_extract_program_pdf_partial_legibility_marks_missing_fields() -> None:
     """Partially legible PDFs should preserve extracted data and mark gaps."""
     referencia_id = uuid.uuid4()
@@ -267,6 +336,8 @@ async def test_extract_program_pdf_partial_legibility_marks_missing_fields() -> 
         result.estructura_curricular.resultados_aprendizaje.estado
         is EstadoCampo.PENDIENTE
     )
+    assert result.estructura_curricular.competencias.bloque_parcial is True
+    assert result.estructura_curricular.resultados_aprendizaje.bloque_vacio is True
     assert draft_repository.draft is not None
     assert draft_repository.draft.referencia_id == referencia_id
     assert (

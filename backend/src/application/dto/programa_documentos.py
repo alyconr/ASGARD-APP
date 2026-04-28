@@ -76,6 +76,9 @@ class ExtractedListBlockDTO:
     estado: EstadoCampo
     motivo: MotivoFalloExtraccion | None
     requiere_revision: bool
+    total_items: int
+    bloque_vacio: bool
+    bloque_parcial: bool
 
 
 @dataclass(frozen=True)
