@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type {
   FieldTraceStatus,
   PdfLegibilityStatus,
+  ProgramaCompetenciaExtraccion,
   ProgramaExtractedField,
   ProgramaExtractedListBlock,
   ProgramaExtractionResult,
@@ -65,10 +66,13 @@ const REASON_COPY: Record<string, string> = {
 };
 
 const CURRICULAR_BLOCKS: Array<{
-  id: keyof ProgramaExtractionResult["estructura_curricular"];
+  id:
+    | "resultados_aprendizaje"
+    | "conocimientos_saber"
+    | "conocimientos_proceso"
+    | "criterios_evaluacion";
   label: string;
 }> = [
-  { id: "competencias", label: "Competencias" },
   { id: "resultados_aprendizaje", label: "Resultados de aprendizaje" },
   { id: "conocimientos_saber", label: "Conocimientos de saber" },
   { id: "conocimientos_proceso", label: "Conocimientos de proceso" },
@@ -182,7 +186,7 @@ function BlockPreview({
         <ul className="mt-3 grid gap-2 text-sm leading-6 text-[var(--foreground)]">
           {visibleItems.map((item) => (
             <li
-              key={`${label}-${item.valor}`}
+              key={`${label}-${item.valor.substring(0, 20)}`}
               className="rounded-lg bg-[var(--paper-strong)] px-3 py-2"
             >
               {item.valor}
@@ -204,8 +208,7 @@ function BlockPreview({
       {block.items.length > visibleItems.length ? (
         <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
           Preview reducido: {visibleItems.length} visibles,{" "}
-          {block.items.length - visibleItems.length} conservado(s) en el
-          borrador.
+          {block.items.length - visibleItems.length} omitidos.
         </p>
       ) : null}
       {block.bloque_parcial ? (
@@ -235,13 +238,15 @@ export function ProgramaCurricularExtractionPreview({
     );
   }
 
+  const { estructura_curricular } = extraction;
+
   return (
     <div className="grid gap-4">
       <div className="flex items-start gap-3 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <ClipboardCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--accent-strong)]" />
         <div>
           <p className="text-sm font-semibold text-[var(--foreground)]">
-            Base curricular preliminar
+            Base curricular preliminar ({estructura_curricular.total_competencias} competencias)
           </p>
           <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
             Vista de lectura para TASK-07. La gestion completa queda reservada
@@ -250,13 +255,24 @@ export function ProgramaCurricularExtractionPreview({
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        {CURRICULAR_BLOCKS.map((block) => (
-          <BlockPreview
-            key={block.id}
-            block={extraction.estructura_curricular[block.id]}
-            label={block.label}
-          />
+      <div className="grid gap-6">
+        {estructura_curricular.competencias.map((comp, idx) => (
+          <div key={`${comp.codigo.valor}-${idx}`} className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
+            <div className="mb-4">
+              <h3 className="text-base font-bold text-[var(--foreground)]">
+                {comp.codigo.valor} - {comp.denominacion.valor}
+              </h3>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-2">
+              {CURRICULAR_BLOCKS.map((block) => (
+                <BlockPreview
+                  key={block.id}
+                  block={comp[block.id]}
+                  label={block.label}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -286,14 +302,10 @@ export function ProgramaExtractionPanel({
       return null;
     }
 
-    const blocks = Object.values(currentResult.estructura_curricular);
-    const extractedBlocks = blocks.filter(
-      (block) => block.items.length > 0,
-    ).length;
+    const extractedCompetencias = currentResult.estructura_curricular.total_competencias;
 
     return {
-      extractedBlocks,
-      totalBlocks: blocks.length,
+      extractedCompetencias
     };
   }, [currentResult]);
 
@@ -401,7 +413,7 @@ export function ProgramaExtractionPanel({
             </p>
             {summary !== null ? (
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                {summary.extractedBlocks} de {summary.totalBlocks} bloques con
+                {summary.extractedCompetencias} competencias con
                 datos preliminares. Revision humana:{" "}
                 {currentResult.requiere_revision_humana ? "requerida" : "no"}.
               </p>

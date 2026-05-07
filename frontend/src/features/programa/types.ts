@@ -125,6 +125,25 @@ export interface ProgramaExtractedListBlock {
   bloque_parcial: boolean;
 }
 
+export interface ProgramaCompetenciaExtraccion {
+  codigo: ProgramaExtractedTextItem;
+  denominacion: ProgramaExtractedTextItem;
+  resultados_aprendizaje: ProgramaExtractedListBlock;
+  conocimientos_saber: ProgramaExtractedListBlock;
+  conocimientos_proceso: ProgramaExtractedListBlock;
+  criterios_evaluacion: ProgramaExtractedListBlock;
+}
+
+export interface ProgramaCurricularExtraction {
+  competencias: ProgramaCompetenciaExtraccion[];
+  estado: FieldTraceStatus;
+  motivo: ExtractionFailureReason | null;
+  requiere_revision: boolean;
+  total_competencias: number;
+  bloque_vacio: boolean;
+  bloque_parcial: boolean;
+}
+
 export interface ProgramaExtractionResult {
   referencia_id: string;
   estado_legibilidad: PdfLegibilityStatus;
@@ -134,13 +153,7 @@ export interface ProgramaExtractionResult {
     codigo_programa: ProgramaExtractedField;
     nombre_programa: ProgramaExtractedField;
   };
-  estructura_curricular: {
-    competencias: ProgramaExtractedListBlock;
-    resultados_aprendizaje: ProgramaExtractedListBlock;
-    conocimientos_saber: ProgramaExtractedListBlock;
-    conocimientos_proceso: ProgramaExtractedListBlock;
-    criterios_evaluacion: ProgramaExtractedListBlock;
-  };
+  estructura_curricular: ProgramaCurricularExtraction;
   programa_actualizado: {
     codigo_programa: string;
     nombre_programa: string;

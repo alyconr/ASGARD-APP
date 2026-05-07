@@ -67,44 +67,65 @@ function buildExtractionResult(): ProgramaExtractionResult {
       },
     },
     estructura_curricular: {
-      competencias: {
-        items: [
-          {
+      competencias: [
+        {
+          codigo: {
+            valor: "220501096",
+            estado: "EXTRAIDO",
+            motivo: null,
+            requiere_revision: true,
+          },
+          denominacion: {
             valor: "Construir software de acuerdo con requisitos",
             estado: "EXTRAIDO",
             motivo: null,
             requiere_revision: true,
           },
-          {
-            valor: "Analizar requisitos del cliente",
+          resultados_aprendizaje: {
+            items: [
+              {
+                valor: "RA1: Validar requisitos funcionales",
+                estado: "EXTRAIDO",
+                motivo: null,
+                requiere_revision: true,
+              },
+              {
+                valor: "RA2: Analizar modelo de datos",
+                estado: "EXTRAIDO",
+                motivo: null,
+                requiere_revision: true,
+              },
+              {
+                valor: "RA3: Ejecutar pruebas",
+                estado: "EXTRAIDO",
+                motivo: null,
+                requiere_revision: true,
+              },
+              {
+                valor: "RA4: Documentar componentes",
+                estado: "EXTRAIDO",
+                motivo: null,
+                requiere_revision: true,
+              },
+            ],
             estado: "EXTRAIDO",
             motivo: null,
             requiere_revision: true,
+            total_items: 4,
+            bloque_vacio: false,
+            bloque_parcial: false,
           },
-          {
-            valor: "Ejecutar pruebas tecnicas",
-            estado: "EXTRAIDO",
-            motivo: null,
-            requiere_revision: true,
-          },
-          {
-            valor: "Documentar componentes",
-            estado: "EXTRAIDO",
-            motivo: null,
-            requiere_revision: true,
-          },
-        ],
-        estado: "EXTRAIDO",
-        motivo: null,
-        requiere_revision: true,
-        total_items: 4,
-        bloque_vacio: false,
-        bloque_parcial: false,
-      },
-      resultados_aprendizaje: pendingBlock,
-      conocimientos_saber: pendingBlock,
-      conocimientos_proceso: pendingBlock,
-      criterios_evaluacion: pendingBlock,
+          conocimientos_saber: pendingBlock,
+          conocimientos_proceso: pendingBlock,
+          criterios_evaluacion: pendingBlock,
+        }
+      ],
+      estado: "EXTRAIDO",
+      motivo: null,
+      requiere_revision: true,
+      total_competencias: 1,
+      bloque_vacio: false,
+      bloque_parcial: false,
     },
     programa_actualizado: {
       codigo_programa: "228118",
@@ -178,9 +199,9 @@ describe("ProgramaExtractionPanel", () => {
       screen.getByText("Analisis y Desarrollo de Software"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Construir software de acuerdo con requisitos"),
+      screen.getByText("220501096 - Construir software de acuerdo con requisitos"),
     ).toBeInTheDocument();
     expect(screen.getByText(/4 elemento\(s\) identificado\(s\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 conservado\(s\) en el borrador/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 omitidos/i)).toBeInTheDocument();
   });
 });

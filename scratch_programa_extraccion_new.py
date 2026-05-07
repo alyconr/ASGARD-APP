@@ -603,7 +603,7 @@ def _extraction_to_payload(
     }
 
 def _field_to_payload(field: ExtractedFieldDTO | ExtractedTextItemDTO) -> dict[str, object]:
-    base: dict[str, object] = {
+    base = {
         "valor": field.valor,
         "estado": field.estado.value,
         "motivo": field.motivo.value if field.motivo is not None else None,

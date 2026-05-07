@@ -100,11 +100,13 @@ function buildExtractionResult(): ProgramaExtractionResult {
       },
     },
     estructura_curricular: {
-      competencias: pendingBlock,
-      resultados_aprendizaje: pendingBlock,
-      conocimientos_saber: pendingBlock,
-      conocimientos_proceso: pendingBlock,
-      criterios_evaluacion: pendingBlock,
+      competencias: [],
+      estado: "PENDIENTE",
+      motivo: "CAMPO_NO_ENCONTRADO",
+      requiere_revision: true,
+      total_competencias: 0,
+      bloque_vacio: true,
+      bloque_parcial: true,
     },
     programa_actualizado: {
       codigo_programa: "228118",

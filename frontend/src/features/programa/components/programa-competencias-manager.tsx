@@ -23,8 +23,8 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   ProgramaCompetencia,
+  ProgramaCompetenciaExtraccion,
   ProgramaCompetenciaListResponse,
-  ProgramaExtractedListBlock,
 } from "@/features/programa/types";
 
 type OperationState = "idle" | "loading" | "saving" | "deleting";
@@ -94,24 +94,24 @@ function CompetenciaEmptyState(): React.JSX.Element {
 }
 
 function ExtractedCompetenciaSuggestions({
-  block,
+  competencias,
   onUseSuggestion,
 }: Readonly<{
-  block: ProgramaExtractedListBlock | null;
+  competencias: ProgramaCompetenciaExtraccion[] | null;
   onUseSuggestion: (value: string) => void;
 }>): React.JSX.Element | null {
-  const suggestions = block?.items ?? [];
+  const suggestions = competencias ?? [];
   if (suggestions.length === 0) {
     return null;
   }
 
   return (
-    <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
+    <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
       <div className="flex items-start gap-3">
         <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
           <Sparkles className="h-4 w-4" />
         </span>
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-[var(--foreground)]">
             Competencias extraidas como base
           </p>
@@ -122,17 +122,20 @@ function ExtractedCompetenciaSuggestions({
         </div>
       </div>
 
-      <div className="mt-3 grid max-h-72 gap-2 overflow-auto pr-1">
-        {suggestions.map((item) => (
-          <button
-            key={item.valor}
-            type="button"
-            onClick={() => onUseSuggestion(item.valor)}
-            className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-left text-sm leading-6 text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            {item.valor}
-          </button>
-        ))}
+      <div className="mt-3 grid max-h-72 min-w-0 gap-2 overflow-auto pr-1">
+        {suggestions.map((item, idx) => {
+          const textValue = `${item.codigo.valor} ${item.denominacion.valor}`;
+          return (
+            <button
+              key={`${item.codigo.valor}-${idx}`}
+              type="button"
+              onClick={() => onUseSuggestion(textValue)}
+              className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-left text-sm leading-6 break-words text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              {textValue}
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -145,7 +148,7 @@ export function ProgramaCompetenciasManager({
   referenciaId,
 }: Readonly<{
   competencias: ProgramaCompetencia[];
-  extractedCompetencias: ProgramaExtractedListBlock | null;
+  extractedCompetencias: ProgramaCompetenciaExtraccion[] | null;
   onCompetenciasSynced: (result: ProgramaCompetenciaListResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
@@ -345,8 +348,8 @@ export function ProgramaCompetenciasManager({
         ) : null}
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+      <div className="grid min-w-0 gap-4">
+        <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-white p-4">
           <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h4 className="text-base font-semibold text-[var(--foreground)]">
@@ -417,7 +420,7 @@ export function ProgramaCompetenciasManager({
         </section>
 
         <ExtractedCompetenciaSuggestions
-          block={extractedCompetencias}
+          competencias={extractedCompetencias}
           onUseSuggestion={handleUseSuggestion}
         />
       </div>

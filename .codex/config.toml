@@ -4,8 +4,8 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "G:\\APPS SENA\\sena-guia-aprendizaje-app"]
 
 [mcp_servers.postgres]
-command = "docker"
-args = ["run", "-i", "--rm", "-e", "POSTGRES_CONNECTION_STRING=postgresql://postgres:postgres@host.docker.internal:5432/sena_guias_db", "mcp/postgres"]
+command = "cmd"
+args = ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres:postgres@localhost:5432/sena_guias_db"]
 
 [mcp_servers.context7]
 command = "npx"

@@ -3,3 +3,4 @@ import { ProgramaWizardShell } from "@/features/programa/components/programa-wiz
 export default function HomePage(): React.JSX.Element {
   return <ProgramaWizardShell />;
 }
+

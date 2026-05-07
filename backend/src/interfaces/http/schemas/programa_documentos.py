@@ -97,16 +97,31 @@ class ProgramaBaseExtractionResponse(BaseModel):
     nombre_programa: ExtractedFieldResponse
 
 
+class CompetenciaExtraccionResponse(BaseModel):
+    """Traceable extraction response for one competencia and its children."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    codigo: ExtractedTextItemResponse
+    denominacion: ExtractedTextItemResponse
+    resultados_aprendizaje: ExtractedListBlockResponse
+    conocimientos_saber: ExtractedListBlockResponse
+    conocimientos_proceso: ExtractedListBlockResponse
+    criterios_evaluacion: ExtractedListBlockResponse
+
+
 class ProgramaCurricularExtractionResponse(BaseModel):
     """Preliminary curricular structure extracted before CRUD tasks."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    competencias: ExtractedListBlockResponse
-    resultados_aprendizaje: ExtractedListBlockResponse
-    conocimientos_saber: ExtractedListBlockResponse
-    conocimientos_proceso: ExtractedListBlockResponse
-    criterios_evaluacion: ExtractedListBlockResponse
+    competencias: list[CompetenciaExtraccionResponse]
+    estado: EstadoCampo
+    motivo: MotivoFalloExtraccion | None
+    requiere_revision: bool
+    total_competencias: int
+    bloque_vacio: bool
+    bloque_parcial: bool
 
 
 class ProgramaDraftFieldsResponse(BaseModel):

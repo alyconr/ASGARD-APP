@@ -298,26 +298,63 @@ function normalizeExtraction(
   const updatedProgram = asRecord(extraction.programa_actualizado);
   const codigo = normalizeExtractedField(programa?.codigo_programa);
   const nombre = normalizeExtractedField(programa?.nombre_programa);
-  const competencias = normalizeExtractedListBlock(estructura?.competencias);
-  const resultados = normalizeExtractedListBlock(
-    estructura?.resultados_aprendizaje,
-  );
-  const saber = normalizeExtractedListBlock(estructura?.conocimientos_saber);
-  const proceso = normalizeExtractedListBlock(
-    estructura?.conocimientos_proceso,
-  );
-  const criterios = normalizeExtractedListBlock(
-    estructura?.criterios_evaluacion,
-  );
+  const competenciasList = Array.isArray(estructura?.competencias)
+    ? estructura.competencias
+    : [];
+
+  const parsedCompetencias = competenciasList.flatMap((comp) => {
+    const record = asRecord(comp);
+    if (!record) return [];
+
+    const codigo = normalizeExtractedField(record.codigo);
+    const denominacion = normalizeExtractedField(record.denominacion);
+    const resultados = normalizeExtractedListBlock(record.resultados_aprendizaje);
+    const saber = normalizeExtractedListBlock(record.conocimientos_saber);
+    const proceso = normalizeExtractedListBlock(record.conocimientos_proceso);
+    const criterios = normalizeExtractedListBlock(record.criterios_evaluacion);
+
+    if (
+      !codigo ||
+      !codigo.valor || // We expect text items here, but reusing ExtractedField logic is okay
+      !denominacion ||
+      !denominacion.valor ||
+      !resultados ||
+      !saber ||
+      !proceso ||
+      !criterios
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        codigo: {
+          valor: codigo.valor,
+          estado: codigo.estado,
+          motivo: codigo.motivo,
+          requiere_revision: codigo.requiere_revision,
+        },
+        denominacion: {
+          valor: denominacion.valor,
+          estado: denominacion.estado,
+          motivo: denominacion.motivo,
+          requiere_revision: denominacion.requiere_revision,
+        },
+        resultados_aprendizaje: resultados,
+        conocimientos_saber: saber,
+        conocimientos_proceso: proceso,
+        criterios_evaluacion: criterios,
+      },
+    ];
+  });
+
+  const estado = normalizeTraceStatus(estructura?.estado);
+  const motivo = normalizeFailureReason(estructura?.motivo);
 
   if (
     codigo === null ||
     nombre === null ||
-    competencias === null ||
-    resultados === null ||
-    saber === null ||
-    proceso === null ||
-    criterios === null
+    estado === null
   ) {
     return null;
   }
@@ -335,11 +372,13 @@ function normalizeExtraction(
       nombre_programa: nombre,
     },
     estructura_curricular: {
-      competencias,
-      resultados_aprendizaje: resultados,
-      conocimientos_saber: saber,
-      conocimientos_proceso: proceso,
-      criterios_evaluacion: criterios,
+      competencias: parsedCompetencias,
+      estado,
+      motivo,
+      requiere_revision: asBoolean(estructura?.requiere_revision, true),
+      total_competencias: asNumber(estructura?.total_competencias, parsedCompetencias.length),
+      bloque_vacio: asBoolean(estructura?.bloque_vacio, parsedCompetencias.length === 0),
+      bloque_parcial: asBoolean(estructura?.bloque_parcial, false),
     },
     programa_actualizado: {
       codigo_programa: asString(updatedProgram?.codigo_programa),

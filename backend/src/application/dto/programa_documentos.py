@@ -90,14 +90,28 @@ class ProgramaBaseExtractionDTO:
 
 
 @dataclass(frozen=True)
-class ProgramaCurricularExtractionDTO:
-    """Preliminary curricular structure extracted before CRUD tasks."""
+class CompetenciaExtraccionDTO:
+    """Traceable extraction result for a single competencia and its curricular children."""
 
-    competencias: ExtractedListBlockDTO
+    codigo: ExtractedTextItemDTO
+    denominacion: ExtractedTextItemDTO
     resultados_aprendizaje: ExtractedListBlockDTO
     conocimientos_saber: ExtractedListBlockDTO
     conocimientos_proceso: ExtractedListBlockDTO
     criterios_evaluacion: ExtractedListBlockDTO
+
+
+@dataclass(frozen=True)
+class ProgramaCurricularExtractionDTO:
+    """Preliminary curricular structure extracted before CRUD tasks."""
+
+    competencias: list[CompetenciaExtraccionDTO]
+    estado: EstadoCampo
+    motivo: MotivoFalloExtraccion | None
+    requiere_revision: bool
+    total_competencias: int
+    bloque_vacio: bool
+    bloque_parcial: bool
 
 
 @dataclass(frozen=True)

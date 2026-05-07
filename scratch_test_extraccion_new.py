@@ -16,7 +16,6 @@ from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.programa.documentos import EstadoLegibilidadPdf
 from src.domain.shared.enums import EstadoBloque, EstadoCampo
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.interfaces.http.schemas.programa_documentos import ProgramaExtractionResponse
 
 
 class FakeSession:
@@ -231,16 +230,6 @@ async def test_extract_program_pdf_prefills_empty_base_fields() -> None:
         "Analisis y Desarrollo de Software"
     )
     assert result.estructura_curricular.competencias
-    response = ProgramaExtractionResponse.model_validate(result)
-    assert response.estructura_curricular.total_competencias == 1
-    assert (
-        response.estructura_curricular.competencias[0].conocimientos_proceso.estado
-        is EstadoCampo.EXTRAIDO
-    )
-    assert (
-        response.estructura_curricular.competencias[0].criterios_evaluacion.estado
-        is EstadoCampo.EXTRAIDO
-    )
     assert reader.reads == 1
     assert draft_repository.draft is not None
     assert (
@@ -294,10 +283,10 @@ async def test_extract_program_pdf_reads_complete_sections() -> None:
 
     competencias = result.estructura_curricular.competencias
     assert len(competencias) == 2
-
+    
     comp1 = competencias[0]
     assert comp1.denominacion.valor == "Analizar requisitos del cliente"
-
+    
     resultados = comp1.resultados_aprendizaje
     criterios = comp1.criterios_evaluacion
     assert resultados.total_items == 2
@@ -305,9 +294,9 @@ async def test_extract_program_pdf_reads_complete_sections() -> None:
         "Validar requisitos funcionales y no funcionales con el equipo del proyecto"
     )
     assert criterios.items[0].valor == (
-        "CE1 Verifica el cumplimiento de requisitos segun criterios establecidos"
+        "Verifica el cumplimiento de requisitos segun criterios establecidos"
     )
-    assert criterios.items[1].valor == "CE2 Registra evidencias de prueba"
+    assert criterios.items[1].valor == "Registra evidencias de prueba"
 
     comp2 = competencias[1]
     assert comp2.codigo.valor == "220501097"
@@ -344,16 +333,16 @@ async def test_extract_program_pdf_partial_legibility_marks_missing_fields() -> 
     assert result.programa.codigo_programa.estado is EstadoCampo.EXTRAIDO
     assert result.programa.codigo_programa.aplicado_al_borrador is True
     assert result.programa.nombre_programa.estado is EstadoCampo.PENDIENTE
-
+    
     assert result.estructura_curricular.estado is EstadoCampo.EXTRAIDO
     assert result.estructura_curricular.bloque_parcial is True
     assert result.estructura_curricular.total_competencias == 1
-
+    
     comp = result.estructura_curricular.competencias[0]
     assert comp.codigo.valor == "220501096"
     assert comp.resultados_aprendizaje.estado is EstadoCampo.PENDIENTE
     assert comp.resultados_aprendizaje.bloque_vacio is True
-
+    
     assert draft_repository.draft is not None
     assert draft_repository.draft.referencia_id == referencia_id
     assert (

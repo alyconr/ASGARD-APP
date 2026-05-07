@@ -192,43 +192,64 @@ describe("programa constants", () => {
                 },
               },
               estructura_curricular: {
-                competencias: {
-                  items: [
-                    {
+                competencias: [
+                  {
+                    codigo: {
+                      valor: "220501096",
+                      estado: "EXTRAIDO",
+                      motivo: null,
+                      requiere_revision: true,
+                    },
+                    denominacion: {
                       valor: "Construir software",
                       estado: "EXTRAIDO",
                       motivo: null,
                       requiere_revision: true,
                     },
-                  ],
-                  estado: "EXTRAIDO",
-                  motivo: null,
-                  requiere_revision: true,
-                },
-                resultados_aprendizaje: {
-                  items: [],
-                  estado: "PENDIENTE",
-                  motivo: "CAMPO_NO_ENCONTRADO",
-                  requiere_revision: true,
-                },
-                conocimientos_saber: {
-                  items: [],
-                  estado: "PENDIENTE",
-                  motivo: "CAMPO_NO_ENCONTRADO",
-                  requiere_revision: true,
-                },
-                conocimientos_proceso: {
-                  items: [],
-                  estado: "PENDIENTE",
-                  motivo: "CAMPO_NO_ENCONTRADO",
-                  requiere_revision: true,
-                },
-                criterios_evaluacion: {
-                  items: [],
-                  estado: "PENDIENTE",
-                  motivo: "CAMPO_NO_ENCONTRADO",
-                  requiere_revision: true,
-                },
+                    resultados_aprendizaje: {
+                      items: [],
+                      estado: "PENDIENTE",
+                      motivo: "CAMPO_NO_ENCONTRADO",
+                      requiere_revision: true,
+                      total_items: 0,
+                      bloque_vacio: true,
+                      bloque_parcial: false,
+                    },
+                    conocimientos_saber: {
+                      items: [],
+                      estado: "PENDIENTE",
+                      motivo: "CAMPO_NO_ENCONTRADO",
+                      requiere_revision: true,
+                      total_items: 0,
+                      bloque_vacio: true,
+                      bloque_parcial: false,
+                    },
+                    conocimientos_proceso: {
+                      items: [],
+                      estado: "PENDIENTE",
+                      motivo: "CAMPO_NO_ENCONTRADO",
+                      requiere_revision: true,
+                      total_items: 0,
+                      bloque_vacio: true,
+                      bloque_parcial: false,
+                    },
+                    criterios_evaluacion: {
+                      items: [],
+                      estado: "PENDIENTE",
+                      motivo: "CAMPO_NO_ENCONTRADO",
+                      requiere_revision: true,
+                      total_items: 0,
+                      bloque_vacio: true,
+                      bloque_parcial: false,
+                    },
+                  },
+                ],
+                estado: "EXTRAIDO",
+                motivo: null,
+                requiere_revision: true,
+                total_competencias: 1,
+                bloque_vacio: false,
+                bloque_parcial: false,
               },
               programa_actualizado: {
                 codigo_programa: "228118",
@@ -250,7 +271,7 @@ describe("programa constants", () => {
       ).toBe("228118");
       expect(
         normalized.documental.programa_pdf?.extraccion?.estructura_curricular
-          .competencias.items[0]?.valor,
+          .competencias[0]?.denominacion.valor,
       ).toBe("Construir software");
     });
   });
