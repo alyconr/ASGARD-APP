@@ -10,6 +10,14 @@ Fase 1
 ## Propósito operativo
 Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
 
+## Decision funcional TASK-08.5
+A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF queda reemplazada para el programa de formacion por esta estrategia:
+
+- el PDF se carga, valida de forma basica, diagnostica y conserva solo como evidencia documental en MinIO;
+- el PDF no se usa como fuente activa para extraer ni prellenar informacion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para analizar, validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
+
 ---
 
 # 1. Prioridad de instrucciones
@@ -115,7 +123,8 @@ La Fase 1 SÍ incluye:
 - cargue del programa de formación,
 - cargue del proyecto formativo,
 - flujo tipo wizard,
-- extracción híbrida PDF/manual,
+- carga documental PDF como evidencia,
+- importación estructurada desde Excel canónico,
 - fallback manual,
 - guardado automático en borrador,
 - revisión consolidada editable,
@@ -150,13 +159,13 @@ La UX principal debe implementarse como wizard y respetar esta secuencia:
 
 1. iniciar nuevo proceso o continuar borrador,
 2. cargar o diligenciar programa,
-3. extraer información si el PDF es legible,
-4. completar manualmente lo faltante,
-5. gestionar competencias y estructura curricular,
-6. revisar y cerrar programa,
-7. habilitar proyecto,
-8. cargar o diligenciar proyecto,
-9. extraer información si el PDF es legible,
+3. cargar PDF solo como evidencia cuando exista,
+4. cargar, validar y previsualizar Excel canónico cuando se use fuente estructurada,
+5. confirmar importación estructurada o completar manualmente lo faltante,
+6. gestionar competencias y estructura curricular,
+7. revisar y cerrar programa,
+8. habilitar proyecto,
+9. cargar o diligenciar proyecto,
 10. completar manualmente lo faltante,
 11. gestionar fases y actividades,
 12. revisar y cerrar proyecto.
@@ -178,18 +187,19 @@ No crear flujos alternos que rompan esta secuencia.
 
 ---
 
-# 8. Reglas obligatorias de extracción híbrida
+# 8. Reglas obligatorias de fuente documental e importacion
 
 El sistema debe soportar:
-- extracción automática desde PDF,
+- carga de PDF como evidencia documental en MinIO,
+- importacion estructurada desde Excel canonico `.xlsx`,
 - diligenciamiento manual.
 
 ## Regla crítica
-La extracción automática no equivale a validación humana.
+La carga documental o la importacion automatizada no equivalen a validacion humana sin revision del usuario.
 
 ## Regla de fallback
-Si el PDF no es legible o no permite extracción confiable:
-- conservar lo útil si existe extracción parcial,
+Si el Excel canonico falta, no cumple contrato o no permite importacion confiable:
+- conservar la metadata del intento y errores de validacion,
 - marcar faltantes,
 - informar motivo,
 - habilitar ingreso manual inmediato.
@@ -356,10 +366,11 @@ La cobertura estricta se evalúa por hito o sprint, no como requisito rígido pa
 # 17. Definición operativa de éxito de Fase 1
 
 La Fase 1 se considera exitosa cuando:
-- el programa puede cargarse manualmente o desde PDF,
+- el programa puede cargarse manualmente o desde Excel canonico,
+- el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o desde PDF,
+- el proyecto puede cargarse manualmente o mediante fuente estructurada definida antes de su tarea,
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida y trazable.

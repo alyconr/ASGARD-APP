@@ -30,6 +30,12 @@ Este archivo debe servir como base para construir:
 - contratos de API,
 - y lógica de completitud.
 
+## Decision funcional TASK-08.5
+
+El modelo relacional vigente ya soporta la importacion Excel canonica hacia `ProgramaFormacion`, `Competencia`, `ResultadoAprendizaje`, `Conocimiento` y `CriterioEvaluacion`.
+
+El PDF del programa permanece como evidencia documental en MinIO y solo deja metadata en `payload_json`. El Excel canonico `.xlsx` tambien se almacena en MinIO como soporte auditable; `payload_json` conserva metadata de preview, validacion, confirmacion e identificadores relacionales creados, nunca el binario.
+
 ---
 
 # 2. Alcance del modelo
@@ -68,7 +74,7 @@ Toda entidad hija debe tener una referencia válida a su entidad padre.
 ## PM-02. Persistencia incremental
 Programa y proyecto deben poder guardarse parcialmente en estado borrador.
 
-## PM-03. Soporte para extracción híbrida
+## PM-03. Soporte para evidencia documental e importacion estructurada
 Cada dato debe poder registrarse como:
 
 - extraído automáticamente,
@@ -98,8 +104,12 @@ Valores permitidos:
 Valores permitidos:
 
 - PDF_EXTRACCION
+- PDF_EVIDENCIA
+- EXCEL_CANONICO
 - MANUAL
 - MIXTO
+
+`PDF_EXTRACCION` queda como valor historico/deprecated. Para TASK-08.5, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion curricular desde workbook.
 
 ## 4.3 TipoConocimiento
 Valores permitidos:

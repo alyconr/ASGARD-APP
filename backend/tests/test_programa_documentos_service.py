@@ -176,6 +176,7 @@ async def test_upload_program_pdf_updates_existing_draft_payload() -> None:
 
     assert result.referencia_id == referencia_id
     assert result.diagnostico.estado_legibilidad is EstadoLegibilidadPdf.LEGIBLE
+    assert result.diagnostico.can_attempt_extraction is False
     assert draft_repository.draft is not None
     assert draft_repository.draft.paso_actual == "origen-documental"
     assert draft_repository.draft.payload_json["meta"]["entryMode"] == "PDF"

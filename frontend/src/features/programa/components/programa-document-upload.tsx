@@ -195,7 +195,8 @@ export function ProgramaDocumentUpload({
                 PDF del programa
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                El diagnostico no valida datos ni extrae campos todavia.
+                Se conserva como soporte documental en MinIO; no se usa para
+                extraer informacion curricular.
               </p>
             </div>
           </div>

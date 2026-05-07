@@ -5,7 +5,8 @@ import { useProgramaWizard } from "./use-programa-wizard";
 import { saveDraft } from "@/features/drafts/api";
 import type { DraftResponse, DraftSaveRequest } from "@/features/drafts/types";
 import type {
-  ProgramaExtractionResult,
+  ProgramaExcelImportResponse,
+  ProgramaExcelPreviewResponse,
   ProgramaPdfUploadResponse,
 } from "@/features/programa/types";
 
@@ -57,66 +58,74 @@ function buildPdfUploadResponse(): ProgramaPdfUploadResponse {
       analyzed_pages: 1,
       pages_with_text: 1,
       text_character_count: 120,
-      can_attempt_extraction: true,
+      can_attempt_extraction: false,
       requires_manual_entry: false,
     },
   };
 }
 
-function buildExtractionResult(): ProgramaExtractionResult {
-  const pendingBlock = {
-    items: [],
-    estado: "PENDIENTE" as const,
-    motivo: "CAMPO_NO_ENCONTRADO" as const,
-    requiere_revision: true,
-    total_items: 0,
-    bloque_vacio: true,
-    bloque_parcial: true,
-  };
-
+function buildExcelPreview(): ProgramaExcelPreviewResponse {
   return {
     referencia_id: referenceId,
-    estado_legibilidad: "LEGIBLE",
-    resumen: "Extraccion aplicada con revision humana.",
-    requiere_revision_humana: true,
+    documento: {
+      original_filename: "programa.xlsx",
+      storage_key: "programas/ref/documentos/programa.xlsx",
+      size_bytes: 2048,
+      content_type:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      checksum_sha256: "def456",
+      etag: "etag-xlsx",
+    },
+    valid: true,
+    estado_validacion: "VALIDO",
+    resumen: {
+      programa: 1,
+      competencias: 1,
+      resultados: 1,
+      conocimientos: 2,
+      criterios: 1,
+    },
     programa: {
-      codigo_programa: {
-        campo: "codigo_programa",
-        valor: "228118",
-        estado: "EXTRAIDO",
-        motivo: null,
-        requiere_revision: true,
-        aplicado_al_borrador: true,
-        valor_actual_borrador: null,
-      },
-      nombre_programa: {
-        campo: "nombre_programa",
-        valor: "Analisis y Desarrollo de Software",
-        estado: "EXTRAIDO",
-        motivo: null,
-        requiere_revision: true,
-        aplicado_al_borrador: true,
-        valor_actual_borrador: null,
-      },
-    },
-    estructura_curricular: {
-      competencias: [],
-      estado: "PENDIENTE",
-      motivo: "CAMPO_NO_ENCONTRADO",
-      requiere_revision: true,
-      total_competencias: 0,
-      bloque_vacio: true,
-      bloque_parcial: true,
-    },
-    programa_actualizado: {
       codigo_programa: "228118",
       nombre_programa: "Analisis y Desarrollo de Software",
-      version_programa: "",
+      version_programa: "1",
+    },
+    competencias: [
+      {
+        competencia_id: "COMP-1",
+        codigo_competencia: "220501046",
+        nombre_competencia: "Desarrollar software",
+        resultados: 1,
+        conocimientos: 2,
+        criterios: 1,
+      },
+    ],
+    errores: [],
+  };
+}
+
+function buildExcelImport(): ProgramaExcelImportResponse {
+  return {
+    referencia_id: referenceId,
+    programa_id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+    competencia_ids: ["bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb"],
+    resultado_ids: ["cccccccc-cccc-4ccc-cccc-cccccccccccc"],
+    conocimiento_ids: [
+      "dddddddd-dddd-4ddd-dddd-dddddddddddd",
+      "eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee",
+    ],
+    criterio_ids: ["ffffffff-ffff-4fff-ffff-ffffffffffff"],
+    resumen: {
+      programa: 1,
+      competencias: 1,
+      resultados: 1,
+      conocimientos: 2,
+      criterios: 1,
     },
   };
 }
 
-describe("useProgramaWizard TASK-07 extraction integration", () => {
+describe("useProgramaWizard TASK-08.5 Excel integration", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -126,7 +135,7 @@ describe("useProgramaWizard TASK-07 extraction integration", () => {
     );
   });
 
-  it("prefills base fields from extraction and keeps later manual edits", async () => {
+  it("keeps PDF as evidence and stores Excel preview/import on the same reference", async () => {
     const { result } = renderHook(() => useProgramaWizard());
 
     await waitFor(() => {
@@ -142,18 +151,26 @@ describe("useProgramaWizard TASK-07 extraction integration", () => {
     });
 
     act(() => {
-      result.current.updateProgramaExtractionResult(buildExtractionResult());
+      result.current.updateProgramaExcelPreview(buildExcelPreview());
+    });
+
+    act(() => {
+      result.current.updateProgramaExcelImport(buildExcelImport());
     });
 
     expect(result.current.activeReferenceId).toBe(referenceId);
-    expect(result.current.payload?.programa.codigo_programa).toBe("228118");
-    expect(result.current.payload?.programa.nombre_programa).toBe(
-      "Analisis y Desarrollo de Software",
+    expect(result.current.payload?.documental.programa_pdf?.uso).toBe(
+      "EVIDENCIA_DOCUMENTAL",
     );
     expect(
-      result.current.payload?.documental.programa_pdf?.extraccion
-        ?.requiere_revision_humana,
+      result.current.payload?.documental.programa_excel?.preview?.valid,
     ).toBe(true);
+    expect(result.current.payload?.documental.programa_excel?.confirmacion.estado).toBe(
+      "IMPORTADO",
+    );
+    expect(result.current.payload?.curricular.programa_formacion_id).toBe(
+      "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+    );
 
     act(() => {
       result.current.updateProgramaBaseField("codigo_programa", "MANUAL-01");
@@ -161,8 +178,5 @@ describe("useProgramaWizard TASK-07 extraction integration", () => {
 
     expect(result.current.activeReferenceId).toBe(referenceId);
     expect(result.current.payload?.programa.codigo_programa).toBe("MANUAL-01");
-    expect(result.current.payload?.programa.nombre_programa).toBe(
-      "Analisis y Desarrollo de Software",
-    );
   });
 });

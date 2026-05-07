@@ -77,7 +77,6 @@ describe("ProgramaCompetenciasManager", () => {
     render(
       <ProgramaCompetenciasManager
         competencias={[]}
-        extractedCompetencias={null}
         referenciaId={referenciaId}
         onCompetenciasSynced={onCompetenciasSynced}
       />,
@@ -102,7 +101,6 @@ describe("ProgramaCompetenciasManager", () => {
     render(
       <ProgramaCompetenciasManager
         competencias={[]}
-        extractedCompetencias={null}
         referenciaId={referenciaId}
         onCompetenciasSynced={onCompetenciasSynced}
       />,
@@ -146,7 +144,6 @@ describe("ProgramaCompetenciasManager", () => {
     render(
       <ProgramaCompetenciasManager
         competencias={[]}
-        extractedCompetencias={null}
         referenciaId={referenciaId}
         onCompetenciasSynced={onCompetenciasSynced}
       />,
@@ -191,7 +188,6 @@ describe("ProgramaCompetenciasManager", () => {
     render(
       <ProgramaCompetenciasManager
         competencias={[competencia]}
-        extractedCompetencias={null}
         referenciaId={referenciaId}
         onCompetenciasSynced={onCompetenciasSynced}
       />,
@@ -248,7 +244,6 @@ describe("ProgramaCompetenciasManager", () => {
     render(
       <ProgramaCompetenciasManager
         competencias={[competencia]}
-        extractedCompetencias={null}
         referenciaId={referenciaId}
         onCompetenciasSynced={onCompetenciasSynced}
       />,

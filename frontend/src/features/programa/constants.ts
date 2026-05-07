@@ -1,10 +1,7 @@
 import type {
-  ExtractionFailureReason,
   FieldTraceStatus,
-  ProgramaExtractedField,
-  ProgramaExtractedListBlock,
   ProgramaCompetencia,
-  ProgramaExtractionResult,
+  ProgramaExcelImportState,
   ProgramaPdfDiagnostic,
   ProgramaStoredDocument,
   ProgramaWizardPayload,
@@ -27,7 +24,7 @@ export const PROGRAMA_WIZARD_STEPS: ProgramaWizardStepDefinition[] = [
     label: "Origen documental",
     shortLabel: "02",
     description:
-      "Seleccion del origen de informacion y punto preparado para el carril PDF/manual.",
+      "PDF como evidencia y Excel canonico como fuente estructurada.",
   },
   {
     id: "estructura-curricular",
@@ -87,11 +84,139 @@ export function createEmptyProgramaPayload(
     },
     documental: {
       programa_pdf: null,
+      programa_excel: null,
     },
     curricular: {
       programa_formacion_id: null,
       competencias: [],
     },
+  };
+}
+
+function normalizeSummary(value: unknown) {
+  const summary = asRecord(value);
+  return {
+    programa: asNumber(summary?.programa),
+    competencias: asNumber(summary?.competencias),
+    resultados: asNumber(summary?.resultados),
+    conocimientos: asNumber(summary?.conocimientos),
+    criterios: asNumber(summary?.criterios),
+  };
+}
+
+function normalizeProgramaExcel(
+  value: unknown,
+  referenciaId: string,
+): ProgramaExcelImportState | null {
+  const excel = asRecord(value);
+  if (excel === null) {
+    return null;
+  }
+
+  const document = normalizeStoredDocument(excel.documento);
+  const preview = asRecord(excel.preview);
+  const confirmation = asRecord(excel.confirmacion);
+  const rawCompetencias = Array.isArray(preview?.competencias)
+    ? preview.competencias
+    : [];
+  const rawErrores = Array.isArray(preview?.errores) ? preview.errores : [];
+  const programa = asRecord(preview?.programa);
+  const valid = asBoolean(preview?.valid);
+
+  return {
+    documento: document,
+    preview:
+      preview === null
+        ? null
+        : {
+            referencia_id: referenciaId,
+            documento: document,
+            valid,
+            estado_validacion: asString(
+              preview.estado_validacion,
+              valid ? "VALIDO" : "INVALIDO",
+            ),
+            resumen: normalizeSummary(preview.resumen),
+            programa:
+              programa === null
+                ? null
+                : {
+                    codigo_programa: asString(programa.codigo_programa),
+                    nombre_programa: asString(programa.nombre_programa),
+                    version_programa:
+                      typeof programa.version_programa === "string"
+                        ? programa.version_programa
+                        : null,
+                  },
+            competencias: rawCompetencias.flatMap((item) => {
+              const competencia = asRecord(item);
+              if (competencia === null) return [];
+              return [
+                {
+                  competencia_id: asString(competencia.competencia_id),
+                  codigo_competencia: asString(
+                    competencia.codigo_competencia,
+                  ),
+                  nombre_competencia: asString(
+                    competencia.nombre_competencia,
+                  ),
+                  resultados: asNumber(competencia.resultados),
+                  conocimientos: asNumber(competencia.conocimientos),
+                  criterios: asNumber(competencia.criterios),
+                },
+              ];
+            }),
+            errores: rawErrores.flatMap((item) => {
+              const issue = asRecord(item);
+              if (issue === null) return [];
+              return [
+                {
+                  hoja: asString(issue.hoja),
+                  fila:
+                    typeof issue.fila === "number" &&
+                    Number.isFinite(issue.fila)
+                      ? issue.fila
+                      : null,
+                  campo:
+                    typeof issue.campo === "string" ? issue.campo : null,
+                  mensaje: asString(issue.mensaje),
+                },
+              ];
+            }),
+          },
+    confirmacion: {
+      estado:
+        confirmation?.estado === "IMPORTADO" ? "IMPORTADO" : "PENDIENTE",
+      confirmed_at:
+        typeof confirmation?.confirmed_at === "string"
+          ? confirmation.confirmed_at
+          : undefined,
+      programa_id:
+        typeof confirmation?.programa_id === "string"
+          ? confirmation.programa_id
+          : undefined,
+      competencia_ids: Array.isArray(confirmation?.competencia_ids)
+        ? confirmation.competencia_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      resultado_ids: Array.isArray(confirmation?.resultado_ids)
+        ? confirmation.resultado_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      conocimiento_ids: Array.isArray(confirmation?.conocimiento_ids)
+        ? confirmation.conocimiento_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      criterio_ids: Array.isArray(confirmation?.criterio_ids)
+        ? confirmation.criterio_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+    },
+    updated_at: typeof excel.updated_at === "string" ? excel.updated_at : undefined,
   };
 }
 
@@ -186,212 +311,6 @@ function normalizeTraceStatus(value: unknown): FieldTraceStatus | null {
   return null;
 }
 
-function normalizeFailureReason(
-  value: unknown,
-): ExtractionFailureReason | null {
-  if (
-    value === "PDF_ESCANEADO" ||
-    value === "DOCUMENTO_ILEGIBLE" ||
-    value === "BAJA_RESOLUCION" ||
-    value === "ESTRUCTURA_NO_RECONOCIDA" ||
-    value === "CAMPO_NO_ENCONTRADO" ||
-    value === "CONTENIDO_AMBIGUO" ||
-    value === "ARCHIVO_PROTEGIDO"
-  ) {
-    return value;
-  }
-
-  return null;
-}
-
-function normalizeExtractedField(
-  value: unknown,
-): ProgramaExtractedField | null {
-  const field = asRecord(value);
-  if (field === null) {
-    return null;
-  }
-
-  const status = normalizeTraceStatus(field.estado);
-  if (status === null) {
-    return null;
-  }
-
-  return {
-    campo: asString(field.campo),
-    valor: typeof field.valor === "string" ? field.valor : null,
-    estado: status,
-    motivo: normalizeFailureReason(field.motivo),
-    requiere_revision: asBoolean(field.requiere_revision, true),
-    aplicado_al_borrador: asBoolean(field.aplicado_al_borrador),
-    valor_actual_borrador:
-      typeof field.valor_actual_borrador === "string"
-        ? field.valor_actual_borrador
-        : null,
-  };
-}
-
-function normalizeExtractedListBlock(
-  value: unknown,
-): ProgramaExtractedListBlock | null {
-  const block = asRecord(value);
-  if (block === null) {
-    return null;
-  }
-
-  const status = normalizeTraceStatus(block.estado);
-  if (status === null || !Array.isArray(block.items)) {
-    return null;
-  }
-
-  const items = block.items.flatMap((item) => {
-    const record = asRecord(item);
-    if (record === null) {
-      return [];
-    }
-    const itemStatus = normalizeTraceStatus(record.estado);
-    const value = asString(record.valor).trim();
-    if (itemStatus === null || value.length === 0) {
-      return [];
-    }
-    return [
-      {
-        valor: value,
-        estado: itemStatus,
-        motivo: normalizeFailureReason(record.motivo),
-        requiere_revision: asBoolean(record.requiere_revision, true),
-      },
-    ];
-  });
-
-  return {
-    items,
-    estado: status,
-    motivo: normalizeFailureReason(block.motivo),
-    requiere_revision: asBoolean(block.requiere_revision, true),
-    total_items: asNumber(block.total_items, items.length),
-    bloque_vacio: asBoolean(block.bloque_vacio, items.length === 0),
-    bloque_parcial: asBoolean(block.bloque_parcial),
-  };
-}
-
-function normalizeExtraction(
-  value: unknown,
-  referenciaId: string,
-): ProgramaExtractionResult | null {
-  const extraction = asRecord(value);
-  if (extraction === null) {
-    return null;
-  }
-
-  const legibility = extraction.estado_legibilidad;
-  if (
-    legibility !== "LEGIBLE" &&
-    legibility !== "PARCIALMENTE_LEGIBLE" &&
-    legibility !== "NO_LEGIBLE"
-  ) {
-    return null;
-  }
-
-  const programa = asRecord(extraction.programa);
-  const estructura = asRecord(extraction.estructura_curricular);
-  const updatedProgram = asRecord(extraction.programa_actualizado);
-  const codigo = normalizeExtractedField(programa?.codigo_programa);
-  const nombre = normalizeExtractedField(programa?.nombre_programa);
-  const competenciasList = Array.isArray(estructura?.competencias)
-    ? estructura.competencias
-    : [];
-
-  const parsedCompetencias = competenciasList.flatMap((comp) => {
-    const record = asRecord(comp);
-    if (!record) return [];
-
-    const codigo = normalizeExtractedField(record.codigo);
-    const denominacion = normalizeExtractedField(record.denominacion);
-    const resultados = normalizeExtractedListBlock(record.resultados_aprendizaje);
-    const saber = normalizeExtractedListBlock(record.conocimientos_saber);
-    const proceso = normalizeExtractedListBlock(record.conocimientos_proceso);
-    const criterios = normalizeExtractedListBlock(record.criterios_evaluacion);
-
-    if (
-      !codigo ||
-      !codigo.valor || // We expect text items here, but reusing ExtractedField logic is okay
-      !denominacion ||
-      !denominacion.valor ||
-      !resultados ||
-      !saber ||
-      !proceso ||
-      !criterios
-    ) {
-      return [];
-    }
-
-    return [
-      {
-        codigo: {
-          valor: codigo.valor,
-          estado: codigo.estado,
-          motivo: codigo.motivo,
-          requiere_revision: codigo.requiere_revision,
-        },
-        denominacion: {
-          valor: denominacion.valor,
-          estado: denominacion.estado,
-          motivo: denominacion.motivo,
-          requiere_revision: denominacion.requiere_revision,
-        },
-        resultados_aprendizaje: resultados,
-        conocimientos_saber: saber,
-        conocimientos_proceso: proceso,
-        criterios_evaluacion: criterios,
-      },
-    ];
-  });
-
-  const estado = normalizeTraceStatus(estructura?.estado);
-  const motivo = normalizeFailureReason(estructura?.motivo);
-
-  if (
-    codigo === null ||
-    nombre === null ||
-    estado === null
-  ) {
-    return null;
-  }
-
-  return {
-    referencia_id: asString(extraction.referencia_id, referenciaId),
-    estado_legibilidad: legibility,
-    resumen: asString(extraction.resumen),
-    requiere_revision_humana: asBoolean(
-      extraction.requiere_revision_humana,
-      true,
-    ),
-    programa: {
-      codigo_programa: codigo,
-      nombre_programa: nombre,
-    },
-    estructura_curricular: {
-      competencias: parsedCompetencias,
-      estado,
-      motivo,
-      requiere_revision: asBoolean(estructura?.requiere_revision, true),
-      total_competencias: asNumber(estructura?.total_competencias, parsedCompetencias.length),
-      bloque_vacio: asBoolean(estructura?.bloque_vacio, parsedCompetencias.length === 0),
-      bloque_parcial: asBoolean(estructura?.bloque_parcial, false),
-    },
-    programa_actualizado: {
-      codigo_programa: asString(updatedProgram?.codigo_programa),
-      nombre_programa: asString(updatedProgram?.nombre_programa),
-      version_programa: asString(updatedProgram?.version_programa),
-    },
-    updated_at:
-      typeof extraction.updated_at === "string"
-        ? extraction.updated_at
-        : undefined,
-  };
-}
-
 function normalizeCompetencia(value: unknown): ProgramaCompetencia | null {
   const competencia = asRecord(value);
   if (competencia === null) {
@@ -447,9 +366,9 @@ export function normalizeProgramaPayload(
   const documental = asRecord(value.documental);
   const curricular = asRecord(value.curricular);
   const programaPdf = asRecord(documental?.programa_pdf);
+  const programaExcel = asRecord(documental?.programa_excel);
   const storedDocument = normalizeStoredDocument(programaPdf?.documento);
   const diagnostic = normalizeDiagnostic(programaPdf?.diagnostico);
-  const extraction = normalizeExtraction(programaPdf?.extraccion, referenciaId);
   const uploadedAt = programaPdf?.updated_at;
   const notesByStepRecord = asRecord(wizard?.notesByStep);
   const competencias = Array.isArray(curricular?.competencias)
@@ -481,7 +400,9 @@ export function normalizeProgramaPayload(
     meta: {
       referenciaId,
       entryMode:
-        meta?.entryMode === "MANUAL" || meta?.entryMode === "PDF"
+        meta?.entryMode === "MANUAL" ||
+        meta?.entryMode === "PDF" ||
+        meta?.entryMode === "EXCEL"
           ? meta.entryMode
           : base.meta.entryMode,
       touchedSteps: normalizeStepList(
@@ -518,11 +439,12 @@ export function normalizeProgramaPayload(
           ? {
               documento: storedDocument,
               diagnostico: diagnostic,
-              extraccion: extraction,
+              uso: "EVIDENCIA_DOCUMENTAL",
               updated_at:
                 typeof uploadedAt === "string" ? uploadedAt : undefined,
             }
           : null,
+      programa_excel: normalizeProgramaExcel(programaExcel, referenciaId),
     },
     curricular: {
       programa_formacion_id: asNullableString(curricular?.programa_formacion_id),

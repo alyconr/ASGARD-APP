@@ -1,4 +1,4 @@
-"""Application service for program PDF upload and diagnosis."""
+"""Application service for program PDF evidence upload and diagnosis."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class AsyncSessionProtocol(Protocol):
 
 
 class ProgramaDocumentService:
-    """Coordinate program PDF storage, diagnosis and draft persistence."""
+    """Coordinate program PDF evidence storage, diagnosis and draft persistence."""
 
     def __init__(
         self,
@@ -109,7 +109,7 @@ class ProgramaDocumentService:
         content_type: str,
         content: bytes,
     ) -> ProgramaPdfUploadResultDTO:
-        """Store a program PDF, diagnose legibility and update the draft payload."""
+        """Store a program PDF as evidence, diagnose it and update the draft."""
         _validate_pdf_upload(
             filename=filename, content_type=content_type, content=content
         )
@@ -124,6 +124,17 @@ class ProgramaDocumentService:
             )
 
         diagnostic = self._diagnostic_service.diagnose(content)
+        diagnostic = PdfLegibilityDiagnosticDTO(
+            estado_legibilidad=diagnostic.estado_legibilidad,
+            motivo=diagnostic.motivo,
+            resumen=diagnostic.resumen,
+            has_text_layer=diagnostic.has_text_layer,
+            analyzed_pages=diagnostic.analyzed_pages,
+            pages_with_text=diagnostic.pages_with_text,
+            text_character_count=diagnostic.text_character_count,
+            can_attempt_extraction=False,
+            requires_manual_entry=diagnostic.requires_manual_entry,
+        )
         storage_key = _build_storage_key(referencia_id, filename)
         stored_document = await self._storage_service.save_pdf(
             key=storage_key,
@@ -239,9 +250,10 @@ def _merge_document_result_into_payload(
             "analyzed_pages": diagnostic.analyzed_pages,
             "pages_with_text": diagnostic.pages_with_text,
             "text_character_count": diagnostic.text_character_count,
-            "can_attempt_extraction": diagnostic.can_attempt_extraction,
+            "can_attempt_extraction": False,
             "requires_manual_entry": diagnostic.requires_manual_entry,
         },
+        "uso": "EVIDENCIA_DOCUMENTAL",
         "updated_at": now,
     }
     next_payload["documental"] = next_documental

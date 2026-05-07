@@ -7,7 +7,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 from src.domain.programa.documentos import EstadoLegibilidadPdf
-from src.domain.shared.enums import EstadoCampo, MotivoFalloExtraccion
+from src.domain.shared.enums import MotivoFalloExtraccion
 
 
 class StoredDocumentResponse(BaseModel):
@@ -47,102 +47,3 @@ class ProgramaPdfUploadResponse(BaseModel):
     referencia_id: uuid.UUID
     documento: StoredDocumentResponse
     diagnostico: PdfLegibilityDiagnosticResponse
-
-
-class ExtractedFieldResponse(BaseModel):
-    """Traceable extraction response for a single field."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    campo: str
-    valor: str | None
-    estado: EstadoCampo
-    motivo: MotivoFalloExtraccion | None
-    requiere_revision: bool
-    aplicado_al_borrador: bool
-    valor_actual_borrador: str | None = None
-
-
-class ExtractedTextItemResponse(BaseModel):
-    """Traceable extraction response for a preliminary curricular item."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    valor: str
-    estado: EstadoCampo
-    motivo: MotivoFalloExtraccion | None
-    requiere_revision: bool
-
-
-class ExtractedListBlockResponse(BaseModel):
-    """Traceable extraction response for a preliminary curricular collection."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    items: list[ExtractedTextItemResponse]
-    estado: EstadoCampo
-    motivo: MotivoFalloExtraccion | None
-    requiere_revision: bool
-    total_items: int
-    bloque_vacio: bool
-    bloque_parcial: bool
-
-
-class ProgramaBaseExtractionResponse(BaseModel):
-    """Program base fields extracted from the PDF."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    codigo_programa: ExtractedFieldResponse
-    nombre_programa: ExtractedFieldResponse
-
-
-class CompetenciaExtraccionResponse(BaseModel):
-    """Traceable extraction response for one competencia and its children."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    codigo: ExtractedTextItemResponse
-    denominacion: ExtractedTextItemResponse
-    resultados_aprendizaje: ExtractedListBlockResponse
-    conocimientos_saber: ExtractedListBlockResponse
-    conocimientos_proceso: ExtractedListBlockResponse
-    criterios_evaluacion: ExtractedListBlockResponse
-
-
-class ProgramaCurricularExtractionResponse(BaseModel):
-    """Preliminary curricular structure extracted before CRUD tasks."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    competencias: list[CompetenciaExtraccionResponse]
-    estado: EstadoCampo
-    motivo: MotivoFalloExtraccion | None
-    requiere_revision: bool
-    total_competencias: int
-    bloque_vacio: bool
-    bloque_parcial: bool
-
-
-class ProgramaDraftFieldsResponse(BaseModel):
-    """Program draft fields after applying the safe extraction merge."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    codigo_programa: str
-    nombre_programa: str
-    version_programa: str
-
-
-class ProgramaExtractionResponse(BaseModel):
-    """Response returned after TASK-07 extraction."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    referencia_id: uuid.UUID
-    estado_legibilidad: EstadoLegibilidadPdf
-    resumen: str
-    requiere_revision_humana: bool
-    programa: ProgramaBaseExtractionResponse
-    estructura_curricular: ProgramaCurricularExtractionResponse
-    programa_actualizado: ProgramaDraftFieldsResponse

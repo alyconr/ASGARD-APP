@@ -13,6 +13,10 @@ Este documento divide la implementación de la Fase 1 en tareas pequeñas, orden
 Cada tarea debe resolverse de forma incremental y verificable.  
 Codex no debe saltarse tareas ni mezclar varias iteraciones grandes en una sola entrega.
 
+## Decision funcional TASK-08.5
+
+TASK-08.5 se ejecuta entre TASK-08 y TASK-09. Alinea el flujo para que PDF sea solo evidencia documental en MinIO y Excel canonico `.xlsx` sea la fuente estructurada de importacion curricular.
+
 ---
 
 # 2. Instrucción general para todas las tareas
@@ -221,7 +225,7 @@ Permitir subir un PDF del programa y evaluar si es legible.
 
 ---
 
-## TASK-07. Implementar extracción híbrida del programa
+## TASK-07. Implementar extracción híbrida del programa [DEPRECATED por TASK-08.5]
 
 ### Objetivo
 Extraer automáticamente los campos del programa cuando sea posible.
@@ -277,6 +281,34 @@ Permitir registrar, editar y eliminar competencias del programa.
 - se pueden crear varias competencias,
 - no se aceptan competencias vacías,
 - no se aceptan duplicados.
+
+---
+
+## TASK-08.5. Refactorizar fuente de extraccion a Excel canonico
+
+### Objetivo
+Desactivar la extraccion curricular desde PDF y habilitar un carril de Excel canonico antes de TASK-09.
+
+### Debe hacer
+- conservar la carga del PDF como evidencia documental en MinIO,
+- eliminar el endpoint y la UI activa de extraccion desde PDF,
+- validar workbook `.xlsx` con hojas `Programa`, `Competencias`, `Resultados`, `Conocimientos` y `Criterios`,
+- validar encabezados exactos, claves cruzadas, tipos minimos y duplicados,
+- generar preview sin persistir tablas relacionales,
+- confirmar importacion para materializar ProgramaFormacion, Competencia, ResultadoAprendizaje, Conocimiento y CriterioEvaluacion,
+- mantener el mismo `referencia_id` del wizard y sincronizar metadata en `payload_json`.
+
+### No debe hacer
+- no implementar el CRUD manual de resultados de TASK-09,
+- no reactivar extraccion PDF,
+- no guardar binarios Excel en PostgreSQL.
+
+### Aceptacion
+- PDF sigue en MinIO como soporte documental,
+- Excel canonico valida y muestra preview,
+- confirmacion importa la estructura curricular completa,
+- el borrador conserva el mismo `referencia_id`,
+- TASK-09 puede continuar sobre la base importada.
 
 ---
 
@@ -506,7 +538,7 @@ Permitir subir el PDF del proyecto y evaluar legibilidad.
 
 ---
 
-## TASK-19. Implementar extracción híbrida del proyecto
+## TASK-19. Definir fuente estructurada del proyecto [pendiente de alineacion]
 
 ### Objetivo
 Extraer automáticamente los datos del proyecto cuando sea posible.
@@ -757,27 +789,28 @@ Ejecutar en este orden:
 6. TASK-06
 7. TASK-07
 8. TASK-08
-9. TASK-09
-10. TASK-10
-11. TASK-11
-12. TASK-12
-13. TASK-13
-14. TASK-14
-15. TASK-15
-16. TASK-16
-17. TASK-17
-18. TASK-18
-19. TASK-19
-20. TASK-20
-21. TASK-21
-22. TASK-22
-23. TASK-23
-24. TASK-24
-25. TASK-25
-26. TASK-26
-27. TASK-27
-28. TASK-28
-29. TASK-29
+9. TASK-08.5
+10. TASK-09
+11. TASK-10
+12. TASK-11
+13. TASK-12
+14. TASK-13
+15. TASK-14
+16. TASK-15
+17. TASK-16
+18. TASK-17
+19. TASK-18
+20. TASK-19
+21. TASK-20
+22. TASK-21
+23. TASK-22
+24. TASK-23
+25. TASK-24
+26. TASK-25
+27. TASK-26
+28. TASK-27
+29. TASK-28
+30. TASK-29
 
 ---
 

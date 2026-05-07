@@ -18,6 +18,8 @@ class TipoFuenteCargue(str, Enum):
     """Supported sources for the initial capture of a root entity."""
 
     PDF_EXTRACCION = "PDF_EXTRACCION"
+    PDF_EVIDENCIA = "PDF_EVIDENCIA"
+    EXCEL_CANONICO = "EXCEL_CANONICO"
     MANUAL = "MANUAL"
     MIXTO = "MIXTO"
 

@@ -8,13 +8,13 @@ import {
   BookOpenCheck,
   ClipboardList,
   FileText,
+  FileSpreadsheet,
   FolderOpen,
   ListX,
   NotebookText,
   RefreshCcw,
   Route,
   Save,
-  ScanLine,
   Trash2,
 } from "lucide-react";
 
@@ -23,7 +23,7 @@ import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
 import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
-import { ProgramaExtractionPanel } from "@/features/programa/components/programa-extraction-panel";
+import { ProgramaExcelImport } from "@/features/programa/components/programa-excel-import";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,9 @@ import type {
   ProgramaEntryMode,
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
-  ProgramaExtractionResult,
+  ProgramaExcelImportResponse,
+  ProgramaExcelImportState,
+  ProgramaExcelPreviewResponse,
   ProgramaPdfUploadResponse,
   ProgramaPdfUploadResult,
   ProgramaWizardStepDefinition,
@@ -55,8 +57,14 @@ const ENTRY_MODE_COPY: Record<
   },
   PDF: {
     label: "PDF",
-    description: "Carril reservado para cargue documental con revision humana.",
+    description: "Documento soporte: se almacena en MinIO y no extrae datos.",
     icon: FileText,
+  },
+  EXCEL: {
+    label: "Excel",
+    description:
+      "Workbook canonico para preview e importacion curricular estructurada.",
+    icon: FileSpreadsheet,
   },
 };
 
@@ -85,10 +93,10 @@ const STEP_CONTENT: Record<
   "origen-documental": {
     label: "Origen de informacion",
     description:
-      "El PDF se almacena, diagnostica y habilita extraccion con revision humana.",
-    slotLabel: "Cargue documental",
-    checks: ["PDF valido", "Diagnostico estructurado", "Extraccion hibrida"],
-    icon: ScanLine,
+      "PDF como evidencia documental y Excel canonico como fuente curricular.",
+    slotLabel: "PDF soporte y Excel canonico",
+    checks: ["PDF en MinIO", "Preview Excel", "Importacion confirmada"],
+    icon: FileSpreadsheet,
   },
   "estructura-curricular": {
     label: "Estructura curricular",
@@ -206,11 +214,12 @@ function StepWorkspace({
   programaValue,
   onEntryModeChange,
   onProgramaPdfUploaded,
-  onProgramaExtracted,
+  onProgramaExcelPreviewed,
+  onProgramaExcelImported,
   onProgramaCompetenciasSynced,
   onProgramaFieldChange,
   onNoteChange,
-  programaExtractionResult,
+  programaExcelResult,
   programaPdfResult,
   competencias,
   referenceId,
@@ -218,7 +227,7 @@ function StepWorkspace({
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
   entryMode: ProgramaEntryMode;
-  programaExtractionResult: ProgramaExtractionResult | null;
+  programaExcelResult: ProgramaExcelImportState | null;
   programaPdfResult: ProgramaPdfUploadResult | null;
   referenceId: string;
   programaValue: {
@@ -227,7 +236,8 @@ function StepWorkspace({
     version_programa: string;
   };
   onEntryModeChange: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
-  onProgramaExtracted: (result: ProgramaExtractionResult) => void;
+  onProgramaExcelPreviewed: (result: ProgramaExcelPreviewResponse) => void;
+  onProgramaExcelImported: (result: ProgramaExcelImportResponse) => void;
   onProgramaCompetenciasSynced: (
     result: ProgramaCompetenciaListResponse,
   ) => void;
@@ -261,7 +271,7 @@ function StepWorkspace({
 
       {currentStep.id === "origen-documental" ? (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {(["MANUAL", "PDF"] as const).map((mode) => (
+          {(["MANUAL", "PDF", "EXCEL"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -298,23 +308,16 @@ function StepWorkspace({
                 referenciaId={referenceId}
                 onUploaded={onProgramaPdfUploaded}
               />
-              <ProgramaExtractionPanel
-                currentResult={programaExtractionResult}
-                hasPdf={programaPdfResult !== null}
-                legibility={
-                  programaPdfResult?.diagnostico.estado_legibilidad ?? null
-                }
+              <ProgramaExcelImport
+                currentResult={programaExcelResult}
                 referenciaId={referenceId}
-                onExtracted={onProgramaExtracted}
+                onImported={onProgramaExcelImported}
+                onPreviewed={onProgramaExcelPreviewed}
               />
             </div>
           ) : currentStep.id === "estructura-curricular" ? (
             <ProgramaCompetenciasManager
               competencias={competencias}
-              extractedCompetencias={
-                programaExtractionResult?.estructura_curricular.competencias ??
-                null
-              }
               referenciaId={referenceId}
               onCompetenciasSynced={onProgramaCompetenciasSynced}
             />
@@ -466,7 +469,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               </h2>
             </div>
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="mt-5 grid gap-4 sm:grid-cols-3">
               <EntryModeButton
                 mode="MANUAL"
                 onSelect={() => void controller.startNewFlow("MANUAL")}
@@ -474,6 +477,10 @@ export function ProgramaWizardShell(): React.JSX.Element {
               <EntryModeButton
                 mode="PDF"
                 onSelect={() => void controller.startNewFlow("PDF")}
+              />
+              <EntryModeButton
+                mode="EXCEL"
+                onSelect={() => void controller.startNewFlow("EXCEL")}
               />
             </div>
 
@@ -629,8 +636,8 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 ] ?? ""
               }
               entryMode={controller.payload.meta.entryMode}
-              programaExtractionResult={
-                controller.payload.documental.programa_pdf?.extraccion ?? null
+              programaExcelResult={
+                controller.payload.documental.programa_excel
               }
               programaPdfResult={controller.payload.documental.programa_pdf}
               competencias={controller.payload.curricular.competencias}
@@ -640,7 +647,8 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               programaValue={controller.payload.programa}
               onEntryModeChange={controller.setEntryMode}
-              onProgramaExtracted={controller.updateProgramaExtractionResult}
+              onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
+              onProgramaExcelImported={controller.updateProgramaExcelImport}
               onProgramaCompetenciasSynced={
                 controller.updateProgramaCompetencias
               }

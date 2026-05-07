@@ -12,6 +12,9 @@ from src.interfaces.http.controllers.health import router as health_router
 from src.interfaces.http.controllers.programa_documentos import (
     router as programa_documentos_router,
 )
+from src.interfaces.http.controllers.programa_excel import (
+    router as programa_excel_router,
+)
 
 
 def create_application() -> FastAPI:
@@ -34,6 +37,7 @@ def create_application() -> FastAPI:
     application.include_router(health_router)
     application.include_router(drafts_router)
     application.include_router(programa_documentos_router)
+    application.include_router(programa_excel_router)
     application.include_router(competencias_router)
 
     return application

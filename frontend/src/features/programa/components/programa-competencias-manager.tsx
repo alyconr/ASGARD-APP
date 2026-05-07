@@ -7,7 +7,6 @@ import {
   Edit3,
   Loader2,
   Plus,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   ProgramaCompetencia,
-  ProgramaCompetenciaExtraccion,
   ProgramaCompetenciaListResponse,
 } from "@/features/programa/types";
 
@@ -51,22 +49,6 @@ function getErrorMessage(error: unknown): string {
   return "No fue posible completar la operacion de competencias.";
 }
 
-function splitExtractedCompetencia(value: string): CompetenciaFormState {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  const match = normalized.match(/^([A-Za-z0-9.-]{3,})\s+(.+)$/);
-  if (match === null) {
-    return {
-      codigo_competencia: "",
-      nombre_competencia: normalized,
-    };
-  }
-
-  return {
-    codigo_competencia: match[1],
-    nombre_competencia: match[2],
-  };
-}
-
 function validateForm(form: CompetenciaFormState): string | null {
   if (form.codigo_competencia.trim().length === 0) {
     return "codigo_competencia es obligatorio.";
@@ -87,68 +69,18 @@ function CompetenciaEmptyState(): React.JSX.Element {
       </p>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--muted)]">
         Agrega la primera competencia del programa para construir la estructura
-        curricular sin validar automaticamente lo extraido del PDF.
+        curricular. El Excel canonico puede importarlas de forma estructurada.
       </p>
     </div>
   );
 }
 
-function ExtractedCompetenciaSuggestions({
-  competencias,
-  onUseSuggestion,
-}: Readonly<{
-  competencias: ProgramaCompetenciaExtraccion[] | null;
-  onUseSuggestion: (value: string) => void;
-}>): React.JSX.Element | null {
-  const suggestions = competencias ?? [];
-  if (suggestions.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
-          <Sparkles className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-[var(--foreground)]">
-            Competencias extraidas como base
-          </p>
-          <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-            Puedes precargar el formulario y confirmar manualmente cada
-            competencia.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid max-h-72 min-w-0 gap-2 overflow-auto pr-1">
-        {suggestions.map((item, idx) => {
-          const textValue = `${item.codigo.valor} ${item.denominacion.valor}`;
-          return (
-            <button
-              key={`${item.codigo.valor}-${idx}`}
-              type="button"
-              onClick={() => onUseSuggestion(textValue)}
-              className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-left text-sm leading-6 break-words text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-            >
-              {textValue}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 export function ProgramaCompetenciasManager({
   competencias,
-  extractedCompetencias,
   onCompetenciasSynced,
   referenciaId,
 }: Readonly<{
   competencias: ProgramaCompetencia[];
-  extractedCompetencias: ProgramaCompetenciaExtraccion[] | null;
   onCompetenciasSynced: (result: ProgramaCompetenciaListResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
@@ -294,13 +226,6 @@ export function ProgramaCompetenciasManager({
     }
   };
 
-  const handleUseSuggestion = (value: string): void => {
-    setForm(splitExtractedCompetencia(value));
-    setEditingId(null);
-    setMessage("Sugerencia cargada en el formulario.");
-    setErrorMessage(null);
-  };
-
   const isBusy = state === "loading" || state === "saving" || state === "deleting";
 
   return (
@@ -418,11 +343,6 @@ export function ProgramaCompetenciasManager({
             </button>
           </form>
         </section>
-
-        <ExtractedCompetenciaSuggestions
-          competencias={extractedCompetencias}
-          onUseSuggestion={handleUseSuggestion}
-        />
       </div>
 
       {sortedCompetencias.length === 0 ? (

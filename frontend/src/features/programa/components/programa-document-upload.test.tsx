@@ -41,7 +41,7 @@ function buildUploadResponse(): ProgramaPdfUploadResponse {
       analyzed_pages: 1,
       pages_with_text: 1,
       text_character_count: 100,
-      can_attempt_extraction: true,
+      can_attempt_extraction: false,
       requires_manual_entry: false,
     },
   };

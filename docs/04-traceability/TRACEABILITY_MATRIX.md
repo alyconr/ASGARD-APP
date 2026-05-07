@@ -4,6 +4,14 @@
 ## Estado: Matriz de trazabilidad inicial
 ## Última actualización: [YYYY-MM-DD]
 
+## Decision funcional TASK-08.5
+
+La trazabilidad de extraccion PDF del programa queda reemplazada por:
+
+- Upload Module PDF Evidencia: carga, validacion basica, diagnostico y MinIO.
+- Excel Import Module: validacion canonica `.xlsx`, preview, confirmacion e importacion relacional.
+- Curriculum Module: consume la base importada sin adelantar el CRUD manual de TASK-09.
+
 ---
 
 # 1. Propósito
@@ -42,9 +50,9 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-04 | El flujo principal debe ser tipo wizard | RF-01, RF-13, RF-21 | HU-01, HU-13, HU-22 | Wizard UI | Validar navegación paso a paso |
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
-| RN-13 | El sistema soporta extracción automática y manual | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Extraction Service | Validar extracción híbrida |
+| RN-13 | El programa soporta PDF evidencia, Excel canonico y manual | RF-04, RF-05, RF-06, RF-07 | HU-03, HU-04, HU-05, HU-06 | Excel Import Service | Validar preview e importacion Excel |
 | RN-14 | Si el PDF no es legible, debe habilitarse cargue manual | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual |
-| RN-15 | La extracción parcial debe conservar lo extraído y pedir lo faltante | RF-06, RF-07, RF-23, RF-24 | HU-05, HU-06, HU-18, HU-19 | Extraction Service | Validar extracción parcial |
+| RN-15 | La validacion Excel debe conservar errores y habilitar fallback manual | RF-06, RF-07 | HU-05, HU-06 | Excel Import Service | Validar workbook invalido y fallback manual |
 | RN-16 | La extracción automática no equivale a validación humana | RF-13, RF-27 | HU-13, HU-22 | Review Screen | Validar confirmación explícita |
 | RN-18 | El programa debe tener código y nombre | RF-02 | HU-01, HU-14 | Programa Form | Validar obligatorios mínimos |
 | RN-22 | Cada competencia debe tener código y nombre | RF-08 | HU-07 | Competencia Module | Validar estructura mínima de competencia |
@@ -103,7 +111,7 @@ Relaciona principalmente:
 
 Componentes:
 - Upload Module
-- Extraction Service
+- Excel Import Service
 - Extraction Feedback UI
 
 ---
@@ -170,7 +178,7 @@ Relaciona principalmente:
 
 Componentes:
 - Upload Module Proyecto
-- Extraction Service Proyecto
+- Fuente estructurada Proyecto por definir
 - Proyecto Module
 
 ---
@@ -241,7 +249,7 @@ Relaciona:
 - HU-03
 - HU-17
 
-## Extraction Service
+## Excel Import Service
 Relaciona:
 - RN-13
 - RN-14

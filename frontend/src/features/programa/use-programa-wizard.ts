@@ -31,10 +31,11 @@ import {
 } from "@/features/programa/constants";
 import type {
   AutosaveState,
-  ProgramaExtractionResult,
   ProgramaCompetenciaListResponse,
   ProgramaDraftSnapshot,
   ProgramaEntryMode,
+  ProgramaExcelImportResponse,
+  ProgramaExcelPreviewResponse,
   ProgramaPdfUploadResponse,
   ProgramaWizardPayload,
   ProgramaWizardStepId,
@@ -100,7 +101,11 @@ function buildDraftLabel(payload: ProgramaWizardPayload): string {
   }
 
   if (payload.meta.entryMode === "PDF") {
-    return "Borrador de programa desde PDF";
+    return "Borrador de programa con PDF soporte";
+  }
+
+  if (payload.meta.entryMode === "EXCEL") {
+    return "Borrador de programa desde Excel canonico";
   }
 
   if (payload.meta.entryMode === "MANUAL") {
@@ -169,7 +174,8 @@ export interface ProgramaWizardController {
   updateProgramaBaseField: (field: ProgramaBaseField, value: string) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
-  updateProgramaExtractionResult: (result: ProgramaExtractionResult) => void;
+  updateProgramaExcelPreview: (result: ProgramaExcelPreviewResponse) => void;
+  updateProgramaExcelImport: (result: ProgramaExcelImportResponse) => void;
   updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
@@ -533,7 +539,7 @@ export function useProgramaWizard(): ProgramaWizardController {
             programa_pdf: {
               documento: result.documento,
               diagnostico: result.diagnostico,
-              extraccion: null,
+              uso: "EVIDENCIA_DOCUMENTAL",
               updated_at: new Date().toISOString(),
             },
           },
@@ -543,13 +549,10 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
-  const updateProgramaExtractionResult = useCallback(
-    (result: ProgramaExtractionResult): void => {
+  const updateProgramaExcelPreview = useCallback(
+    (result: ProgramaExcelPreviewResponse): void => {
       setPayload((currentPayload) => {
-        if (
-          currentPayload === null ||
-          currentPayload.documental.programa_pdf === null
-        ) {
+        if (currentPayload === null) {
           return currentPayload;
         }
 
@@ -559,24 +562,70 @@ export function useProgramaWizard(): ProgramaWizardController {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
-            entryMode: "PDF",
+            entryMode: "EXCEL",
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
               "origen-documental",
             ),
             lastInteractionAt: now,
           },
-          programa: result.programa_actualizado,
           documental: {
             ...currentPayload.documental,
-            programa_pdf: {
-              ...currentPayload.documental.programa_pdf,
-              extraccion: {
-                ...result,
-                updated_at: result.updated_at ?? now,
-              },
+            programa_excel: {
+              documento: result.documento,
+              preview: result,
+              confirmacion: { estado: "PENDIENTE" },
               updated_at: now,
             },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const updateProgramaExcelImport = useCallback(
+    (result: ProgramaExcelImportResponse): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        const now = new Date().toISOString();
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            entryMode: "EXCEL",
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "estructura-curricular",
+            ),
+            lastInteractionAt: now,
+          },
+          curricular: {
+            ...currentPayload.curricular,
+            programa_formacion_id: result.programa_id,
+          },
+          documental: {
+            ...currentPayload.documental,
+            programa_excel:
+              currentPayload.documental.programa_excel === null
+                ? null
+                : {
+                    ...currentPayload.documental.programa_excel,
+                    confirmacion: {
+                      estado: "IMPORTADO",
+                      confirmed_at: now,
+                      programa_id: result.programa_id,
+                      competencia_ids: result.competencia_ids,
+                      resultado_ids: result.resultado_ids,
+                      conocimiento_ids: result.conocimiento_ids,
+                      criterio_ids: result.criterio_ids,
+                    },
+                    updated_at: now,
+                  },
           },
         };
       });
@@ -689,7 +738,8 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateProgramaBaseField,
     updateStepNote,
     updateProgramaPdfResult,
-    updateProgramaExtractionResult,
+    updateProgramaExcelPreview,
+    updateProgramaExcelImport,
     updateProgramaCompetencias,
     updateContinueReferenceInput,
     forgetKnownDraft,

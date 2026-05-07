@@ -1,4 +1,4 @@
-"""PDF legibility diagnosis for TASK-06."""
+"""PDF evidence diagnosis for TASK-06/TASK-08.5."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class InvalidPdfError(Exception):
 
 
 class PdfLegibilityDiagnosticService:
-    """Classify whether a PDF has an extractable text layer."""
+    """Classify the PDF text layer while keeping it as evidence only."""
 
     def diagnose(self, content: bytes) -> PdfLegibilityDiagnosticDTO:
         """Return a structured legibility diagnosis without extracting fields."""
@@ -114,14 +114,14 @@ def _classify_text_layer(
             estado_legibilidad=EstadoLegibilidadPdf.LEGIBLE,
             motivo=None,
             resumen=(
-                "El PDF tiene capa de texto suficiente para intentar una "
-                "extraccion posterior con revision humana."
+                "El PDF tiene capa de texto, pero desde TASK-08.5 se conserva "
+                "solo como evidencia documental."
             ),
             has_text_layer=True,
             analyzed_pages=total_pages,
             pages_with_text=pages_with_text,
             text_character_count=text_character_count,
-            can_attempt_extraction=True,
+            can_attempt_extraction=False,
             requires_manual_entry=False,
         )
 
@@ -129,13 +129,13 @@ def _classify_text_layer(
         estado_legibilidad=EstadoLegibilidadPdf.PARCIALMENTE_LEGIBLE,
         motivo=MotivoFalloExtraccion.ESTRUCTURA_NO_RECONOCIDA,
         resumen=(
-            "El PDF tiene texto extraible parcial o insuficiente. Se podra "
-            "intentar extraccion limitada y completar manualmente."
+            "El PDF tiene texto extraible parcial o insuficiente, pero desde "
+            "TASK-08.5 no se usa como fuente de extraccion curricular."
         ),
         has_text_layer=True,
         analyzed_pages=total_pages,
         pages_with_text=pages_with_text,
         text_character_count=text_character_count,
-        can_attempt_extraction=True,
+        can_attempt_extraction=False,
         requires_manual_entry=True,
     )

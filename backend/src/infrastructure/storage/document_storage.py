@@ -18,7 +18,7 @@ PDF_METADATA_FILENAME_ENCODING = "utf-8-percent"
 
 
 class DocumentStorageService(Protocol):
-    """Storage port used by application services for PDF documents."""
+    """Storage port used by application services for program documents."""
 
     async def save_pdf(
         self,
@@ -32,6 +32,19 @@ class DocumentStorageService(Protocol):
 
     async def read_pdf(self, *, key: str) -> bytes:
         """Read a stored PDF object by key."""
+
+    async def save_excel(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        content_type: str,
+        original_filename: str,
+    ) -> StoredDocumentDTO:
+        """Store a canonical Excel workbook and return durable metadata."""
+
+    async def read_excel(self, *, key: str) -> bytes:
+        """Read a stored Excel workbook by key."""
 
 
 class MinioDocumentStorageService:
@@ -87,6 +100,51 @@ class MinioDocumentStorageService:
     async def read_pdf(self, *, key: str) -> bytes:
         """Read a stored PDF object by key."""
 
+        return await self._read_object(key=key, missing_label="PDF")
+
+    async def save_excel(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        content_type: str,
+        original_filename: str,
+    ) -> StoredDocumentDTO:
+        """Ensure the bucket exists, upload the workbook and return metadata."""
+        checksum = hashlib.sha256(content).hexdigest()
+
+        def upload() -> StoredDocumentDTO:
+            self._ensure_bucket()
+            result = self._client.put_object(
+                bucket_name=self._bucket_name,
+                object_name=key,
+                data=io.BytesIO(content),
+                length=len(content),
+                content_type=content_type,
+                metadata=build_pdf_metadata(
+                    original_filename=original_filename,
+                    checksum_sha256=checksum,
+                ),
+            )
+            return StoredDocumentDTO(
+                original_filename=original_filename,
+                storage_key=key,
+                size_bytes=len(content),
+                content_type=content_type,
+                checksum_sha256=checksum,
+                etag=result.etag,
+            )
+
+        return await anyio.to_thread.run_sync(upload)
+
+    async def read_excel(self, *, key: str) -> bytes:
+        """Read a stored Excel object by key."""
+
+        return await self._read_object(key=key, missing_label="Excel")
+
+    async def _read_object(self, *, key: str, missing_label: str) -> bytes:
+        """Read a stored object by key."""
+
         def download() -> bytes:
             try:
                 response = self._client.get_object(
@@ -96,7 +154,7 @@ class MinioDocumentStorageService:
             except S3Error as error:
                 if error.code in {"NoSuchKey", "NoSuchBucket"}:
                     raise FileNotFoundError(
-                        f"No existe el PDF almacenado con key {key}",
+                        f"No existe el {missing_label} almacenado con key {key}",
                     ) from error
                 raise
 

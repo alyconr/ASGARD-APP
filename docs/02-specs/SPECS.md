@@ -14,7 +14,8 @@ La Fase 1 debe permitir:
 
 - cargar información del programa de formación,
 - cargar información del proyecto formativo,
-- extraer datos desde PDF cuando sea posible,
+- conservar PDF como evidencia documental cuando exista,
+- importar datos desde Excel canonico cuando se use fuente estructurada,
 - permitir diligenciamiento manual cuando no sea posible,
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
@@ -22,6 +23,15 @@ La Fase 1 debe permitir:
 - y persistir toda la información de forma estructurada y trazable.
 
 La Fase 1 no genera aún la guía final; deja preparada la base funcional y de datos para fases posteriores.
+
+## Decision funcional TASK-08.5
+
+Desde TASK-08.5, el flujo del programa separa dos insumos:
+
+- PDF: documento soporte, validado de forma basica y almacenado en MinIO; no se usa para extraccion curricular.
+- Excel canonico `.xlsx`: fuente estructurada para validar hojas, encabezados, claves cruzadas, preview e importacion relacional.
+
+El contrato canonico del workbook contiene las hojas `Programa`, `Competencias`, `Resultados`, `Conocimientos` y `Criterios`.
 
 ---
 
@@ -34,7 +44,7 @@ Implementar un módulo web que permita registrar, extraer, revisar, editar y val
 # 3. Objetivos específicos
 
 - Permitir el cargue manual o asistido del programa de formación.
-- Permitir la extracción automática desde PDF del programa cuando el documento sea legible.
+- Permitir la importacion estructurada desde Excel canonico del programa.
 - Permitir el diligenciamiento manual de los campos faltantes o no extraídos.
 - Permitir la gestión completa de competencias y su estructura curricular.
 - Validar la completitud del programa antes de habilitar el proyecto.
@@ -56,7 +66,8 @@ La Fase 1 incluye:
 - wizard del proyecto formativo,
 - servicio de borradores,
 - diagnóstico de legibilidad de PDF,
-- extracción híbrida PDF/manual,
+- carga documental PDF como evidencia,
+- importacion estructurada desde Excel canonico,
 - CRUD de competencias,
 - CRUD de resultados de aprendizaje,
 - CRUD de conocimientos de saber,
@@ -449,7 +460,11 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 
 ---
 
-# 13. Reglas de extracción documental
+# 13. Reglas de fuente documental e importacion Excel
+
+> TASK-08.5 deja el PDF como evidencia documental. La extraccion curricular
+> del programa se realiza desde Excel canonico `.xlsx` mediante preview y
+> confirmacion explicita.
 
 ## 13.1 Objetivo de extracción del programa
 El sistema debe intentar extraer del PDF del programa:
@@ -643,7 +658,7 @@ No deben implementarse funcionalidades de fases futuras dentro de este alcance.
 # 18. Criterios de aceptación globales
 
 ## CA-01
-El programa puede iniciarse manualmente o desde PDF.
+El programa puede iniciarse manualmente o desde Excel canonico; el PDF queda como soporte documental.
 
 ## CA-02
 Si el PDF del programa no es legible, el sistema permite completar manualmente.

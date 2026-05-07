@@ -35,6 +35,16 @@ Antes de implementar cualquier módulo, el agente o desarrollador debe leer y re
 
 Ninguna implementación debe contradecir estos documentos.
 
+## Decision funcional TASK-08.5
+
+Antes de continuar con TASK-09, se introduce una tarea puente:
+
+- desactivar la extraccion curricular desde PDF en el flujo activo;
+- conservar PDF como evidencia documental en MinIO;
+- agregar importacion estructurada desde Excel canonico `.xlsx`;
+- exigir preview sin persistencia relacional antes de confirmacion;
+- confirmar importacion para materializar programa, competencias, resultados, conocimientos y criterios.
+
 ---
 
 # 3. Objetivo general de implementación
@@ -43,7 +53,8 @@ Construir la Fase 1 de una aplicación web que permita:
 
 - cargar información del programa de formación,
 - cargar información del proyecto formativo,
-- extraer datos desde PDF cuando sea posible,
+- conservar PDF como evidencia documental,
+- importar datos desde Excel canonico cuando aplique,
 - permitir fallback manual cuando no sea posible,
 - guardar siempre el avance en borrador,
 - revisar y validar la información,
@@ -121,12 +132,12 @@ La implementación debe seguir este orden:
 2. Modelo de datos
 3. Persistencia de borradores
 4. Wizard del programa
-5. Extracción híbrida del programa
-6. Gestión curricular
-7. Revisión y cierre del programa
-8. Bloqueo/desbloqueo del proyecto
-9. Wizard del proyecto
-10. Extracción híbrida del proyecto
+5. Carga PDF del programa como evidencia
+6. Importacion estructurada desde Excel canonico
+7. Gestión curricular
+8. Revisión y cierre del programa
+9. Bloqueo/desbloqueo del proyecto
+10. Wizard del proyecto
 11. Gestión de fases y actividades
 12. Revisión y cierre del proyecto
 13. Auditoría básica
@@ -659,7 +670,8 @@ Una tarea se considera terminada cuando:
 - [ ] modelo programa
 - [ ] endpoints programa
 - [ ] wizard programa
-- [ ] extracción PDF programa
+- [ ] PDF evidencia programa
+- [ ] importacion Excel canonico programa
 - [ ] fallback manual
 - [ ] CRUD competencias
 - [ ] CRUD resultados
@@ -673,7 +685,7 @@ Una tarea se considera terminada cuando:
 - [ ] bloqueo del proyecto
 - [ ] modelo proyecto
 - [ ] wizard proyecto
-- [ ] extracción PDF proyecto
+- [ ] fuente estructurada proyecto por definir antes de implementacion
 - [ ] fallback manual
 - [ ] CRUD fases
 - [ ] CRUD actividades

@@ -21,6 +21,15 @@ Su objetivo es establecer:
 
 Este documento es la **fuente de verdad del negocio** para la Fase 1.
 
+## Decision funcional TASK-08.5
+
+Desde TASK-08.5, la estrategia documental del programa cambia:
+
+- el PDF del programa se carga y conserva solo como evidencia documental en MinIO;
+- el PDF ya no es fuente activa de extraccion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- cualquier regla anterior de extraccion hibrida desde PDF queda reemplazada por esta decision para el flujo del programa.
+
 ---
 
 # 2. Contexto de negocio
@@ -46,7 +55,8 @@ La Fase 1 sí incluye:
 - cargue del programa de formación,
 - cargue del proyecto formativo,
 - flujo de usuario tipo wizard,
-- extracción híbrida desde PDF,
+- carga documental PDF como evidencia,
+- importacion estructurada desde Excel canonico,
 - cargue manual como mecanismo de respaldo,
 - guardado automático en borrador,
 - edición y eliminación de registros,
@@ -194,12 +204,16 @@ El usuario debe poder retomar un borrador desde el mismo punto donde quedó.
 
 ---
 
-# 9. Reglas de extracción híbrida
+# 9. Reglas de fuente documental e importacion estructurada
+
+> TASK-08.5 reemplaza la extraccion curricular desde PDF para el programa.
+> El PDF queda como evidencia en MinIO; el Excel canonico `.xlsx` es la fuente
+> estructurada para poblar el modelo curricular.
 
 ## RN-13. Modos de ingreso permitidos
 La información podrá ingresar al sistema por dos vías:
 
-- extracción automática desde PDF,
+- importacion estructurada desde Excel canonico,
 - diligenciamiento manual.
 
 ## RN-14. Fallback manual obligatorio
@@ -524,10 +538,11 @@ Estas condiciones deben cumplirse siempre:
 
 La Fase 1 se considera exitosa cuando:
 
-- el programa puede cargarse manualmente o desde PDF,
+- el programa puede cargarse manualmente o desde Excel canonico,
+- el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o desde PDF,
+- el proyecto puede cargarse manualmente o mediante fuente estructurada definida antes de su tarea,
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida,
@@ -554,7 +569,7 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 
 - la UX principal será tipo wizard,
 - siempre habrá guardado automático en borrador,
-- el sistema soportará enfoque híbrido PDF/manual,
+- el sistema soportara PDF como evidencia y Excel canonico como fuente estructurada,
 - el proyecto estará bloqueado hasta completar el programa,
 - la validación humana será obligatoria antes del cierre,
 - el alcance se limitará a la Fase 1,

@@ -30,6 +30,7 @@ describe("programa constants", () => {
       expect(payload.meta.touchedSteps).toEqual([DEFAULT_PROGRAMA_STEP_ID]);
       expect(payload.programa.codigo_programa).toBe("");
       expect(payload.documental.programa_pdf).toBeNull();
+      expect(payload.documental.programa_excel).toBeNull();
       expect(payload.wizard.notesByStep).toEqual({});
       expect(typeof payload.meta.startedAt).toBe("string");
       expect(typeof payload.meta.lastInteractionAt).toBe("string");
@@ -120,9 +121,10 @@ describe("programa constants", () => {
               analyzed_pages: 3,
               pages_with_text: 1,
               text_character_count: 120,
-              can_attempt_extraction: true,
+              can_attempt_extraction: false,
               requires_manual_entry: true,
             },
+            uso: "EVIDENCIA_DOCUMENTAL",
             updated_at: "2026-04-27T00:00:00Z",
           },
         },
@@ -136,128 +138,52 @@ describe("programa constants", () => {
       expect(
         normalized.documental.programa_pdf?.diagnostico.estado_legibilidad,
       ).toBe("PARCIALMENTE_LEGIBLE");
+      expect(normalized.documental.programa_pdf?.uso).toBe(
+        "EVIDENCIA_DOCUMENTAL",
+      );
     });
 
-    it("preserves a valid extraction result in the draft payload", () => {
+    it("preserves canonical Excel preview metadata in the draft payload", () => {
       const input = {
-        programa: {
-          codigo_programa: "228118",
-          nombre_programa: "Analisis y Desarrollo de Software",
-          version_programa: "",
-        },
         documental: {
-          programa_pdf: {
+          programa_excel: {
             documento: {
-              original_filename: "programa.pdf",
-              storage_key: "programas/ref/documentos/programa.pdf",
+              original_filename: "programa.xlsx",
+              storage_key: "programas/ref/documentos/programa.xlsx",
               size_bytes: 2048,
-              content_type: "application/pdf",
+              content_type:
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
               checksum_sha256: "checksum",
               etag: "etag",
             },
-            diagnostico: {
-              estado_legibilidad: "LEGIBLE",
-              motivo: null,
-              resumen: "Texto legible",
-              has_text_layer: true,
-              analyzed_pages: 3,
-              pages_with_text: 3,
-              text_character_count: 1200,
-              can_attempt_extraction: true,
-              requires_manual_entry: false,
-            },
-            extraccion: {
-              referencia_id: "ref-123",
-              estado_legibilidad: "LEGIBLE",
-              resumen: "Extraccion aplicada",
-              requiere_revision_humana: true,
+            preview: {
+              valid: true,
+              estado_validacion: "VALIDO",
+              resumen: {
+                programa: 1,
+                competencias: 1,
+                resultados: 1,
+                conocimientos: 2,
+                criterios: 1,
+              },
               programa: {
-                codigo_programa: {
-                  campo: "codigo_programa",
-                  valor: "228118",
-                  estado: "EXTRAIDO",
-                  motivo: null,
-                  requiere_revision: true,
-                  aplicado_al_borrador: true,
-                  valor_actual_borrador: null,
-                },
-                nombre_programa: {
-                  campo: "nombre_programa",
-                  valor: "Analisis y Desarrollo de Software",
-                  estado: "EXTRAIDO",
-                  motivo: null,
-                  requiere_revision: true,
-                  aplicado_al_borrador: true,
-                  valor_actual_borrador: null,
-                },
-              },
-              estructura_curricular: {
-                competencias: [
-                  {
-                    codigo: {
-                      valor: "220501096",
-                      estado: "EXTRAIDO",
-                      motivo: null,
-                      requiere_revision: true,
-                    },
-                    denominacion: {
-                      valor: "Construir software",
-                      estado: "EXTRAIDO",
-                      motivo: null,
-                      requiere_revision: true,
-                    },
-                    resultados_aprendizaje: {
-                      items: [],
-                      estado: "PENDIENTE",
-                      motivo: "CAMPO_NO_ENCONTRADO",
-                      requiere_revision: true,
-                      total_items: 0,
-                      bloque_vacio: true,
-                      bloque_parcial: false,
-                    },
-                    conocimientos_saber: {
-                      items: [],
-                      estado: "PENDIENTE",
-                      motivo: "CAMPO_NO_ENCONTRADO",
-                      requiere_revision: true,
-                      total_items: 0,
-                      bloque_vacio: true,
-                      bloque_parcial: false,
-                    },
-                    conocimientos_proceso: {
-                      items: [],
-                      estado: "PENDIENTE",
-                      motivo: "CAMPO_NO_ENCONTRADO",
-                      requiere_revision: true,
-                      total_items: 0,
-                      bloque_vacio: true,
-                      bloque_parcial: false,
-                    },
-                    criterios_evaluacion: {
-                      items: [],
-                      estado: "PENDIENTE",
-                      motivo: "CAMPO_NO_ENCONTRADO",
-                      requiere_revision: true,
-                      total_items: 0,
-                      bloque_vacio: true,
-                      bloque_parcial: false,
-                    },
-                  },
-                ],
-                estado: "EXTRAIDO",
-                motivo: null,
-                requiere_revision: true,
-                total_competencias: 1,
-                bloque_vacio: false,
-                bloque_parcial: false,
-              },
-              programa_actualizado: {
                 codigo_programa: "228118",
                 nombre_programa: "Analisis y Desarrollo de Software",
-                version_programa: "",
+                version_programa: "1",
               },
-              updated_at: "2026-04-28T00:00:00Z",
+              competencias: [
+                {
+                  competencia_id: "COMP-1",
+                  codigo_competencia: "220501096",
+                  nombre_competencia: "Construir software",
+                  resultados: 1,
+                  conocimientos: 2,
+                  criterios: 1,
+                },
+              ],
+              errores: [],
             },
+            confirmacion: { estado: "PENDIENTE" },
             updated_at: "2026-04-28T00:00:00Z",
           },
         },
@@ -265,14 +191,11 @@ describe("programa constants", () => {
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
 
+      expect(normalized.documental.programa_excel?.preview?.valid).toBe(true);
       expect(
-        normalized.documental.programa_pdf?.extraccion?.programa.codigo_programa
-          .valor,
-      ).toBe("228118");
-      expect(
-        normalized.documental.programa_pdf?.extraccion?.estructura_curricular
-          .competencias[0]?.denominacion.valor,
-      ).toBe("Construir software");
+        normalized.documental.programa_excel?.preview?.competencias[0]
+          ?.codigo_competencia,
+      ).toBe("220501096");
     });
   });
 });

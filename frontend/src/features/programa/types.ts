@@ -1,6 +1,6 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
-export type ProgramaEntryMode = "MANUAL" | "PDF" | null;
+export type ProgramaEntryMode = "MANUAL" | "PDF" | "EXCEL" | null;
 
 export type ProgramaWizardStepId =
   | "datos-programa"
@@ -21,15 +21,6 @@ export type FieldTraceStatus =
   | "CORREGIDO"
   | "PENDIENTE"
   | "VALIDADO";
-
-export type ExtractionFailureReason =
-  | "PDF_ESCANEADO"
-  | "DOCUMENTO_ILEGIBLE"
-  | "BAJA_RESOLUCION"
-  | "ESTRUCTURA_NO_RECONOCIDA"
-  | "CAMPO_NO_ENCONTRADO"
-  | "CONTENIDO_AMBIGUO"
-  | "ARCHIVO_PROTEGIDO";
 
 export interface ProgramaWizardStepDefinition {
   id: ProgramaWizardStepId;
@@ -57,6 +48,7 @@ export interface ProgramaWizardPayload {
   };
   documental: {
     programa_pdf: ProgramaPdfUploadResult | null;
+    programa_excel: ProgramaExcelImportState | null;
   };
   curricular: {
     programa_formacion_id: string | null;
@@ -88,7 +80,7 @@ export interface ProgramaPdfDiagnostic {
 export interface ProgramaPdfUploadResult {
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
-  extraccion: ProgramaExtractionResult | null;
+  uso?: "EVIDENCIA_DOCUMENTAL";
   updated_at?: string;
 }
 
@@ -96,70 +88,6 @@ export interface ProgramaPdfUploadResponse {
   referencia_id: string;
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
-}
-
-export interface ProgramaExtractedField {
-  campo: string;
-  valor: string | null;
-  estado: FieldTraceStatus;
-  motivo: ExtractionFailureReason | null;
-  requiere_revision: boolean;
-  aplicado_al_borrador: boolean;
-  valor_actual_borrador: string | null;
-}
-
-export interface ProgramaExtractedTextItem {
-  valor: string;
-  estado: FieldTraceStatus;
-  motivo: ExtractionFailureReason | null;
-  requiere_revision: boolean;
-}
-
-export interface ProgramaExtractedListBlock {
-  items: ProgramaExtractedTextItem[];
-  estado: FieldTraceStatus;
-  motivo: ExtractionFailureReason | null;
-  requiere_revision: boolean;
-  total_items: number;
-  bloque_vacio: boolean;
-  bloque_parcial: boolean;
-}
-
-export interface ProgramaCompetenciaExtraccion {
-  codigo: ProgramaExtractedTextItem;
-  denominacion: ProgramaExtractedTextItem;
-  resultados_aprendizaje: ProgramaExtractedListBlock;
-  conocimientos_saber: ProgramaExtractedListBlock;
-  conocimientos_proceso: ProgramaExtractedListBlock;
-  criterios_evaluacion: ProgramaExtractedListBlock;
-}
-
-export interface ProgramaCurricularExtraction {
-  competencias: ProgramaCompetenciaExtraccion[];
-  estado: FieldTraceStatus;
-  motivo: ExtractionFailureReason | null;
-  requiere_revision: boolean;
-  total_competencias: number;
-  bloque_vacio: boolean;
-  bloque_parcial: boolean;
-}
-
-export interface ProgramaExtractionResult {
-  referencia_id: string;
-  estado_legibilidad: PdfLegibilityStatus;
-  resumen: string;
-  requiere_revision_humana: boolean;
-  programa: {
-    codigo_programa: ProgramaExtractedField;
-    nombre_programa: ProgramaExtractedField;
-  };
-  estructura_curricular: ProgramaCurricularExtraction;
-  programa_actualizado: {
-    codigo_programa: string;
-    nombre_programa: string;
-    version_programa: string;
-  };
-  updated_at?: string;
 }
 
 export interface ProgramaCompetencia {
@@ -183,6 +111,72 @@ export interface ProgramaCompetenciaListResponse {
   referencia_id: string;
   programa_id: string | null;
   competencias: ProgramaCompetencia[];
+}
+
+export interface ExcelValidationIssue {
+  hoja: string;
+  fila: number | null;
+  campo: string | null;
+  mensaje: string;
+}
+
+export interface ExcelPreviewSummary {
+  programa: number;
+  competencias: number;
+  resultados: number;
+  conocimientos: number;
+  criterios: number;
+}
+
+export interface ExcelProgramPreview {
+  codigo_programa: string;
+  nombre_programa: string;
+  version_programa: string | null;
+}
+
+export interface ExcelCompetenciaPreview {
+  competencia_id: string;
+  codigo_competencia: string;
+  nombre_competencia: string;
+  resultados: number;
+  conocimientos: number;
+  criterios: number;
+}
+
+export interface ProgramaExcelPreviewResponse {
+  referencia_id: string;
+  documento: ProgramaStoredDocument | null;
+  valid: boolean;
+  estado_validacion: "VALIDO" | "INVALIDO" | string;
+  resumen: ExcelPreviewSummary;
+  programa: ExcelProgramPreview | null;
+  competencias: ExcelCompetenciaPreview[];
+  errores: ExcelValidationIssue[];
+}
+
+export interface ProgramaExcelImportResponse {
+  referencia_id: string;
+  programa_id: string;
+  competencia_ids: string[];
+  resultado_ids: string[];
+  conocimiento_ids: string[];
+  criterio_ids: string[];
+  resumen: ExcelPreviewSummary;
+}
+
+export interface ProgramaExcelImportState {
+  documento: ProgramaStoredDocument | null;
+  preview: ProgramaExcelPreviewResponse | null;
+  confirmacion: {
+    estado: "PENDIENTE" | "IMPORTADO";
+    confirmed_at?: string;
+    programa_id?: string;
+    competencia_ids?: string[];
+    resultado_ids?: string[];
+    conocimiento_ids?: string[];
+    criterio_ids?: string[];
+  };
+  updated_at?: string;
 }
 
 export interface ProgramaCompetenciaDeleteResponse {

@@ -3,6 +3,14 @@
 ## Fase: 1
 ## Última actualización: [YYYY-MM-DD]
 
+## Decision funcional TASK-08.5
+
+Las historias de cargue hibrido del programa se reinterpretan asi desde TASK-08.5:
+
+- HU-03 y HU-04 conservan PDF solo como soporte documental en MinIO.
+- HU-05 deja de ejecutarse desde PDF para el programa.
+- La nueva tarea puente TASK-08.5 agrega preview e importacion desde Excel canonico antes de TASK-09.
+
 ---
 
 # 1. Épica: Inicio y borradores
