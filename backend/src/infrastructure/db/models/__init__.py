@@ -5,6 +5,7 @@ from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
     CriterioEvaluacion,
+    ElementoCurricularPendiente,
     ProgramaFormacion,
     ResultadoAprendizaje,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "Competencia",
     "Conocimiento",
     "CriterioEvaluacion",
+    "ElementoCurricularPendiente",
     "EventoAuditoria",
     "FaseProyecto",
     "ProgramaFormacion",

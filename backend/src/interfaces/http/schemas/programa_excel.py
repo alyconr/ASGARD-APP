@@ -32,6 +32,31 @@ class ExcelPreviewSummaryResponse(BaseModel):
     criterios: int
 
 
+class ExcelPendingSummaryResponse(BaseModel):
+    """Pending assignment counts detected in preview or import."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    total: int
+    conocimientos: int
+    criterios: int
+
+
+class ExcelPendingAssignmentResponse(BaseModel):
+    """Unresolved workbook row shown for later manual assignment."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    tipo_elemento: str
+    tipo_conocimiento: str | None
+    descripcion: str
+    competencia_id_origen_excel: str | None
+    rap_id_origen_excel: str | None
+    motivo: str
+    hoja: str
+    fila: int | None
+
+
 class ExcelProgramPreviewResponse(BaseModel):
     """Program fields read from the canonical workbook."""
 
@@ -67,6 +92,8 @@ class ProgramaExcelPreviewResponse(BaseModel):
     resumen: ExcelPreviewSummaryResponse
     programa: ExcelProgramPreviewResponse | None
     competencias: list[ExcelCompetenciaPreviewResponse]
+    pendientes_resumen: ExcelPendingSummaryResponse
+    pendientes: list[ExcelPendingAssignmentResponse]
     errores: list[ExcelValidationIssueResponse]
 
 
@@ -81,4 +108,6 @@ class ProgramaExcelImportResponse(BaseModel):
     resultado_ids: list[uuid.UUID]
     conocimiento_ids: list[uuid.UUID]
     criterio_ids: list[uuid.UUID]
+    pendiente_ids: list[uuid.UUID]
     resumen: ExcelPreviewSummaryResponse
+    pendientes_resumen: ExcelPendingSummaryResponse

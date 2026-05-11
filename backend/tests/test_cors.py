@@ -32,7 +32,4 @@ def test_health_response_allows_127_frontend_origin() -> None:
     )
 
     assert response.status_code == 200
-    assert (
-        response.headers["access-control-allow-origin"]
-        == "http://127.0.0.1:3000"
-    )
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"

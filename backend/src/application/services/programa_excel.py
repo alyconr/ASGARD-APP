@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from openpyxl import load_workbook  # type: ignore[import-untyped]
+from openpyxl import load_workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.programa_excel import (
     ExcelCompetenciaPreviewDTO,
+    ExcelPendingAssignmentDTO,
+    ExcelPendingSummaryDTO,
     ExcelPreviewSummaryDTO,
     ExcelProgramPreviewDTO,
     ExcelValidationIssueDTO,
@@ -21,11 +23,17 @@ from src.application.dto.programa_excel import (
     ProgramaExcelPreviewDTO,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque, TipoConocimiento
+from src.domain.shared.enums import (
+    EstadoBloque,
+    MotivoPendienteAsignacion,
+    TipoConocimiento,
+    TipoElementoCurricularPendiente,
+)
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
     CriterioEvaluacion,
+    ElementoCurricularPendiente,
     ProgramaFormacion,
     ResultadoAprendizaje,
 )
@@ -84,9 +92,7 @@ CANONICAL_SHEETS: dict[str, list[str]] = {
     ],
 }
 
-EXCEL_CONTENT_TYPE = (
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+EXCEL_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class ProgramaExcelDraftMissingError(Exception):
@@ -139,7 +145,7 @@ class ResultadoRow:
 
 @dataclass(frozen=True)
 class ConocimientoRow:
-    competencia_id: str
+    competencia_id: str | None
     rap_id: str | None
     tipo_conocimiento: TipoConocimiento
     descripcion: str
@@ -149,7 +155,7 @@ class ConocimientoRow:
 
 @dataclass(frozen=True)
 class CriterioRow:
-    competencia_id: str
+    competencia_id: str | None
     rap_id: str | None
     descripcion: str
     orden: int | None
@@ -163,6 +169,7 @@ class CanonicalWorkbook:
     resultados: list[ResultadoRow]
     conocimientos: list[ConocimientoRow]
     criterios: list[CriterioRow]
+    pendientes: list[ExcelPendingAssignmentDTO]
     errores: list[ExcelValidationIssueDTO]
 
     @property
@@ -262,6 +269,7 @@ class ProgramaExcelRepositoryProtocol(Protocol):
         competencia_id: uuid.UUID,
         tipo: TipoConocimiento,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Return whether a knowledge item exists."""
 
@@ -270,6 +278,7 @@ class ProgramaExcelRepositoryProtocol(Protocol):
         *,
         competencia_id: uuid.UUID,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Return whether a criterion exists."""
 
@@ -300,6 +309,7 @@ class ProgramaExcelRepositoryProtocol(Protocol):
         tipo: TipoConocimiento,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> Conocimiento:
         """Create a knowledge item."""
 
@@ -309,8 +319,27 @@ class ProgramaExcelRepositoryProtocol(Protocol):
         competencia_id: uuid.UUID,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> CriterioEvaluacion:
         """Create an evaluation criterion."""
+
+    async def clear_pendientes(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+    ) -> None:
+        """Remove previous pending rows for a reference before reimporting."""
+
+    async def add_pendiente(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+        programa_id: uuid.UUID,
+        pendiente: ExcelPendingAssignmentDTO,
+        orden: int | None,
+        raw_excel: dict[str, object] | None,
+    ) -> ElementoCurricularPendiente:
+        """Create a pending assignment row."""
 
 
 class AsyncSessionProtocol(Protocol):
@@ -383,6 +412,7 @@ class ProgramaExcelImportService:
                 "referencia_id": str(referencia_id),
                 "estado_validacion": preview.estado_validacion,
                 "errores": len(preview.errores),
+                "pendientes": preview.pendientes_resumen.total,
             },
         )
         await self._session.commit()
@@ -440,6 +470,7 @@ class ProgramaExcelImportService:
                 "resultados": import_result.resumen.resultados,
                 "conocimientos": import_result.resumen.conocimientos,
                 "criterios": import_result.resumen.criterios,
+                "pendientes": import_result.pendientes_resumen.total,
             },
         )
         await self._session.commit()
@@ -469,10 +500,12 @@ class ProgramaExcelImportService:
 
         programa = await self._resolve_program(draft, workbook.programa)
         competencia_by_excel_id: dict[str, Competencia] = {}
+        resultado_by_excel_key: dict[tuple[str, str], uuid.UUID] = {}
         competencia_ids: list[uuid.UUID] = []
         resultado_ids: list[uuid.UUID] = []
         conocimiento_ids: list[uuid.UUID] = []
         criterio_ids: list[uuid.UUID] = []
+        pendiente_ids: list[uuid.UUID] = []
 
         for row in workbook.competencias:
             if await self._curriculum_repository.competencia_code_exists(
@@ -505,19 +538,33 @@ class ProgramaExcelImportService:
                 )
             resultado = await self._curriculum_repository.add_resultado(
                 competencia_id=competencia.id,
-                codigo_resultado=resultado_row.rap_numero or resultado_row.rap_id,
+                codigo_resultado=resultado_row.rap_id,
                 descripcion=resultado_row.resultado_aprendizaje,
                 orden=resultado_row.orden,
             )
             await self._session.refresh(resultado)
             resultado_ids.append(resultado.id)
+            resultado_by_excel_key[
+                (resultado_row.competencia_id, resultado_row.rap_id)
+            ] = resultado.id
 
         for conocimiento_row in workbook.conocimientos:
+            if conocimiento_row.competencia_id is None:
+                raise ProgramaExcelValidationError(
+                    "Conocimiento importable sin competencia resuelta",
+                )
             competencia = competencia_by_excel_id[conocimiento_row.competencia_id]
+            resultado_id = None
+            if conocimiento_row.rap_id:
+                resultado_id = resultado_by_excel_key.get(
+                    (conocimiento_row.competencia_id, conocimiento_row.rap_id)
+                )
+
             if await self._curriculum_repository.conocimiento_exists(
                 competencia_id=competencia.id,
                 tipo=conocimiento_row.tipo_conocimiento,
                 descripcion=conocimiento_row.descripcion,
+                resultado_id=resultado_id,
             ):
                 raise ProgramaExcelValidationError(
                     "Ya existe un conocimiento duplicado en la competencia "
@@ -528,15 +575,27 @@ class ProgramaExcelImportService:
                 tipo=conocimiento_row.tipo_conocimiento,
                 descripcion=conocimiento_row.descripcion,
                 orden=conocimiento_row.orden,
+                resultado_id=resultado_id,
             )
             await self._session.refresh(conocimiento)
             conocimiento_ids.append(conocimiento.id)
 
         for criterio_row in workbook.criterios:
+            if criterio_row.competencia_id is None:
+                raise ProgramaExcelValidationError(
+                    "Criterio importable sin competencia resuelta",
+                )
             competencia = competencia_by_excel_id[criterio_row.competencia_id]
+            resultado_id = None
+            if criterio_row.rap_id:
+                resultado_id = resultado_by_excel_key.get(
+                    (criterio_row.competencia_id, criterio_row.rap_id)
+                )
+
             if await self._curriculum_repository.criterio_exists(
                 competencia_id=competencia.id,
                 descripcion=criterio_row.descripcion,
+                resultado_id=resultado_id,
             ):
                 raise ProgramaExcelValidationError(
                     "Ya existe un criterio duplicado en la competencia "
@@ -546,9 +605,25 @@ class ProgramaExcelImportService:
                 competencia_id=competencia.id,
                 descripcion=criterio_row.descripcion,
                 orden=criterio_row.orden,
+                resultado_id=resultado_id,
             )
             await self._session.refresh(criterio)
             criterio_ids.append(criterio.id)
+
+        await self._curriculum_repository.clear_pendientes(
+            referencia_id=referencia_id,
+        )
+        for index, pendiente in enumerate(workbook.pendientes, start=1):
+            raw_excel = _raw_excel_for_pending(workbook, pendiente)
+            pending_row = await self._curriculum_repository.add_pendiente(
+                referencia_id=referencia_id,
+                programa_id=programa.id,
+                pendiente=pendiente,
+                orden=index,
+                raw_excel=raw_excel,
+            )
+            await self._session.refresh(pending_row)
+            pendiente_ids.append(pending_row.id)
 
         return ProgramaExcelImportDTO(
             referencia_id=referencia_id,
@@ -557,7 +632,9 @@ class ProgramaExcelImportService:
             resultado_ids=resultado_ids,
             conocimiento_ids=conocimiento_ids,
             criterio_ids=criterio_ids,
+            pendiente_ids=pendiente_ids,
             resumen=_build_summary(workbook),
+            pendientes_resumen=_build_pending_summary(workbook.pendientes),
         )
 
     async def _resolve_program(
@@ -615,6 +692,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
             resultados=[],
             conocimientos=[],
             criterios=[],
+            pendientes=[],
             errores=[
                 ExcelValidationIssueDTO(
                     hoja="Workbook",
@@ -640,7 +718,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
             ),
         )
     if missing_sheets:
-        return CanonicalWorkbook(None, [], [], [], [], errores)
+        return CanonicalWorkbook(None, [], [], [], [], [], errores)
 
     rows_by_sheet: dict[str, list[dict[str, object]]] = {}
     for sheet_name, expected_headers in CANONICAL_SHEETS.items():
@@ -667,7 +745,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
         ):
             if all(_cell_to_string(value) == "" for value in values):
                 continue
-            record = {
+            record: dict[str, object] = {
                 header: value
                 for header, value in zip(expected_headers, values, strict=False)
             }
@@ -676,13 +754,19 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
         rows_by_sheet[sheet_name] = sheet_rows
 
     if errores:
-        return CanonicalWorkbook(None, [], [], [], [], errores)
+        return CanonicalWorkbook(None, [], [], [], [], [], errores)
 
     programa = _parse_programa(rows_by_sheet["Programa"], errores)
     competencias = _parse_competencias(rows_by_sheet["Competencias"], errores)
     resultados = _parse_resultados(rows_by_sheet["Resultados"], errores)
     conocimientos = _parse_conocimientos(rows_by_sheet["Conocimientos"], errores)
     criterios = _parse_criterios(rows_by_sheet["Criterios"], errores)
+    conocimientos, criterios, pendientes = _split_assignable_rows(
+        competencias=competencias,
+        resultados=resultados,
+        conocimientos=conocimientos,
+        criterios=criterios,
+    )
 
     _validate_cross_references(
         competencias=competencias,
@@ -696,6 +780,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
         resultados=resultados,
         conocimientos=conocimientos,
         criterios=criterios,
+        pendientes=pendientes,
         errores=errores,
     )
 
@@ -705,6 +790,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
         resultados=resultados,
         conocimientos=conocimientos,
         criterios=criterios,
+        pendientes=pendientes,
         errores=errores,
     )
 
@@ -818,12 +904,7 @@ def _parse_conocimientos(
 ) -> list[ConocimientoRow]:
     parsed: list[ConocimientoRow] = []
     for row in rows:
-        competencia_id = _required_string(
-            row,
-            "Conocimientos",
-            "competencia_id",
-            errores,
-        )
+        competencia_id = _optional_string(row.get("competencia_id"))
         raw_tipo = _required_string(
             row,
             "Conocimientos",
@@ -838,7 +919,7 @@ def _parse_conocimientos(
         )
         orden = _optional_int(row, "Conocimientos", "orden", errores)
         tipo = _parse_tipo_conocimiento(raw_tipo, row, errores)
-        if competencia_id is None or tipo is None or descripcion is None:
+        if tipo is None or descripcion is None:
             continue
         parsed.append(
             ConocimientoRow(
@@ -859,15 +940,10 @@ def _parse_criterios(
 ) -> list[CriterioRow]:
     parsed: list[CriterioRow] = []
     for row in rows:
-        competencia_id = _required_string(
-            row,
-            "Criterios",
-            "competencia_id",
-            errores,
-        )
+        competencia_id = _optional_string(row.get("competencia_id"))
         descripcion = _required_string(row, "Criterios", "descripcion", errores)
         orden = _optional_int(row, "Criterios", "orden", errores)
-        if competencia_id is None or descripcion is None:
+        if descripcion is None:
             continue
         parsed.append(
             CriterioRow(
@@ -879,6 +955,157 @@ def _parse_criterios(
             ),
         )
     return parsed
+
+
+def _split_assignable_rows(
+    *,
+    competencias: list[CompetenciaRow],
+    resultados: list[ResultadoRow],
+    conocimientos: list[ConocimientoRow],
+    criterios: list[CriterioRow],
+) -> tuple[list[ConocimientoRow], list[CriterioRow], list[ExcelPendingAssignmentDTO]]:
+    competencia_ids = {row.competencia_id for row in competencias}
+    rap_keys = {(row.competencia_id, row.rap_id) for row in resultados}
+    pending: list[ExcelPendingAssignmentDTO] = []
+    assignable_conocimientos: list[ConocimientoRow] = []
+    assignable_criterios: list[CriterioRow] = []
+
+    for conocimiento_row in conocimientos:
+        motivo = _pending_reason_for_row(
+            competencia_id=conocimiento_row.competencia_id,
+            rap_id=conocimiento_row.rap_id,
+            competencia_ids=competencia_ids,
+            rap_keys=rap_keys,
+        )
+        if motivo is not None:
+            pending.append(_pending_from_conocimiento(conocimiento_row, motivo))
+            continue
+        assignable_conocimientos.append(conocimiento_row)
+
+    for criterio_row in criterios:
+        motivo = _pending_reason_for_row(
+            competencia_id=criterio_row.competencia_id,
+            rap_id=criterio_row.rap_id,
+            competencia_ids=competencia_ids,
+            rap_keys=rap_keys,
+        )
+        if motivo is not None:
+            pending.append(_pending_from_criterio(criterio_row, motivo))
+            continue
+        assignable_criterios.append(criterio_row)
+
+    assignable_conocimientos, duplicated_conocimientos = (
+        _move_duplicate_conocimientos_to_pending(assignable_conocimientos)
+    )
+    assignable_criterios, duplicated_criterios = _move_duplicate_criterios_to_pending(
+        assignable_criterios
+    )
+    pending.extend(duplicated_conocimientos)
+    pending.extend(duplicated_criterios)
+    return assignable_conocimientos, assignable_criterios, pending
+
+
+def _pending_reason_for_row(
+    *,
+    competencia_id: str | None,
+    rap_id: str | None,
+    competencia_ids: set[str],
+    rap_keys: set[tuple[str, str]],
+) -> MotivoPendienteAsignacion | None:
+    if competencia_id is None or competencia_id not in competencia_ids:
+        return MotivoPendienteAsignacion.COMPETENCIA_NO_IDENTIFICADA
+    if rap_id is None or (competencia_id, rap_id) not in rap_keys:
+        return MotivoPendienteAsignacion.RESULTADO_NO_IDENTIFICADO
+    return None
+
+
+def _move_duplicate_conocimientos_to_pending(
+    rows: list[ConocimientoRow],
+) -> tuple[list[ConocimientoRow], list[ExcelPendingAssignmentDTO]]:
+    seen: set[tuple[str | None, str, str, str | None]] = set()
+    assignable: list[ConocimientoRow] = []
+    pending: list[ExcelPendingAssignmentDTO] = []
+    for row in rows:
+        key = (
+            row.competencia_id,
+            row.tipo_conocimiento.value,
+            _norm(row.descripcion),
+            row.rap_id,
+        )
+        if key in seen:
+            pending.append(
+                _pending_from_conocimiento(
+                    row,
+                    MotivoPendienteAsignacion.ASOCIACION_AMBIGUA,
+                )
+            )
+            continue
+        seen.add(key)
+        assignable.append(row)
+    return assignable, pending
+
+
+def _move_duplicate_criterios_to_pending(
+    rows: list[CriterioRow],
+) -> tuple[list[CriterioRow], list[ExcelPendingAssignmentDTO]]:
+    seen: set[tuple[str | None, str, str | None]] = set()
+    assignable: list[CriterioRow] = []
+    pending: list[ExcelPendingAssignmentDTO] = []
+    for row in rows:
+        key = (row.competencia_id, _norm(row.descripcion), row.rap_id)
+        if key in seen:
+            pending.append(
+                _pending_from_criterio(
+                    row,
+                    MotivoPendienteAsignacion.ASOCIACION_AMBIGUA,
+                )
+            )
+            continue
+        seen.add(key)
+        assignable.append(row)
+    return assignable, pending
+
+
+def _pending_from_conocimiento(
+    row: ConocimientoRow,
+    motivo: MotivoPendienteAsignacion,
+) -> ExcelPendingAssignmentDTO:
+    return ExcelPendingAssignmentDTO(
+        tipo_elemento=TipoElementoCurricularPendiente.CONOCIMIENTO,
+        tipo_conocimiento=row.tipo_conocimiento,
+        descripcion=row.descripcion,
+        competencia_id_origen_excel=row.competencia_id,
+        rap_id_origen_excel=row.rap_id,
+        motivo=motivo,
+        hoja="Conocimientos",
+        fila=_row_index(row.raw),
+        raw_excel=row.raw,
+    )
+
+
+def _pending_from_criterio(
+    row: CriterioRow,
+    motivo: MotivoPendienteAsignacion,
+) -> ExcelPendingAssignmentDTO:
+    return ExcelPendingAssignmentDTO(
+        tipo_elemento=TipoElementoCurricularPendiente.CRITERIO,
+        tipo_conocimiento=None,
+        descripcion=row.descripcion,
+        competencia_id_origen_excel=row.competencia_id,
+        rap_id_origen_excel=row.rap_id,
+        motivo=motivo,
+        hoja="Criterios",
+        fila=_row_index(row.raw),
+        raw_excel=row.raw,
+    )
+
+
+def _raw_excel_for_pending(
+    workbook: CanonicalWorkbook,
+    pendiente: ExcelPendingAssignmentDTO,
+) -> dict[str, object] | None:
+    del workbook
+    return pendiente.raw_excel
 
 
 def _validate_cross_references(
@@ -942,14 +1169,24 @@ def _validate_duplicates(
     resultados: list[ResultadoRow],
     conocimientos: list[ConocimientoRow],
     criterios: list[CriterioRow],
+    pendientes: list[ExcelPendingAssignmentDTO],
     errores: list[ExcelValidationIssueDTO],
 ) -> None:
+    del conocimientos, criterios, pendientes
     _reject_duplicate_keys(
         "Competencias",
         [(row.codigo_competencia.lower(), row) for row in competencias],
         "codigo_competencia",
         "Competencia duplicada por codigo dentro del programa",
         errores,
+    )
+    _reject_duplicate_keys(
+        "Resultados",
+        [((row.competencia_id, row.rap_id), row) for row in resultados],
+        "rap_id",
+        "Resultado duplicado por rap_id dentro de la competencia",
+        errores,
+        labels=("competencia_id", "rap_id"),
     )
     _reject_duplicate_keys(
         "Resultados",
@@ -960,33 +1197,7 @@ def _validate_duplicates(
         "resultado_aprendizaje",
         "Resultado duplicado exacto dentro de la competencia",
         errores,
-    )
-    _reject_duplicate_keys(
-        "Conocimientos",
-        [
-            (
-                (
-                    row.competencia_id,
-                    row.tipo_conocimiento.value,
-                    _norm(row.descripcion),
-                ),
-                row,
-            )
-            for row in conocimientos
-        ],
-        "descripcion",
-        "Conocimiento duplicado por tipo y descripcion en la competencia",
-        errores,
-    )
-    _reject_duplicate_keys(
-        "Criterios",
-        [
-            ((row.competencia_id, _norm(row.descripcion)), row)
-            for row in criterios
-        ],
-        "descripcion",
-        "Criterio duplicado exacto dentro de la competencia",
-        errores,
+        labels=("competencia_id", "resultado_aprendizaje"),
     )
 
 
@@ -996,8 +1207,9 @@ def _reject_duplicate_keys(
     campo: str,
     mensaje: str,
     errores: list[ExcelValidationIssueDTO],
+    labels: tuple[str, ...] | None = None,
 ) -> None:
-    seen: set[object] = set()
+    seen: dict[object, int | None] = {}
     for key, row in keys:
         if key in seen:
             raw = getattr(row, "raw", {})
@@ -1006,10 +1218,37 @@ def _reject_duplicate_keys(
                     hoja=hoja,
                     fila=_row_index(raw),
                     campo=campo,
-                    mensaje=mensaje,
+                    mensaje=_duplicate_message(
+                        mensaje=mensaje,
+                        key=key,
+                        labels=labels,
+                        original_row=seen[key],
+                    ),
                 ),
             )
-        seen.add(key)
+            continue
+        raw = getattr(row, "raw", {})
+        seen[key] = _row_index(raw)
+
+
+def _duplicate_message(
+    *,
+    mensaje: str,
+    key: object,
+    labels: tuple[str, ...] | None,
+    original_row: int | None,
+) -> str:
+    details: list[str] = []
+    if labels is not None and isinstance(key, tuple):
+        details.extend(
+            f"{label}={value or '<vacio>'}"
+            for label, value in zip(labels, key, strict=False)
+        )
+    if original_row is not None:
+        details.append(f"fila_original={original_row}")
+    if not details:
+        return mensaje
+    return f"{mensaje} ({', '.join(details)})"
 
 
 def _sheet_for_row(row: object) -> str:
@@ -1077,6 +1316,8 @@ def _build_preview_dto(
             )
             for row in workbook.competencias
         ],
+        pendientes_resumen=_build_pending_summary(workbook.pendientes),
+        pendientes=workbook.pendientes,
         errores=workbook.errores,
     )
 
@@ -1088,6 +1329,24 @@ def _build_summary(workbook: CanonicalWorkbook) -> ExcelPreviewSummaryDTO:
         resultados=len(workbook.resultados),
         conocimientos=len(workbook.conocimientos),
         criterios=len(workbook.criterios),
+    )
+
+
+def _build_pending_summary(
+    pendientes: list[ExcelPendingAssignmentDTO],
+) -> ExcelPendingSummaryDTO:
+    return ExcelPendingSummaryDTO(
+        total=len(pendientes),
+        conocimientos=sum(
+            1
+            for item in pendientes
+            if item.tipo_elemento == TipoElementoCurricularPendiente.CONOCIMIENTO
+        ),
+        criterios=sum(
+            1
+            for item in pendientes
+            if item.tipo_elemento == TipoElementoCurricularPendiente.CRITERIO
+        ),
     )
 
 
@@ -1132,6 +1391,10 @@ def _merge_excel_import_into_payload(
         "resultado_ids": [str(item) for item in result.resultado_ids],
         "conocimiento_ids": [str(item) for item in result.conocimiento_ids],
         "criterio_ids": [str(item) for item in result.criterio_ids],
+        "pendiente_ids": [str(item) for item in result.pendiente_ids],
+        "pendientes_resumen": _pending_summary_to_payload(
+            result.pendientes_resumen,
+        ),
     }
     documental["programa_excel"] = excel_payload
     next_payload["documental"] = documental
@@ -1153,6 +1416,9 @@ def _merge_excel_import_into_payload(
             "estado": "IMPORTADO",
             "updated_at": now,
             "resumen": _summary_to_payload(result.resumen),
+            "pendientes_resumen": _pending_summary_to_payload(
+                result.pendientes_resumen,
+            ),
         },
     }
     return next_payload
@@ -1189,6 +1455,26 @@ def _preview_to_payload(
                 }
                 for item in preview.competencias
             ],
+            "pendientes_resumen": _pending_summary_to_payload(
+                preview.pendientes_resumen,
+            ),
+            "pendientes": [
+                {
+                    "tipo_elemento": item.tipo_elemento.value,
+                    "tipo_conocimiento": (
+                        item.tipo_conocimiento.value
+                        if item.tipo_conocimiento is not None
+                        else None
+                    ),
+                    "descripcion": item.descripcion,
+                    "competencia_id_origen_excel": item.competencia_id_origen_excel,
+                    "rap_id_origen_excel": item.rap_id_origen_excel,
+                    "motivo": item.motivo.value,
+                    "hoja": item.hoja,
+                    "fila": item.fila,
+                }
+                for item in preview.pendientes
+            ],
             "errores": [
                 {
                     "hoja": issue.hoja,
@@ -1224,6 +1510,14 @@ def _summary_to_payload(summary: ExcelPreviewSummaryDTO) -> dict[str, int]:
         "programa": summary.programa,
         "competencias": summary.competencias,
         "resultados": summary.resultados,
+        "conocimientos": summary.conocimientos,
+        "criterios": summary.criterios,
+    }
+
+
+def _pending_summary_to_payload(summary: ExcelPendingSummaryDTO) -> dict[str, int]:
+    return {
+        "total": summary.total,
         "conocimientos": summary.conocimientos,
         "criterios": summary.criterios,
     }

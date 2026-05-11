@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,10 +19,19 @@ import {
   ProgramaCompetenciaError,
   updateProgramaCompetencia,
 } from "@/features/programa/competencias-api";
+import {
+  createProgramaResultado,
+  deleteProgramaResultado,
+  listProgramaResultados,
+  ProgramaResultadoError,
+  updateProgramaResultado,
+} from "@/features/programa/resultados-api";
 import { cn } from "@/lib/utils";
 import type {
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
+  ResultadoAprendizaje,
+  ResultadoAprendizajeListResponse,
 } from "@/features/programa/types";
 
 type OperationState = "idle" | "loading" | "saving" | "deleting";
@@ -32,13 +41,26 @@ interface CompetenciaFormState {
   nombre_competencia: string;
 }
 
+interface ResultadoFormState {
+  codigo_resultado: string;
+  descripcion: string;
+}
+
 const EMPTY_FORM: CompetenciaFormState = {
   codigo_competencia: "",
   nombre_competencia: "",
 };
 
+const EMPTY_RESULTADO_FORM: ResultadoFormState = {
+  codigo_resultado: "",
+  descripcion: "",
+};
+
 function getErrorMessage(error: unknown): string {
-  if (error instanceof ProgramaCompetenciaError) {
+  if (
+    error instanceof ProgramaCompetenciaError ||
+    error instanceof ProgramaResultadoError
+  ) {
     return error.detail;
   }
 
@@ -61,6 +83,14 @@ function validateForm(form: CompetenciaFormState): string | null {
   return null;
 }
 
+function validateResultadoForm(form: ResultadoFormState): string | null {
+  if (form.descripcion.trim().length === 0) {
+    return "descripcion es obligatoria.";
+  }
+
+  return null;
+}
+
 function CompetenciaEmptyState(): React.JSX.Element {
   return (
     <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] px-4 py-6 text-center">
@@ -71,6 +101,345 @@ function CompetenciaEmptyState(): React.JSX.Element {
         Agrega la primera competencia del programa para construir la estructura
         curricular. El Excel canonico puede importarlas de forma estructurada.
       </p>
+    </div>
+  );
+}
+
+function ProgramaResultadosManager({
+  competencia,
+  onResultadosSynced,
+  referenciaId,
+}: Readonly<{
+  competencia: ProgramaCompetencia;
+  onResultadosSynced: (result: ResultadoAprendizajeListResponse) => void;
+  referenciaId: string;
+}>): React.JSX.Element {
+  const [resultados, setResultados] = useState<ResultadoAprendizaje[]>(
+    competencia.resultados ?? [],
+  );
+  const [form, setForm] = useState<ResultadoFormState>(EMPTY_RESULTADO_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [state, setState] = useState<OperationState>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const sortedResultados = useMemo(() => {
+    return [...resultados].sort((left, right) => {
+      const leftOrder = left.orden ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.orden ?? Number.MAX_SAFE_INTEGER;
+      return leftOrder - rightOrder;
+    });
+  }, [resultados]);
+
+  useEffect(() => {
+    setResultados(competencia.resultados ?? []);
+  }, [competencia.resultados]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadResultados = async (): Promise<void> => {
+      setState("loading");
+      setErrorMessage(null);
+
+      try {
+        const result = await listProgramaResultados(referenciaId, competencia.id);
+        if (isCurrent) {
+          setResultados(result.resultados);
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setErrorMessage(getErrorMessage(error));
+        }
+      } finally {
+        if (isCurrent) {
+          setState("idle");
+        }
+      }
+    };
+
+    void loadResultados();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competencia.id, referenciaId]);
+
+  const resetForm = (): void => {
+    setForm(EMPTY_RESULTADO_FORM);
+    setEditingId(null);
+  };
+
+  const syncResultados = (result: ResultadoAprendizajeListResponse): void => {
+    setResultados(result.resultados);
+    onResultadosSynced(result);
+  };
+
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event.preventDefault();
+    const validationMessage = validateResultadoForm(form);
+    if (validationMessage !== null) {
+      setErrorMessage(validationMessage);
+      notify.warning("Revisa el resultado de aprendizaje", {
+        description: validationMessage,
+      });
+      return;
+    }
+
+    setState("saving");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      const payload = {
+        descripcion: form.descripcion.trim(),
+        codigo_resultado: form.codigo_resultado.trim() || null,
+      };
+      const result =
+        editingId === null
+          ? await createProgramaResultado(referenciaId, competencia.id, payload)
+          : await updateProgramaResultado(
+              referenciaId,
+              competencia.id,
+              editingId,
+              payload,
+            );
+
+      syncResultados(result);
+      resetForm();
+      setMessage(
+        editingId === null
+          ? "Resultado de aprendizaje registrado."
+          : "Resultado de aprendizaje actualizado.",
+      );
+      notify.success("Resultados sincronizados", {
+        description: "El borrador conserva la estructura curricular actual.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible guardar el resultado", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const handleEdit = (resultado: ResultadoAprendizaje): void => {
+    setEditingId(resultado.id);
+    setForm({
+      codigo_resultado: resultado.codigo_resultado ?? "",
+      descripcion: resultado.descripcion,
+    });
+    setMessage(null);
+    setErrorMessage(null);
+  };
+
+  const handleDelete = async (
+    resultado: ResultadoAprendizaje,
+  ): Promise<void> => {
+    const confirmed = window.confirm(
+      "Eliminar este resultado de aprendizaje? Esta accion requiere confirmacion.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setState("deleting");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      await deleteProgramaResultado(referenciaId, competencia.id, resultado.id);
+      const result = await listProgramaResultados(referenciaId, competencia.id);
+      syncResultados(result);
+      if (editingId === resultado.id) {
+        resetForm();
+      }
+      setMessage("Resultado de aprendizaje eliminado.");
+      notify.success("Resultado eliminado", {
+        description: "El borrador fue actualizado con la lista vigente.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible eliminar el resultado", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const isBusy = state === "loading" || state === "saving" || state === "deleting";
+
+  return (
+    <div className="mt-4 border-t border-[color:var(--card-border)] pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">
+            Resultados de aprendizaje
+          </h4>
+          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+            Asociados a esta competencia y guardados en el mismo borrador.
+          </p>
+        </div>
+        <span className="inline-flex min-h-7 items-center rounded-full border border-[color:var(--card-border)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
+          {sortedResultados.length} registrado(s)
+        </span>
+      </div>
+
+      {state === "loading" ? (
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-[var(--paper-strong)] px-3 py-2 text-xs text-[var(--muted)]">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando resultados...
+        </div>
+      ) : null}
+
+      {errorMessage !== null ? (
+        <div
+          role="alert"
+          className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-900"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{errorMessage}</p>
+        </div>
+      ) : null}
+
+      {message !== null ? (
+        <div
+          role="status"
+          className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-900"
+        >
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{message}</p>
+        </div>
+      ) : null}
+
+      <form
+        onSubmit={(event) => void handleSubmit(event)}
+        className="mt-3 grid gap-3 rounded-lg bg-[var(--paper-strong)] p-3"
+      >
+        <div className="grid gap-3 sm:grid-cols-[minmax(10rem,14rem)_1fr]">
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+              codigo_resultado
+            </span>
+            <input
+              value={form.codigo_resultado}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  codigo_resultado: event.target.value,
+                }))
+              }
+              placeholder="Ej. RAP-01"
+              className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+              descripcion
+            </span>
+            <textarea
+              value={form.descripcion}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  descripcion: event.target.value,
+                }))
+              }
+              rows={3}
+              placeholder="Describe el resultado de aprendizaje."
+              className="min-h-24 resize-none rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {state === "saving" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : editingId === null ? (
+              <Plus className="h-4 w-4" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            {editingId === null ? "Crear resultado" : "Guardar resultado"}
+          </button>
+          {editingId !== null ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              <X className="h-4 w-4" />
+              Cancelar
+            </button>
+          ) : null}
+        </div>
+      </form>
+
+      {sortedResultados.length === 0 ? (
+        <p className="mt-3 rounded-lg border border-dashed border-[color:var(--card-border)] px-3 py-3 text-sm text-[var(--muted)]">
+          No hay resultados asociados a esta competencia.
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-2">
+          {sortedResultados.map((resultado) => (
+            <div
+              key={resultado.id}
+              className={cn(
+                "grid gap-3 rounded-lg border bg-white p-3 sm:grid-cols-[1fr_auto]",
+                editingId === resultado.id
+                  ? "border-[var(--accent)]"
+                  : "border-[color:var(--card-border)]",
+              )}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {resultado.codigo_resultado !== null ? (
+                    <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {resultado.codigo_resultado}
+                    </span>
+                  ) : null}
+                  <span className="text-xs font-semibold text-[var(--muted)]">
+                    {resultado.estado}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 break-words text-[var(--foreground)]">
+                  {resultado.descripcion}
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleEdit(resultado)}
+                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  disabled={state === "deleting"}
+                  onClick={() => void handleDelete(resultado)}
+                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -97,6 +466,23 @@ export function ProgramaCompetenciasManager({
       return leftOrder - rightOrder;
     });
   }, [competencias]);
+
+  const handleResultadosSynced = useCallback(
+    (result: ResultadoAprendizajeListResponse): void => {
+      onCompetenciasSynced({
+        referencia_id: result.referencia_id,
+        programa_id:
+          competencias.find((item) => item.id === result.competencia_id)
+            ?.programa_id ?? null,
+        competencias: competencias.map((item) =>
+          item.id === result.competencia_id
+            ? { ...item, resultados: result.resultados }
+            : item,
+        ),
+      });
+    },
+    [competencias, onCompetenciasSynced],
+  );
 
   useEffect(() => {
     let isCurrent = true;
@@ -371,6 +757,11 @@ export function ProgramaCompetenciasManager({
                 <p className="mt-2 text-sm leading-6 break-words text-[var(--foreground)]">
                   {competencia.nombre_competencia}
                 </p>
+                <ProgramaResultadosManager
+                  competencia={competencia}
+                  referenciaId={referenciaId}
+                  onResultadosSynced={handleResultadosSynced}
+                />
               </div>
 
               <div className="flex items-start gap-2">

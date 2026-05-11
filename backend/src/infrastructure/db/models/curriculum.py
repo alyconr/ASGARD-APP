@@ -6,6 +6,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -13,14 +14,18 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.domain.shared.enums import (
     EstadoBloque,
     EstadoCampo,
+    EstadoConciliacionPendiente,
     MotivoFalloExtraccion,
+    MotivoPendienteAsignacion,
     TipoConocimiento,
+    TipoElementoCurricularPendiente,
     TipoFuenteCargue,
 )
 from src.infrastructure.db.base import Base
@@ -38,6 +43,18 @@ estado_bloque_enum = build_postgres_enum(EstadoBloque, "estado_bloque")
 estado_campo_enum = build_postgres_enum(EstadoCampo, "estado_campo")
 fuente_cargue_enum = build_postgres_enum(TipoFuenteCargue, "tipo_fuente_cargue")
 tipo_conocimiento_enum = build_postgres_enum(TipoConocimiento, "tipo_conocimiento")
+tipo_elemento_pendiente_enum = build_postgres_enum(
+    TipoElementoCurricularPendiente,
+    "tipo_elemento_curricular_pendiente",
+)
+motivo_pendiente_asignacion_enum = build_postgres_enum(
+    MotivoPendienteAsignacion,
+    "motivo_pendiente_asignacion",
+)
+estado_conciliacion_pendiente_enum = build_postgres_enum(
+    EstadoConciliacionPendiente,
+    "estado_conciliacion_pendiente",
+)
 motivo_fallo_enum = build_postgres_enum(
     MotivoFalloExtraccion,
     "motivo_fallo_extraccion",
@@ -179,6 +196,14 @@ class ResultadoAprendizaje(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     competencia: Mapped[Competencia] = relationship(back_populates="resultados")
+    conocimientos: Mapped[list["Conocimiento"]] = relationship(
+        back_populates="resultado",
+        cascade="all, delete-orphan",
+    )
+    criterios: Mapped[list["CriterioEvaluacion"]] = relationship(
+        back_populates="resultado",
+        cascade="all, delete-orphan",
+    )
 
 
 class Conocimiento(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -186,11 +211,22 @@ class Conocimiento(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "conocimientos"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_conocimientos_comp_tipo_desc_rap",
             "competencia_id",
             "tipo",
             "descripcion",
-            name="uq_conocimientos_competencia_tipo_descripcion",
+            "resultado_id",
+            unique=True,
+            postgresql_where=text("resultado_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_conocimientos_comp_tipo_desc_norap",
+            "competencia_id",
+            "tipo",
+            "descripcion",
+            unique=True,
+            postgresql_where=text("resultado_id IS NULL"),
         ),
         CheckConstraint(
             "btrim(descripcion) <> ''",
@@ -202,6 +238,10 @@ class Conocimiento(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     competencia_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("competencias.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    resultado_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
+        nullable=True,
     )
     tipo: Mapped[TipoConocimiento] = mapped_column(
         tipo_conocimiento_enum,
@@ -220,6 +260,9 @@ class Conocimiento(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     competencia: Mapped[Competencia] = relationship(back_populates="conocimientos")
+    resultado: Mapped[ResultadoAprendizaje | None] = relationship(
+        back_populates="conocimientos"
+    )
 
 
 class CriterioEvaluacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -227,10 +270,20 @@ class CriterioEvaluacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "criterios_evaluacion"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_criterios_eval_comp_desc_rap",
             "competencia_id",
             "descripcion",
-            name="uq_criterios_evaluacion_competencia_descripcion",
+            "resultado_id",
+            unique=True,
+            postgresql_where=text("resultado_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_criterios_eval_comp_desc_norap",
+            "competencia_id",
+            "descripcion",
+            unique=True,
+            postgresql_where=text("resultado_id IS NULL"),
         ),
         CheckConstraint(
             "btrim(descripcion) <> ''",
@@ -242,6 +295,10 @@ class CriterioEvaluacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     competencia_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("competencias.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    resultado_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
+        nullable=True,
     )
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
     orden: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -256,3 +313,70 @@ class CriterioEvaluacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     competencia: Mapped[Competencia] = relationship(back_populates="criterios")
+    resultado: Mapped[ResultadoAprendizaje | None] = relationship(
+        back_populates="criterios"
+    )
+
+
+class ElementoCurricularPendiente(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Excel curricular row waiting for manual assignment."""
+
+    __tablename__ = "elementos_curriculares_pendientes"
+    __table_args__ = (
+        CheckConstraint(
+            "btrim(descripcion) <> ''",
+            name="elemento_curricular_pendiente_descripcion_not_blank",
+        ),
+        Index(
+            "ix_elementos_curriculares_pendientes_referencia_estado",
+            "referencia_id",
+            "estado",
+        ),
+        Index(
+            "ix_elementos_curriculares_pendientes_programa_id",
+            "programa_id",
+        ),
+    )
+
+    referencia_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    programa_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("programas_formacion.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    tipo_elemento: Mapped[TipoElementoCurricularPendiente] = mapped_column(
+        tipo_elemento_pendiente_enum,
+        nullable=False,
+    )
+    tipo_conocimiento: Mapped[TipoConocimiento | None] = mapped_column(
+        tipo_conocimiento_enum,
+        nullable=True,
+    )
+    descripcion: Mapped[str] = mapped_column(Text, nullable=False)
+    competencia_id_origen_excel: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    rap_id_origen_excel: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    motivo: Mapped[MotivoPendienteAsignacion] = mapped_column(
+        motivo_pendiente_asignacion_enum,
+        nullable=False,
+    )
+    estado: Mapped[EstadoConciliacionPendiente] = mapped_column(
+        estado_conciliacion_pendiente_enum,
+        nullable=False,
+        default=EstadoConciliacionPendiente.PENDIENTE,
+    )
+    competencia_destino_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("competencias.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resultado_destino_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("resultados_aprendizaje.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    elemento_creado_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    orden: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    raw_excel: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)

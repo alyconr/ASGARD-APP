@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.dto.programa_excel import ExcelPendingAssignmentDTO
 from src.domain.shared.enums import (
     EstadoBloque,
     EstadoCampo,
+    EstadoConciliacionPendiente,
     TipoConocimiento,
     TipoFuenteCargue,
 )
@@ -17,6 +19,7 @@ from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
     CriterioEvaluacion,
+    ElementoCurricularPendiente,
     ProgramaFormacion,
     ResultadoAprendizaje,
 )
@@ -119,6 +122,7 @@ class ProgramaExcelImportRepository:
         competencia_id: uuid.UUID,
         tipo: TipoConocimiento,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Return whether a knowledge item already exists."""
         statement = (
@@ -127,6 +131,10 @@ class ProgramaExcelImportRepository:
             .where(Conocimiento.tipo == tipo)
             .where(func.lower(Conocimiento.descripcion) == descripcion.lower())
         )
+        if resultado_id is not None:
+            statement = statement.where(Conocimiento.resultado_id == resultado_id)
+        else:
+            statement = statement.where(Conocimiento.resultado_id.is_(None))
         result = await self._session.execute(statement)
         return result.scalar_one_or_none() is not None
 
@@ -135,6 +143,7 @@ class ProgramaExcelImportRepository:
         *,
         competencia_id: uuid.UUID,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Return whether a criterion description already exists."""
         statement = (
@@ -142,6 +151,10 @@ class ProgramaExcelImportRepository:
             .where(CriterioEvaluacion.competencia_id == competencia_id)
             .where(func.lower(CriterioEvaluacion.descripcion) == descripcion.lower())
         )
+        if resultado_id is not None:
+            statement = statement.where(CriterioEvaluacion.resultado_id == resultado_id)
+        else:
+            statement = statement.where(CriterioEvaluacion.resultado_id.is_(None))
         result = await self._session.execute(statement)
         return result.scalar_one_or_none() is not None
 
@@ -193,6 +206,7 @@ class ProgramaExcelImportRepository:
         tipo: TipoConocimiento,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> Conocimiento:
         """Create a knowledge row imported from Excel."""
         conocimiento = Conocimiento(
@@ -201,6 +215,7 @@ class ProgramaExcelImportRepository:
             descripcion=descripcion,
             orden=orden,
             estado=EstadoCampo.VALIDADO,
+            resultado_id=resultado_id,
         )
         self._session.add(conocimiento)
         await self._session.flush()
@@ -212,6 +227,7 @@ class ProgramaExcelImportRepository:
         competencia_id: uuid.UUID,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> CriterioEvaluacion:
         """Create an evaluation criterion imported from Excel."""
         criterio = CriterioEvaluacion(
@@ -219,7 +235,44 @@ class ProgramaExcelImportRepository:
             descripcion=descripcion,
             orden=orden,
             estado=EstadoCampo.VALIDADO,
+            resultado_id=resultado_id,
         )
         self._session.add(criterio)
         await self._session.flush()
         return criterio
+
+    async def clear_pendientes(self, *, referencia_id: uuid.UUID) -> None:
+        """Remove previous pending assignment rows for a wizard reference."""
+        await self._session.execute(
+            delete(ElementoCurricularPendiente).where(
+                ElementoCurricularPendiente.referencia_id == referencia_id,
+            )
+        )
+        await self._session.flush()
+
+    async def add_pendiente(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+        programa_id: uuid.UUID,
+        pendiente: ExcelPendingAssignmentDTO,
+        orden: int | None,
+        raw_excel: dict[str, object] | None,
+    ) -> ElementoCurricularPendiente:
+        """Persist an unresolved Excel row for later manual assignment."""
+        item = ElementoCurricularPendiente(
+            referencia_id=referencia_id,
+            programa_id=programa_id,
+            tipo_elemento=pendiente.tipo_elemento,
+            tipo_conocimiento=pendiente.tipo_conocimiento,
+            descripcion=pendiente.descripcion,
+            competencia_id_origen_excel=pendiente.competencia_id_origen_excel,
+            rap_id_origen_excel=pendiente.rap_id_origen_excel,
+            motivo=pendiente.motivo,
+            estado=EstadoConciliacionPendiente.PENDIENTE,
+            orden=orden,
+            raw_excel=raw_excel,
+        )
+        self._session.add(item)
+        await self._session.flush()
+        return item

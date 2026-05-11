@@ -18,11 +18,17 @@ from src.application.services.programa_excel import (
     ProgramaExcelValidationError,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque, EstadoCampo, TipoConocimiento
+from src.domain.shared.enums import (
+    EstadoBloque,
+    EstadoCampo,
+    EstadoConciliacionPendiente,
+    TipoConocimiento,
+)
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
     CriterioEvaluacion,
+    ElementoCurricularPendiente,
     ProgramaFormacion,
     ResultadoAprendizaje,
 )
@@ -148,6 +154,7 @@ class FakeProgramaExcelRepository:
         self.resultados: dict[uuid.UUID, ResultadoAprendizaje] = {}
         self.conocimientos: dict[uuid.UUID, Conocimiento] = {}
         self.criterios: dict[uuid.UUID, CriterioEvaluacion] = {}
+        self.pendientes: dict[uuid.UUID, ElementoCurricularPendiente] = {}
 
     async def get_programa(self, programa_id: uuid.UUID) -> ProgramaFormacion | None:
         """Return a program by id."""
@@ -204,8 +211,7 @@ class FakeProgramaExcelRepository:
         """Check duplicate competence code."""
         return any(
             competencia.programa_id == programa_id
-            and competencia.codigo_competencia.lower()
-            == codigo_competencia.lower()
+            and competencia.codigo_competencia.lower() == codigo_competencia.lower()
             for competencia in self.competencias.values()
         )
 
@@ -228,12 +234,14 @@ class FakeProgramaExcelRepository:
         competencia_id: uuid.UUID,
         tipo: TipoConocimiento,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Check duplicate knowledge."""
         return any(
             item.competencia_id == competencia_id
             and item.tipo == tipo
             and item.descripcion.lower() == descripcion.lower()
+            and item.resultado_id == resultado_id
             for item in self.conocimientos.values()
         )
 
@@ -242,11 +250,13 @@ class FakeProgramaExcelRepository:
         *,
         competencia_id: uuid.UUID,
         descripcion: str,
+        resultado_id: uuid.UUID | None = None,
     ) -> bool:
         """Check duplicate criterion."""
         return any(
             item.competencia_id == competencia_id
             and item.descripcion.lower() == descripcion.lower()
+            and item.resultado_id == resultado_id
             for item in self.criterios.values()
         )
 
@@ -301,10 +311,12 @@ class FakeProgramaExcelRepository:
         tipo: TipoConocimiento,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> Conocimiento:
         """Create a knowledge row."""
         conocimiento = Conocimiento(
             competencia_id=competencia_id,
+            resultado_id=resultado_id,
             tipo=tipo,
             descripcion=descripcion,
             orden=orden,
@@ -320,10 +332,12 @@ class FakeProgramaExcelRepository:
         competencia_id: uuid.UUID,
         descripcion: str,
         orden: int | None,
+        resultado_id: uuid.UUID | None = None,
     ) -> CriterioEvaluacion:
         """Create a criterion."""
         criterio = CriterioEvaluacion(
             competencia_id=competencia_id,
+            resultado_id=resultado_id,
             descripcion=descripcion,
             orden=orden,
             estado=EstadoCampo.VALIDADO,
@@ -331,6 +345,44 @@ class FakeProgramaExcelRepository:
         criterio.id = uuid.uuid4()
         self.criterios[criterio.id] = criterio
         return criterio
+
+    async def clear_pendientes(self, *, referencia_id: uuid.UUID) -> None:
+        """Remove pending rows for a reference."""
+        self.pendientes = {
+            key: value
+            for key, value in self.pendientes.items()
+            if value.referencia_id != referencia_id
+        }
+
+    async def add_pendiente(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+        programa_id: uuid.UUID,
+        pendiente: Any,
+        orden: int | None,
+        raw_excel: dict[str, object] | None,
+    ) -> ElementoCurricularPendiente:
+        """Create a pending row."""
+        now = datetime.now(UTC)
+        item = ElementoCurricularPendiente(
+            referencia_id=referencia_id,
+            programa_id=programa_id,
+            tipo_elemento=pendiente.tipo_elemento,
+            tipo_conocimiento=pendiente.tipo_conocimiento,
+            descripcion=pendiente.descripcion,
+            competencia_id_origen_excel=pendiente.competencia_id_origen_excel,
+            rap_id_origen_excel=pendiente.rap_id_origen_excel,
+            motivo=pendiente.motivo,
+            estado=EstadoConciliacionPendiente.PENDIENTE,
+            orden=orden,
+            raw_excel=raw_excel,
+        )
+        item.id = uuid.uuid4()
+        item.fecha_creacion = now
+        item.fecha_actualizacion = now
+        self.pendientes[item.id] = item
+        return item
 
 
 def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
@@ -490,13 +542,15 @@ async def test_preview_valid_canonical_workbook_updates_same_draft() -> None:
     assert result.valid is True
     assert result.resumen.competencias == 1
     assert result.resumen.resultados == 1
-    assert result.resumen.conocimientos == 2
+    assert result.resumen.conocimientos == 1
+    assert result.pendientes_resumen.conocimientos == 1
     assert repo.programas == {}
     assert len(storage.objects) == 1
     assert drafts.draft.referencia_id == referencia_id
-    assert drafts.draft.payload_json["documental"]["programa_excel"]["preview"][
-        "valid"
-    ] is True
+    assert (
+        drafts.draft.payload_json["documental"]["programa_excel"]["preview"]["valid"]
+        is True
+    )
     assert session.commits == 1
 
 
@@ -523,6 +577,92 @@ async def test_preview_rejects_broken_cross_references() -> None:
 
 
 @pytest.mark.anyio
+async def test_preview_keeps_conocimiento_without_competencia_as_pending() -> None:
+    """Knowledge rows without competencia_id do not invalidate the workbook."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Conocimientos": [
+                    ["", "RAP-1", "SABER", "1", "Arquitectura pendiente", 1, 12, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.errores == []
+    assert result.resumen.conocimientos == 0
+    assert result.pendientes_resumen.conocimientos == 1
+    assert result.pendientes[0].motivo.value == "COMPETENCIA_NO_IDENTIFICADA"
+
+
+@pytest.mark.anyio
+async def test_preview_keeps_criterio_without_rap_as_pending() -> None:
+    """Criteria rows without rap_id do not invalidate the workbook."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Criterios": [
+                    ["COMP-1", "", "1", "Criterio pendiente", 1, 14, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.errores == []
+    assert result.resumen.criterios == 0
+    assert result.pendientes_resumen.criterios == 1
+    assert result.pendientes[0].motivo.value == "RESULTADO_NO_IDENTIFICADO"
+
+
+@pytest.mark.anyio
+async def test_preview_allows_practical_stage_competence_without_children() -> None:
+    """A practical-stage competence may exist without curricular children."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Competencias": [
+                    ["COMP-1", "220501046", "Desarrollar software", 120, 1, 10, ""],
+                    [
+                        "ETAPA-PRACTICA",
+                        "999999999",
+                        "Aplicar etapa practica",
+                        864,
+                        2,
+                        20,
+                        "",
+                    ],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    practical = next(
+        item for item in result.competencias if item.competencia_id == "ETAPA-PRACTICA"
+    )
+    assert practical.resultados == 0
+    assert practical.conocimientos == 0
+    assert practical.criterios == 0
+
+
+@pytest.mark.anyio
 async def test_confirm_import_materializes_full_curriculum_without_new_reference() -> (
     None
 ):
@@ -542,15 +682,19 @@ async def test_confirm_import_materializes_full_curriculum_without_new_reference
     assert len(repo.programas) == 1
     assert len(repo.competencias) == 1
     assert len(repo.resultados) == 1
-    assert len(repo.conocimientos) == 2
+    assert len(repo.conocimientos) == 1
     assert len(repo.criterios) == 1
+    assert len(repo.pendientes) == 1
     assert drafts.draft.referencia_id == referencia_id
     assert drafts.draft.payload_json["curricular"]["programa_formacion_id"] == str(
         result.programa_id,
     )
-    assert drafts.draft.payload_json["documental"]["programa_excel"]["confirmacion"][
-        "estado"
-    ] == "IMPORTADO"
+    assert (
+        drafts.draft.payload_json["documental"]["programa_excel"]["confirmacion"][
+            "estado"
+        ]
+        == "IMPORTADO"
+    )
     assert session.commits == 2
 
 
@@ -569,3 +713,197 @@ async def test_confirm_import_rejects_duplicate_confirmation() -> None:
 
     with pytest.raises(ProgramaExcelValidationError):
         await service.confirm_program_excel_import(referencia_id=referencia_id)
+
+
+@pytest.mark.anyio
+async def test_preview_rejects_duplicate_resultado_rap_id() -> None:
+    """RAP identifiers are unique inside a competence in the canonical workbook."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Resultados": [
+                    ["COMP-1", "RAP-1", "1", "Construye componentes", 1, 11, ""],
+                    ["COMP-1", "RAP-1", "2", "Integra componentes", 2, 12, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is False
+    assert any(
+        "Resultado duplicado por rap_id" in issue.mensaje for issue in result.errores
+    )
+
+
+@pytest.mark.anyio
+async def test_preview_allows_same_conocimiento_different_rap() -> None:
+    """The same knowledge description is valid in a different RAP."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Resultados": [
+                    ["COMP-1", "RAP-1", "1", "Construye componentes", 1, 11, ""],
+                    ["COMP-1", "RAP-2", "2", "Integra componentes", 2, 12, ""],
+                ],
+                "Conocimientos": [
+                    ["COMP-1", "RAP-1", "SABER", "1", "Arquitectura", 1, 12, ""],
+                    ["COMP-1", "RAP-2", "SABER", "1", "Arquitectura", 1, 13, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+
+
+@pytest.mark.anyio
+async def test_preview_moves_duplicate_conocimiento_same_rap_to_pending() -> None:
+    """The same knowledge description in the same RAP waits for reconciliation."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Conocimientos": [
+                    ["COMP-1", "RAP-1", "SABER", "1", "Arquitectura", 1, 12, ""],
+                    ["COMP-1", "RAP-1", "SABER", "2", "Arquitectura", 2, 13, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.pendientes_resumen.conocimientos == 1
+    assert result.pendientes[0].motivo.value == "ASOCIACION_AMBIGUA"
+
+
+@pytest.mark.anyio
+async def test_preview_allows_same_criterio_different_rap() -> None:
+    """The same criterion description is valid in a different RAP."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Resultados": [
+                    ["COMP-1", "RAP-1", "1", "Construye componentes", 1, 11, ""],
+                    ["COMP-1", "RAP-2", "2", "Integra componentes", 2, 12, ""],
+                ],
+                "Criterios": [
+                    ["COMP-1", "RAP-1", "1", "Verifica componentes", 1, 14, ""],
+                    ["COMP-1", "RAP-2", "1", "Verifica componentes", 1, 15, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+
+
+@pytest.mark.anyio
+async def test_preview_moves_duplicate_criterio_same_rap_to_pending() -> None:
+    """The same criterion description in the same RAP waits for reconciliation."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Criterios": [
+                    ["COMP-1", "RAP-1", "1", "Verifica componentes", 1, 14, ""],
+                    ["COMP-1", "RAP-1", "2", "Verifica componentes", 2, 15, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.pendientes_resumen.criterios == 1
+    assert any(item.motivo.value == "ASOCIACION_AMBIGUA" for item in result.pendientes)
+
+
+@pytest.mark.anyio
+async def test_preview_keeps_items_without_rap_as_pending() -> None:
+    """Items without rap_id should not invalidate the workbook."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Conocimientos": [
+                    ["COMP-1", "", "PROCESO", "1", "Codificar solucion", 2, 13, ""],
+                    ["COMP-1", "", "PROCESO", "2", "Codificar solucion", 3, 14, ""],
+                ],
+                "Criterios": [
+                    ["COMP-1", "", "1", "Prueba global", 1, 14, ""],
+                    ["COMP-1", "", "2", "Prueba global", 2, 15, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.errores == []
+    assert result.pendientes_resumen.conocimientos == 2
+    assert result.pendientes_resumen.criterios == 2
+
+
+@pytest.mark.anyio
+async def test_confirm_import_persists_resultado_id_correctly() -> None:
+    """Confirmation should correctly resolve rap_id to the database resultado_id."""
+    service, _, drafts, repo, _ = build_service()
+    referencia_id = drafts.draft.referencia_id
+
+    await service.preview_program_excel(
+        referencia_id=referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(),
+    )
+
+    await service.confirm_program_excel_import(referencia_id=referencia_id)
+
+    # Find the result
+    assert len(repo.resultados) == 1
+    resultado = list(repo.resultados.values())[0]
+    assert resultado.codigo_resultado == "RAP-1"
+
+    # Verify conocimientos
+    assert len(repo.conocimientos) == 1
+    conocimientos = list(repo.conocimientos.values())
+
+    saber = next(c for c in conocimientos if c.tipo == TipoConocimiento.SABER)
+
+    # Saber knowledge should have the resultado_id since it was linked to RAP-1
+    assert saber.resultado_id == resultado.id
+
+    # Proceso knowledge has no rap_id in the source and waits for manual assignment.
+    assert len(repo.pendientes) == 1
+
+    # Verify criterios
+    assert len(repo.criterios) == 1
+    criterio = list(repo.criterios.values())[0]
+
+    # Criterion should have the resultado_id since it was linked to RAP-1
+    assert criterio.resultado_id == resultado.id

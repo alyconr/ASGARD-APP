@@ -114,9 +114,7 @@ class FakeProgramaCompetenciaService:
 def test_competencias_endpoints_create_list_update_delete() -> None:
     """The HTTP API should expose the competence CRUD contract."""
     fake_service = FakeProgramaCompetenciaService()
-    app.dependency_overrides[get_programa_competencia_service] = (
-        lambda: fake_service
-    )
+    app.dependency_overrides[get_programa_competencia_service] = lambda: fake_service
     client = TestClient(app)
     referencia_id = uuid.uuid4()
 
@@ -160,9 +158,7 @@ def test_competencias_endpoints_create_list_update_delete() -> None:
 def test_competencias_endpoint_rejects_duplicate_code() -> None:
     """The HTTP API should map duplicate codes to conflict responses."""
     fake_service = FakeProgramaCompetenciaService()
-    app.dependency_overrides[get_programa_competencia_service] = (
-        lambda: fake_service
-    )
+    app.dependency_overrides[get_programa_competencia_service] = lambda: fake_service
     client = TestClient(app)
     referencia_id = uuid.uuid4()
 

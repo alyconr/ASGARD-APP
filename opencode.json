@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "postgres": {
+      "type": "local",
+      "enabled": true,
+      "timeout": 10000,
+      "command": [
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "DATABASE_URI",
+        "crystaldba/postgres-mcp",
+        "--access-mode=unrestricted"
+      ],
+      "environment": {
+        "DATABASE_URI": "postgresql://postgres:postgres@sena_guias_postgres:5432/sena_guias_db"
+      }
+    }
+  }
+}

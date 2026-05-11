@@ -70,6 +70,12 @@ function buildPreview(valid = true): ProgramaExcelPreviewResponse {
           },
         ]
       : [],
+    pendientes_resumen: {
+      total: 0,
+      conocimientos: 0,
+      criterios: 0,
+    },
+    pendientes: [],
     errores: valid
       ? []
       : [
@@ -91,12 +97,18 @@ function buildImport(): ProgramaExcelImportResponse {
     resultado_ids: ["cccccccc-cccc-4ccc-cccc-cccccccccccc"],
     conocimiento_ids: ["dddddddd-dddd-4ddd-dddd-dddddddddddd"],
     criterio_ids: ["eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee"],
+    pendiente_ids: [],
     resumen: {
       programa: 1,
       competencias: 1,
       resultados: 1,
       conocimientos: 1,
       criterios: 1,
+    },
+    pendientes_resumen: {
+      total: 0,
+      conocimientos: 0,
+      criterios: 0,
     },
   };
 }

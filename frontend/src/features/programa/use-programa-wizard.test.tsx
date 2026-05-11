@@ -100,6 +100,12 @@ function buildExcelPreview(): ProgramaExcelPreviewResponse {
         criterios: 1,
       },
     ],
+    pendientes_resumen: {
+      total: 0,
+      conocimientos: 0,
+      criterios: 0,
+    },
+    pendientes: [],
     errores: [],
   };
 }
@@ -115,12 +121,18 @@ function buildExcelImport(): ProgramaExcelImportResponse {
       "eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee",
     ],
     criterio_ids: ["ffffffff-ffff-4fff-ffff-ffffffffffff"],
+    pendiente_ids: [],
     resumen: {
       programa: 1,
       competencias: 1,
       resultados: 1,
       conocimientos: 2,
       criterios: 1,
+    },
+    pendientes_resumen: {
+      total: 0,
+      conocimientos: 0,
+      criterios: 0,
     },
   };
 }

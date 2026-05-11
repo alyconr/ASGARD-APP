@@ -108,6 +108,19 @@ function PreviewPanel({
         </div>
       </dl>
 
+      {preview.pendientes_resumen.total > 0 ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-950">
+          <p className="font-semibold">
+            {preview.pendientes_resumen.total} pendiente(s) de asignacion
+          </p>
+          <p className="mt-1">
+            {preview.pendientes_resumen.conocimientos} conocimiento(s) y{" "}
+            {preview.pendientes_resumen.criterios} criterio(s) pasaran a
+            conciliacion manual despues de confirmar.
+          </p>
+        </div>
+      ) : null}
+
       {preview.errores.length > 0 ? (
         <div className="mt-4 grid gap-2">
           {preview.errores.slice(0, 5).map((issue, index) => (
@@ -126,11 +139,13 @@ function PreviewPanel({
 export function ProgramaExcelImport({
   currentResult,
   onImported,
+  onBeforePreview,
   onPreviewed,
   referenciaId,
 }: Readonly<{
   currentResult: ProgramaExcelImportState | null;
   onImported: (result: ProgramaExcelImportResponse) => void;
+  onBeforePreview?: () => Promise<boolean>;
   onPreviewed: (result: ProgramaExcelPreviewResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
@@ -160,6 +175,15 @@ export function ProgramaExcelImport({
     setMessage(null);
 
     try {
+      const draftReady = onBeforePreview === undefined || (await onBeforePreview());
+      if (!draftReady) {
+        setState("error");
+        setMessage(
+          "No fue posible sincronizar el borrador antes de validar el Excel.",
+        );
+        return;
+      }
+
       const result = await previewProgramaExcel(referenciaId, file);
       onPreviewed(result);
       setState(result.valid ? "ready" : "error");

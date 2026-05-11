@@ -274,6 +274,11 @@ Cada competencia debe tener obligatoriamente:
 - al menos un conocimiento de proceso,
 - al menos un criterio de evaluación.
 
+Esta estructura minima aplica al cierre del programa, no al preview ni a la
+importacion parcial del Excel canonico. La competencia de etapa practica puede
+existir sin resultados, conocimientos ni criterios, y no debe invalidar el
+workbook por esa ausencia.
+
 ## RN-24. Completitud del programa
 El programa solo puede pasar a estado **COMPLETO** cuando:
 
@@ -329,6 +334,11 @@ No se deben permitir criterios vacíos.
 No deben permitirse criterios idénticos dentro de la misma competencia.
 
 ---
+
+## RN-34A. Pendientes de asignacion desde Excel
+Cuando el Excel canonico trae conocimientos o criterios sin competencia o RAP
+resoluble, las filas deben conservarse como pendientes de asignacion manual y no
+deben bloquear todo el workbook.
 
 # 14. Reglas del proyecto formativo
 

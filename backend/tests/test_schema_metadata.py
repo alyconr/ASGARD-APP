@@ -36,14 +36,16 @@ def test_key_uniqueness_constraints_exist() -> None:
     conocimientos = Base.metadata.tables["conocimientos"]
     criterios = Base.metadata.tables["criterios_evaluacion"]
 
-    constraint_columns = {
-        table.name: {
-            tuple(constraint.columns.keys())
-            for constraint in table.constraints
-            if isinstance(constraint, UniqueConstraint)
-        }
-        for table in [programas, competencias, resultados, conocimientos, criterios]
-    }
+    constraint_columns = {}
+    for table in [programas, competencias, resultados, conocimientos, criterios]:
+        unique_cols = set()
+        for constraint in table.constraints:
+            if isinstance(constraint, UniqueConstraint):
+                unique_cols.add(tuple(constraint.columns.keys()))
+        for index in table.indexes:
+            if index.unique:
+                unique_cols.add(tuple([col.name for col in index.columns]))
+        constraint_columns[table.name] = unique_cols
 
     assert ("codigo_programa", "version_programa") in constraint_columns[
         "programas_formacion"
@@ -52,9 +54,15 @@ def test_key_uniqueness_constraints_exist() -> None:
     assert ("competencia_id", "descripcion") in constraint_columns[
         "resultados_aprendizaje"
     ]
-    assert ("competencia_id", "tipo", "descripcion") in constraint_columns[
-        "conocimientos"
-    ]
-    assert ("competencia_id", "descripcion") in constraint_columns[
-        "criterios_evaluacion"
-    ]
+    # Check partial unique index for knowledge and criteria when RAP is provided
+    assert (
+        "competencia_id",
+        "tipo",
+        "descripcion",
+        "resultado_id",
+    ) in constraint_columns["conocimientos"]
+    assert (
+        "competencia_id",
+        "descripcion",
+        "resultado_id",
+    ) in constraint_columns["criterios_evaluacion"]

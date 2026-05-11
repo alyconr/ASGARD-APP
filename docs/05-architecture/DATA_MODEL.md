@@ -36,6 +36,11 @@ El modelo relacional vigente ya soporta la importacion Excel canonica hacia `Pro
 
 El PDF del programa permanece como evidencia documental en MinIO y solo deja metadata en `payload_json`. El Excel canonico `.xlsx` tambien se almacena en MinIO como soporte auditable; `payload_json` conserva metadata de preview, validacion, confirmacion e identificadores relacionales creados, nunca el binario.
 
+Los conocimientos y criterios del Excel que no puedan enlazarse con seguridad a
+competencia o RAP no se insertan aun en `Conocimiento` ni `CriterioEvaluacion`;
+se conservan en `ElementoCurricularPendiente` para conciliacion manual
+posterior.
+
 ---
 
 # 2. Alcance del modelo
@@ -226,7 +231,7 @@ Representa un resultado de aprendizaje asociado a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
-- codigo_resultado: string nullable
+- codigo_resultado: string nullable; para importacion Excel canonica guarda el `rap_id` estable del workbook, no el `rap_numero` visible
 - descripcion: text
 - orden: integer nullable
 - estado: EstadoCampo
@@ -248,6 +253,7 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 ### Campos
 - id
 - competencia_id
+- resultado_id
 - tipo
 - descripcion
 - orden
@@ -259,6 +265,7 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
+- resultado_id: FK nullable a ResultadoAprendizaje
 - tipo: TipoConocimiento
 - descripcion: text
 - orden: integer nullable
@@ -269,9 +276,11 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 
 ### Restricciones
 - competencia_id es obligatorio
+- resultado_id es opcional; cuando existe, debe pertenecer a un ResultadoAprendizaje de la misma competencia
 - tipo es obligatorio
 - descripcion es obligatoria
-- no debe duplicarse la misma descripcion exacta dentro de la misma categoría y competencia
+- no debe duplicarse la misma descripcion exacta dentro de la misma categoría, competencia y RAP cuando resultado_id exista
+- los conocimientos sin resultado_id se validan a nivel de categoría y competencia
 
 ---
 
@@ -282,6 +291,7 @@ Representa criterios de evaluación asociados a una competencia.
 ### Campos
 - id
 - competencia_id
+- resultado_id
 - descripcion
 - orden
 - estado
@@ -292,6 +302,7 @@ Representa criterios de evaluación asociados a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
+- resultado_id: FK nullable a ResultadoAprendizaje
 - descripcion: text
 - orden: integer nullable
 - estado: EstadoCampo
@@ -301,8 +312,42 @@ Representa criterios de evaluación asociados a una competencia.
 
 ### Restricciones
 - competencia_id es obligatorio
+- resultado_id es opcional; cuando existe, debe pertenecer a un ResultadoAprendizaje de la misma competencia
 - descripcion es obligatoria
-- no debe duplicarse la misma descripcion exacta dentro de la misma competencia
+- no debe duplicarse la misma descripcion exacta dentro de la misma competencia y RAP cuando resultado_id exista
+- los criterios sin resultado_id se validan a nivel de competencia
+
+---
+
+## 5.5.1 ElementoCurricularPendiente
+
+Representa una fila de Excel canonico de tipo conocimiento o criterio que
+requiere asignacion manual antes de materializarse en la estructura final.
+
+### Campos
+- id
+- referencia_id
+- programa_id
+- tipo_elemento
+- tipo_conocimiento
+- descripcion
+- competencia_id_origen_excel
+- rap_id_origen_excel
+- motivo
+- estado
+- competencia_destino_id
+- resultado_destino_id
+- elemento_creado_id
+- orden
+- raw_excel
+- fecha_creacion
+- fecha_actualizacion
+
+### Restricciones
+- descripcion es obligatoria
+- tipo_elemento solo puede ser CONOCIMIENTO o CRITERIO
+- estado inicia en PENDIENTE y pasa a ASIGNADO cuando se crea el elemento final
+- la competencia de etapa practica puede existir sin hijos curriculares
 
 ---
 
@@ -471,6 +516,10 @@ Representa la trazabilidad mínima del sistema.
 - 1:N con Conocimiento
 - 1:N con CriterioEvaluacion
 
+## ResultadoAprendizaje
+- 1:N opcional con Conocimiento
+- 1:N opcional con CriterioEvaluacion
+
 ## ProyectoFormativo
 - 1:N con FaseProyecto
 
@@ -546,13 +595,13 @@ No duplicar combinación lógica de codigo_programa + version_programa.
 No duplicar codigo_competencia dentro del mismo programa.
 
 ## U-03. Resultado
-No duplicar descripcion exacta dentro de la misma competencia.
+No duplicar `codigo_resultado`/`rap_id` dentro de la misma competencia cuando provenga de Excel canonico. Tampoco se debe duplicar la misma descripcion exacta dentro de la misma competencia.
 
 ## U-04. Conocimiento
-No duplicar descripcion exacta dentro de la misma categoría y competencia.
+No duplicar descripcion exacta dentro de la misma categoría, competencia y RAP cuando tenga resultado_id. Si resultado_id es nulo, no duplicar dentro de la misma categoría y competencia.
 
 ## U-05. Criterio
-No duplicar descripcion exacta dentro de la misma competencia.
+No duplicar descripcion exacta dentro de la misma competencia y RAP cuando tenga resultado_id. Si resultado_id es nulo, no duplicar dentro de la misma competencia.
 
 ## U-06. Actividad
 No duplicar descripcion exacta dentro de la misma fase.

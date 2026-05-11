@@ -31,6 +31,28 @@ class TipoConocimiento(str, Enum):
     PROCESO = "PROCESO"
 
 
+class TipoElementoCurricularPendiente(str, Enum):
+    """Curricular element types that can wait for manual assignment."""
+
+    CONOCIMIENTO = "CONOCIMIENTO"
+    CRITERIO = "CRITERIO"
+
+
+class MotivoPendienteAsignacion(str, Enum):
+    """Reasons why an Excel row needs human reconciliation."""
+
+    COMPETENCIA_NO_IDENTIFICADA = "COMPETENCIA_NO_IDENTIFICADA"
+    RESULTADO_NO_IDENTIFICADO = "RESULTADO_NO_IDENTIFICADO"
+    ASOCIACION_AMBIGUA = "ASOCIACION_AMBIGUA"
+
+
+class EstadoConciliacionPendiente(str, Enum):
+    """Lifecycle for unresolved curricular rows imported from Excel."""
+
+    PENDIENTE = "PENDIENTE"
+    ASIGNADO = "ASIGNADO"
+
+
 class EstadoCampo(str, Enum):
     """Traceability state for extracted or manually edited content."""
 

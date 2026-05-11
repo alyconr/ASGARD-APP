@@ -174,6 +174,7 @@ export interface ProgramaWizardController {
   updateProgramaBaseField: (field: ProgramaBaseField, value: string) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
+  persistActiveDraftNow: () => Promise<boolean>;
   updateProgramaExcelPreview: (result: ProgramaExcelPreviewResponse) => void;
   updateProgramaExcelImport: (result: ProgramaExcelImportResponse) => void;
   updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
@@ -214,10 +215,13 @@ export function useProgramaWizard(): ProgramaWizardController {
   }, [activeReferenceId, currentStepId, payload]);
 
   const persistSnapshot = useCallback(
-    async (nextSnapshot: ProgramaDraftSnapshot): Promise<void> => {
+    async (
+      nextSnapshot: ProgramaDraftSnapshot,
+      options: { force?: boolean } = {},
+    ): Promise<boolean> => {
       const serialized = serializeSnapshot(nextSnapshot);
-      if (serialized === lastPersistedSnapshotRef.current) {
-        return;
+      if (!options.force && serialized === lastPersistedSnapshotRef.current) {
+        return true;
       }
 
       setAutosave({
@@ -247,6 +251,7 @@ export function useProgramaWizard(): ProgramaWizardController {
           const nextDrafts = rememberProgramaDraft(summary);
           return nextDrafts.length > 0 ? nextDrafts : currentDrafts;
         });
+        return true;
       } catch (error) {
         const errorMessage = getDraftErrorMessage(error);
         setAutosave({
@@ -258,6 +263,7 @@ export function useProgramaWizard(): ProgramaWizardController {
         notify.error("No fue posible guardar el borrador", {
           description: errorMessage,
         });
+        return false;
       }
     },
     [],
@@ -516,6 +522,14 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
+  const persistActiveDraftNow = useCallback(async (): Promise<boolean> => {
+    if (snapshot === null) {
+      return false;
+    }
+
+    return await persistSnapshot(snapshot, { force: true });
+  }, [persistSnapshot, snapshot]);
+
   const updateProgramaPdfResult = useCallback(
     (result: ProgramaPdfUploadResponse): void => {
       setPayload((currentPayload) => {
@@ -623,6 +637,8 @@ export function useProgramaWizard(): ProgramaWizardController {
                       resultado_ids: result.resultado_ids,
                       conocimiento_ids: result.conocimiento_ids,
                       criterio_ids: result.criterio_ids,
+                      pendiente_ids: result.pendiente_ids,
+                      pendientes_resumen: result.pendientes_resumen,
                     },
                     updated_at: now,
                   },
@@ -737,6 +753,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     goToStep,
     updateProgramaBaseField,
     updateStepNote,
+    persistActiveDraftNow,
     updateProgramaPdfResult,
     updateProgramaExcelPreview,
     updateProgramaExcelImport,

@@ -122,8 +122,7 @@ class FakeCompetenciaRepository:
         """Check case-insensitive duplicate code inside one program."""
         return any(
             competencia.programa_id == programa_id
-            and competencia.codigo_competencia.lower()
-            == codigo_competencia.lower()
+            and competencia.codigo_competencia.lower() == codigo_competencia.lower()
             and competencia.id != exclude_competencia_id
             for competencia in self.competencias.values()
         )

@@ -30,6 +30,49 @@ export interface ProgramaWizardStepDefinition {
   description: string;
 }
 
+export interface ResultadoAprendizaje {
+  id: string;
+  competencia_id: string;
+  codigo_resultado: string | null;
+  descripcion: string;
+  orden: number | null;
+  estado: string;
+  motivo_fallo_extraccion?: string | null;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
+export interface ResultadoAprendizajePayload {
+  descripcion: string;
+  codigo_resultado?: string | null;
+}
+
+export interface ResultadoAprendizajeListResponse {
+  referencia_id: string;
+  competencia_id: string | null;
+  resultados: ResultadoAprendizaje[];
+}
+
+export interface ResultadoAprendizajeDeleteResponse {
+  referencia_id: string;
+  competencia_id: string;
+  resultado_id: string;
+  eliminado: boolean;
+}
+
+export interface ProgramaCompetencia {
+  id: string;
+  programa_id: string;
+  codigo_competencia: string;
+  nombre_competencia: string;
+  orden: number | null;
+  estado: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
+  origen_campo: FieldTraceStatus;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+  resultados?: ResultadoAprendizaje[];
+}
+
 export interface ProgramaWizardPayload {
   meta: {
     referenciaId: string;
@@ -90,17 +133,6 @@ export interface ProgramaPdfUploadResponse {
   diagnostico: ProgramaPdfDiagnostic;
 }
 
-export interface ProgramaCompetencia {
-  id: string;
-  programa_id: string;
-  codigo_competencia: string;
-  nombre_competencia: string;
-  orden: number | null;
-  estado: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
-  origen_campo: FieldTraceStatus;
-  fecha_creacion: string;
-  fecha_actualizacion: string;
-}
 
 export interface ProgramaCompetenciaPayload {
   codigo_competencia: string;
@@ -128,6 +160,30 @@ export interface ExcelPreviewSummary {
   criterios: number;
 }
 
+export interface ExcelPendingSummary {
+  total: number;
+  conocimientos: number;
+  criterios: number;
+}
+
+export type TipoElementoCurricularPendiente = "CONOCIMIENTO" | "CRITERIO";
+export type EstadoConciliacionPendiente = "PENDIENTE" | "ASIGNADO";
+export type MotivoPendienteAsignacion =
+  | "COMPETENCIA_NO_IDENTIFICADA"
+  | "RESULTADO_NO_IDENTIFICADO"
+  | "ASOCIACION_AMBIGUA";
+
+export interface ExcelPendingAssignment {
+  tipo_elemento: TipoElementoCurricularPendiente;
+  tipo_conocimiento: "SABER" | "PROCESO" | null;
+  descripcion: string;
+  competencia_id_origen_excel: string | null;
+  rap_id_origen_excel: string | null;
+  motivo: MotivoPendienteAsignacion;
+  hoja: string;
+  fila: number | null;
+}
+
 export interface ExcelProgramPreview {
   codigo_programa: string;
   nombre_programa: string;
@@ -151,6 +207,8 @@ export interface ProgramaExcelPreviewResponse {
   resumen: ExcelPreviewSummary;
   programa: ExcelProgramPreview | null;
   competencias: ExcelCompetenciaPreview[];
+  pendientes_resumen: ExcelPendingSummary;
+  pendientes: ExcelPendingAssignment[];
   errores: ExcelValidationIssue[];
 }
 
@@ -161,7 +219,9 @@ export interface ProgramaExcelImportResponse {
   resultado_ids: string[];
   conocimiento_ids: string[];
   criterio_ids: string[];
+  pendiente_ids: string[];
   resumen: ExcelPreviewSummary;
+  pendientes_resumen: ExcelPendingSummary;
 }
 
 export interface ProgramaExcelImportState {
@@ -175,8 +235,38 @@ export interface ProgramaExcelImportState {
     resultado_ids?: string[];
     conocimiento_ids?: string[];
     criterio_ids?: string[];
+    pendiente_ids?: string[];
+    pendientes_resumen?: ExcelPendingSummary;
   };
   updated_at?: string;
+}
+
+export interface PendienteCurricular {
+  id: string;
+  referencia_id: string;
+  programa_id: string | null;
+  tipo_elemento: TipoElementoCurricularPendiente;
+  tipo_conocimiento: "SABER" | "PROCESO" | null;
+  descripcion: string;
+  competencia_id_origen_excel: string | null;
+  rap_id_origen_excel: string | null;
+  motivo: MotivoPendienteAsignacion;
+  estado: EstadoConciliacionPendiente;
+  competencia_destino_id: string | null;
+  resultado_destino_id: string | null;
+  elemento_creado_id: string | null;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
+export interface PendienteCurricularListResponse {
+  referencia_id: string;
+  pendientes: PendienteCurricular[];
+}
+
+export interface PendienteCurricularAsignacionResponse {
+  referencia_id: string;
+  pendiente: PendienteCurricular;
 }
 
 export interface ProgramaCompetenciaDeleteResponse {

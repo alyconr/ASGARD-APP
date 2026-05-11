@@ -24,6 +24,7 @@ import { ProgramaBaseForm } from "@/features/programa/components/programa-base-f
 import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
 import { ProgramaExcelImport } from "@/features/programa/components/programa-excel-import";
+import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { cn } from "@/lib/utils";
@@ -218,6 +219,7 @@ function StepWorkspace({
   onProgramaExcelImported,
   onProgramaCompetenciasSynced,
   onProgramaFieldChange,
+  onPersistDraftBeforeExcelPreview,
   onNoteChange,
   programaExcelResult,
   programaPdfResult,
@@ -243,6 +245,7 @@ function StepWorkspace({
   ) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
+  onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   competencias: ProgramaCompetencia[];
 }>): React.JSX.Element {
@@ -311,16 +314,23 @@ function StepWorkspace({
               <ProgramaExcelImport
                 currentResult={programaExcelResult}
                 referenciaId={referenceId}
+                onBeforePreview={onPersistDraftBeforeExcelPreview}
                 onImported={onProgramaExcelImported}
                 onPreviewed={onProgramaExcelPreviewed}
               />
             </div>
           ) : currentStep.id === "estructura-curricular" ? (
-            <ProgramaCompetenciasManager
-              competencias={competencias}
-              referenciaId={referenceId}
-              onCompetenciasSynced={onProgramaCompetenciasSynced}
-            />
+            <div className="grid gap-4">
+              <ProgramaPendientesConciliacion
+                competencias={competencias}
+                referenciaId={referenceId}
+              />
+              <ProgramaCompetenciasManager
+                competencias={competencias}
+                referenciaId={referenceId}
+                onCompetenciasSynced={onProgramaCompetenciasSynced}
+              />
+            </div>
           ) : (
             <>
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
@@ -654,6 +664,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               onProgramaPdfUploaded={controller.updateProgramaPdfResult}
               onProgramaFieldChange={controller.updateProgramaBaseField}
+              onPersistDraftBeforeExcelPreview={controller.persistActiveDraftNow}
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }

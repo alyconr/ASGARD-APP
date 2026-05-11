@@ -56,11 +56,12 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-16 | La extracción automática no equivale a validación humana | RF-13, RF-27 | HU-13, HU-22 | Review Screen | Validar confirmación explícita |
 | RN-18 | El programa debe tener código y nombre | RF-02 | HU-01, HU-14 | Programa Form | Validar obligatorios mínimos |
 | RN-22 | Cada competencia debe tener código y nombre | RF-08 | HU-07 | Competencia Module | Validar estructura mínima de competencia |
-| RN-23 | Cada competencia debe tener resultados, saber, proceso y criterios | RF-09, RF-10, RF-11, RF-12, RF-14 | HU-08, HU-09, HU-10, HU-11, HU-14 | Curriculum Module | Validar completitud curricular |
+| RN-23 | Cada competencia debe tener resultados, saber, proceso y criterios para cierre, excepto etapa practica sin hijos | RF-09, RF-10, RF-11, RF-12, RF-14 | HU-08, HU-09, HU-10, HU-11, HU-14 | Curriculum Module | Validar completitud curricular |
 | RN-24 | El programa solo se completa cuando toda competencia está completa | RF-14, RF-15 | HU-13, HU-14 | Completion Validator | Validar cierre del programa |
 | RN-25 | Todo resultado pertenece a una competencia | RF-09 | HU-08 | Curriculum Module | Validar integridad relacional de resultados |
 | RN-28 | Saber y proceso se almacenan separados | RF-10, RF-11 | HU-09, HU-10 | Knowledge Module | Validar separación por tipo |
 | RN-32 | Todo criterio pertenece a una competencia | RF-12 | HU-11 | Criteria Module | Validar integridad relacional de criterios |
+| RN-34A | Conocimientos y criterios no enlazados desde Excel quedan pendientes de asignacion | RF-06, RF-07, RF-10, RF-12 | HU-05, HU-06, HU-10, HU-11 | Excel Import Service / Pending Reconciliation | Preview con pendientes e importacion parcial |
 | RN-35 | El proyecto depende del programa completo | RF-16, RF-17, RF-18 | HU-15, HU-16 | State Gate / Access Control | Validar bloqueo del proyecto |
 | RN-36 | El proyecto debe tener código, nombre, versión, fases y actividades | RF-19, RF-25, RF-26, RF-28, RF-29 | HU-20, HU-21, HU-22 | Proyecto Module | Validar estructura mínima del proyecto |
 | RN-38 | Toda actividad debe pertenecer a una fase | RF-26 | HU-21 | Actividad Module | Validar relación fase-actividad |

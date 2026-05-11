@@ -7,6 +7,7 @@ import type {
   ProgramaWizardPayload,
   ProgramaWizardStepDefinition,
   ProgramaWizardStepId,
+  ResultadoAprendizaje,
 } from "@/features/programa/types";
 
 export const PROGRAMA_WIZARD_STEPS: ProgramaWizardStepDefinition[] = [
@@ -104,6 +105,15 @@ function normalizeSummary(value: unknown) {
   };
 }
 
+function normalizePendingSummary(value: unknown) {
+  const summary = asRecord(value);
+  return {
+    total: asNumber(summary?.total),
+    conocimientos: asNumber(summary?.conocimientos),
+    criterios: asNumber(summary?.criterios),
+  };
+}
+
 function normalizeProgramaExcel(
   value: unknown,
   referenciaId: string,
@@ -120,6 +130,9 @@ function normalizeProgramaExcel(
     ? preview.competencias
     : [];
   const rawErrores = Array.isArray(preview?.errores) ? preview.errores : [];
+  const rawPendientes = Array.isArray(preview?.pendientes)
+    ? preview.pendientes
+    : [];
   const programa = asRecord(preview?.programa);
   const valid = asBoolean(preview?.valid);
 
@@ -163,6 +176,46 @@ function normalizeProgramaExcel(
                   resultados: asNumber(competencia.resultados),
                   conocimientos: asNumber(competencia.conocimientos),
                   criterios: asNumber(competencia.criterios),
+                },
+              ];
+            }),
+            pendientes_resumen: normalizePendingSummary(
+              preview.pendientes_resumen,
+            ),
+            pendientes: rawPendientes.flatMap((item) => {
+              const pending = asRecord(item);
+              if (pending === null) return [];
+              return [
+                {
+                  tipo_elemento:
+                    pending.tipo_elemento === "CRITERIO"
+                      ? "CRITERIO"
+                      : "CONOCIMIENTO",
+                  tipo_conocimiento:
+                    pending.tipo_conocimiento === "SABER" ||
+                    pending.tipo_conocimiento === "PROCESO"
+                      ? pending.tipo_conocimiento
+                      : null,
+                  descripcion: asString(pending.descripcion),
+                  competencia_id_origen_excel:
+                    typeof pending.competencia_id_origen_excel === "string"
+                      ? pending.competencia_id_origen_excel
+                      : null,
+                  rap_id_origen_excel:
+                    typeof pending.rap_id_origen_excel === "string"
+                      ? pending.rap_id_origen_excel
+                      : null,
+                  motivo:
+                    pending.motivo === "RESULTADO_NO_IDENTIFICADO" ||
+                    pending.motivo === "ASOCIACION_AMBIGUA"
+                      ? pending.motivo
+                      : "COMPETENCIA_NO_IDENTIFICADA",
+                  hoja: asString(pending.hoja),
+                  fila:
+                    typeof pending.fila === "number" &&
+                    Number.isFinite(pending.fila)
+                      ? pending.fila
+                      : null,
                 },
               ];
             }),
@@ -215,6 +268,14 @@ function normalizeProgramaExcel(
             (item): item is string => typeof item === "string",
           )
         : undefined,
+      pendiente_ids: Array.isArray(confirmation?.pendiente_ids)
+        ? confirmation.pendiente_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      pendientes_resumen: normalizePendingSummary(
+        confirmation?.pendientes_resumen,
+      ),
     },
     updated_at: typeof excel.updated_at === "string" ? excel.updated_at : undefined,
   };
@@ -311,6 +372,42 @@ function normalizeTraceStatus(value: unknown): FieldTraceStatus | null {
   return null;
 }
 
+function normalizeResultado(value: unknown): ResultadoAprendizaje | null {
+  const resultado = asRecord(value);
+  if (resultado === null) {
+    return null;
+  }
+
+  const id = asString(resultado.id);
+  const competenciaId = asString(resultado.competencia_id);
+  const descripcion = asString(resultado.descripcion).trim();
+
+  if (!id || !competenciaId || !descripcion) {
+    return null;
+  }
+
+  return {
+    id,
+    competencia_id: competenciaId,
+    codigo_resultado:
+      typeof resultado.codigo_resultado === "string"
+        ? resultado.codigo_resultado
+        : null,
+    descripcion,
+    orden:
+      typeof resultado.orden === "number" && Number.isFinite(resultado.orden)
+        ? resultado.orden
+        : null,
+    estado: asString(resultado.estado, "MANUAL"),
+    motivo_fallo_extraccion:
+      typeof resultado.motivo_fallo_extraccion === "string"
+        ? resultado.motivo_fallo_extraccion
+        : null,
+    fecha_creacion: asString(resultado.fecha_creacion),
+    fecha_actualizacion: asString(resultado.fecha_actualizacion),
+  };
+}
+
 function normalizeCompetencia(value: unknown): ProgramaCompetencia | null {
   const competencia = asRecord(value);
   if (competencia === null) {
@@ -323,6 +420,12 @@ function normalizeCompetencia(value: unknown): ProgramaCompetencia | null {
   const nombre = asString(competencia.nombre_competencia).trim();
   const estado = competencia.estado;
   const origen = normalizeTraceStatus(competencia.origen_campo);
+  const resultados = Array.isArray(competencia.resultados)
+    ? competencia.resultados.flatMap((item) => {
+        const normalized = normalizeResultado(item);
+        return normalized === null ? [] : [normalized];
+      })
+    : [];
 
   if (
     !id ||
@@ -352,6 +455,7 @@ function normalizeCompetencia(value: unknown): ProgramaCompetencia | null {
     origen_campo: origen,
     fecha_creacion: asString(competencia.fecha_creacion),
     fecha_actualizacion: asString(competencia.fecha_actualizacion),
+    resultados,
   };
 }
 

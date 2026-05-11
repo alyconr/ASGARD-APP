@@ -452,6 +452,11 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 - no duplicar conocimientos exactos dentro de la misma categoría y competencia,
 - no duplicar criterios exactos dentro de la misma competencia.
 
+Durante preview/importacion Excel, los conocimientos y criterios sin
+competencia o RAP resoluble no se consideran error fatal: se conservan como
+pendientes de asignacion y la duplicidad se evalua cuando el usuario seleccione
+el destino final.
+
 ## 12.3 Validaciones del proyecto
 - no duplicar actividad exacta dentro de la misma fase,
 - no permitir actividades sin fase,
@@ -465,6 +470,10 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 > TASK-08.5 deja el PDF como evidencia documental. La extraccion curricular
 > del programa se realiza desde Excel canonico `.xlsx` mediante preview y
 > confirmacion explicita.
+
+El Excel canonico puede traer conocimientos y criterios no completamente
+enlazados a competencia o RAP. El sistema debe importar lo resoluble, persistir
+lo no resoluble como pendiente y permitir conciliacion manual posterior.
 
 ## 13.1 Objetivo de extracción del programa
 El sistema debe intentar extraer del PDF del programa:
@@ -555,7 +564,7 @@ La vista consolidada debe permitir volver a editar antes del cierre.
 ## ResultadoAprendizaje
 - id
 - competencia_id
-- codigo_resultado
+- codigo_resultado (`rap_id` estable cuando proviene del Excel canonico)
 - descripcion
 - estado
 - orden
@@ -581,6 +590,21 @@ La vista consolidada debe permitir volver a editar antes del cierre.
 - codigo_proyecto
 - nombre_proyecto
 - version_proyecto
+
+## ElementoCurricularPendiente
+- id
+- referencia_id
+- programa_id
+- tipo_elemento
+- tipo_conocimiento
+- descripcion
+- competencia_id_origen_excel
+- rap_id_origen_excel
+- motivo
+- estado
+- competencia_destino_id
+- resultado_destino_id
+- elemento_creado_id
 - estado
 - fuente_cargue
 - fecha_creacion

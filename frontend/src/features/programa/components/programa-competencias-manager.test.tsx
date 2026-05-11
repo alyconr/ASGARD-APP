@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaCompetenciasManager } from "./programa-competencias-manager";
 import * as competenciasApi from "@/features/programa/competencias-api";
+import * as resultadosApi from "@/features/programa/resultados-api";
 import type {
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
+  ResultadoAprendizaje,
+  ResultadoAprendizajeListResponse,
 } from "@/features/programa/types";
 
 vi.mock("@/components/feedback/notifications", () => ({
@@ -32,6 +35,24 @@ vi.mock("@/features/programa/competencias-api", () => ({
   deleteProgramaCompetencia: vi.fn(),
   listProgramaCompetencias: vi.fn(),
   updateProgramaCompetencia: vi.fn(),
+}));
+
+vi.mock("@/features/programa/resultados-api", () => ({
+  ProgramaResultadoError: class ProgramaResultadoError extends Error {
+    readonly status: number;
+
+    readonly detail: string;
+
+    constructor(status: number, detail: string) {
+      super(detail);
+      this.status = status;
+      this.detail = detail;
+    }
+  },
+  createProgramaResultado: vi.fn(),
+  deleteProgramaResultado: vi.fn(),
+  listProgramaResultados: vi.fn(),
+  updateProgramaResultado: vi.fn(),
 }));
 
 const referenciaId = "12345678-1234-4234-9234-123456789abc";
@@ -63,11 +84,43 @@ function buildResponse(
   };
 }
 
+function buildResultado(
+  competenciaId: string,
+  overrides: Partial<ResultadoAprendizaje> = {},
+): ResultadoAprendizaje {
+  return {
+    id: "cccccccc-cccc-4ccc-9ccc-cccccccccccc",
+    competencia_id: competenciaId,
+    codigo_resultado: "RAP-01",
+    descripcion: "Analizar los requisitos del software",
+    orden: 1,
+    estado: "MANUAL",
+    fecha_creacion: "2026-05-11T00:00:00Z",
+    fecha_actualizacion: "2026-05-11T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function buildResultadoResponse(
+  competenciaId: string,
+  resultados: ResultadoAprendizaje[],
+): ResultadoAprendizajeListResponse {
+  return {
+    referencia_id: referenciaId,
+    competencia_id: competenciaId,
+    resultados,
+  };
+}
+
 describe("ProgramaCompetenciasManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(competenciasApi.listProgramaCompetencias).mockResolvedValue(
       buildResponse([]),
+    );
+    vi.mocked(resultadosApi.listProgramaResultados).mockImplementation(
+      async (_referenciaId: string, competenciaId: string) =>
+        buildResultadoResponse(competenciaId, []),
     );
   });
 
@@ -258,5 +311,57 @@ describe("ProgramaCompetenciasManager", () => {
       );
     });
     expect(onCompetenciasSynced).toHaveBeenCalledWith(buildResponse([]));
+  });
+
+  it("should create a learning outcome inside a competencia", async () => {
+    const competencia = buildCompetencia();
+    const resultado = buildResultado(competencia.id);
+    vi.mocked(resultadosApi.createProgramaResultado).mockResolvedValue(
+      buildResultadoResponse(competencia.id, [resultado]),
+    );
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+    await waitFor(() => {
+      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+      );
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("Ej. RAP-01"), {
+      target: { value: " RAP-01 " },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
+      {
+        target: { value: " Analizar los requisitos del software " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear resultado/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(resultadosApi.createProgramaResultado).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+        {
+          codigo_resultado: "RAP-01",
+          descripcion: "Analizar los requisitos del software",
+        },
+      );
+    });
+    expect(onCompetenciasSynced).toHaveBeenCalledWith(
+      buildResponse([{ ...competencia, resultados: [resultado] }]),
+    );
   });
 });

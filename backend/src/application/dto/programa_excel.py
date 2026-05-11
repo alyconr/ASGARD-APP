@@ -6,6 +6,11 @@ import uuid
 from dataclasses import dataclass
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.domain.shared.enums import (
+    MotivoPendienteAsignacion,
+    TipoConocimiento,
+    TipoElementoCurricularPendiente,
+)
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,30 @@ class ExcelPreviewSummaryDTO:
     resultados: int
     conocimientos: int
     criterios: int
+
+
+@dataclass(frozen=True)
+class ExcelPendingSummaryDTO:
+    """Pending assignment counts detected during preview or import."""
+
+    total: int
+    conocimientos: int
+    criterios: int
+
+
+@dataclass(frozen=True)
+class ExcelPendingAssignmentDTO:
+    """Workbook row that requires manual curricular assignment."""
+
+    tipo_elemento: TipoElementoCurricularPendiente
+    tipo_conocimiento: TipoConocimiento | None
+    descripcion: str
+    competencia_id_origen_excel: str | None
+    rap_id_origen_excel: str | None
+    motivo: MotivoPendienteAsignacion
+    hoja: str
+    fila: int | None
+    raw_excel: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +90,8 @@ class ProgramaExcelPreviewDTO:
     resumen: ExcelPreviewSummaryDTO
     programa: ExcelProgramPreviewDTO | None
     competencias: list[ExcelCompetenciaPreviewDTO]
+    pendientes_resumen: ExcelPendingSummaryDTO
+    pendientes: list[ExcelPendingAssignmentDTO]
     errores: list[ExcelValidationIssueDTO]
 
 
@@ -74,4 +105,6 @@ class ProgramaExcelImportDTO:
     resultado_ids: list[uuid.UUID]
     conocimiento_ids: list[uuid.UUID]
     criterio_ids: list[uuid.UUID]
+    pendiente_ids: list[uuid.UUID]
     resumen: ExcelPreviewSummaryDTO
+    pendientes_resumen: ExcelPendingSummaryDTO
