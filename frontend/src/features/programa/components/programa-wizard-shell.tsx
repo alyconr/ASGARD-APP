@@ -321,15 +321,17 @@ function StepWorkspace({
             </div>
           ) : currentStep.id === "estructura-curricular" ? (
             <div className="grid gap-4">
-              <ProgramaPendientesConciliacion
-                competencias={competencias}
-                referenciaId={referenceId}
-              />
               <ProgramaCompetenciasManager
                 competencias={competencias}
                 referenciaId={referenceId}
                 onCompetenciasSynced={onProgramaCompetenciasSynced}
               />
+              <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+                <ProgramaPendientesConciliacion
+                  competencias={competencias}
+                  referenciaId={referenceId}
+                />
+              </div>
             </div>
           ) : (
             <>

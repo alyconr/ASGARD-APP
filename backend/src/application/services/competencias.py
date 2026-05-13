@@ -11,6 +11,9 @@ from src.application.dto.competencias import (
     CompetenciaDTO,
     CompetenciaListDTO,
     CompetenciaPayloadDTO,
+    ConocimientoResumenDTO,
+    CriterioEvaluacionResumenDTO,
+    ResultadoAprendizajeResumenDTO,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.infrastructure.db.models.curriculum import Competencia, ProgramaFormacion
@@ -446,6 +449,55 @@ def _competencia_payload_item(competencia: Competencia) -> dict[str, object]:
         "origen_campo": competencia.origen_campo.value,
         "fecha_creacion": competencia.fecha_creacion.isoformat(),
         "fecha_actualizacion": competencia.fecha_actualizacion.isoformat(),
+        "resultados": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "codigo_resultado": item.codigo_resultado,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.resultados,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        "conocimientos": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "resultado_id": str(item.resultado_id) if item.resultado_id else None,
+                "tipo": item.tipo.value,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.conocimientos,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        "criterios": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "resultado_id": str(item.resultado_id) if item.resultado_id else None,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.criterios,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
     }
 
 
@@ -460,4 +512,53 @@ def _build_competencia_dto(competencia: Competencia) -> CompetenciaDTO:
         origen_campo=competencia.origen_campo,
         fecha_creacion=competencia.fecha_creacion,
         fecha_actualizacion=competencia.fecha_actualizacion,
+        resultados=[
+            ResultadoAprendizajeResumenDTO(
+                id=item.id,
+                competencia_id=item.competencia_id,
+                codigo_resultado=item.codigo_resultado,
+                descripcion=item.descripcion,
+                orden=item.orden,
+                estado=item.estado,
+                fecha_creacion=item.fecha_creacion,
+                fecha_actualizacion=item.fecha_actualizacion,
+            )
+            for item in sorted(
+                competencia.resultados,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        conocimientos=[
+            ConocimientoResumenDTO(
+                id=item.id,
+                competencia_id=item.competencia_id,
+                resultado_id=item.resultado_id,
+                tipo=item.tipo,
+                descripcion=item.descripcion,
+                orden=item.orden,
+                estado=item.estado,
+                fecha_creacion=item.fecha_creacion,
+                fecha_actualizacion=item.fecha_actualizacion,
+            )
+            for item in sorted(
+                competencia.conocimientos,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        criterios=[
+            CriterioEvaluacionResumenDTO(
+                id=item.id,
+                competencia_id=item.competencia_id,
+                resultado_id=item.resultado_id,
+                descripcion=item.descripcion,
+                orden=item.orden,
+                estado=item.estado,
+                fecha_creacion=item.fecha_creacion,
+                fecha_actualizacion=item.fecha_actualizacion,
+            )
+            for item in sorted(
+                competencia.criterios,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
     )

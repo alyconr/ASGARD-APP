@@ -36,10 +36,15 @@ El modelo relacional vigente ya soporta la importacion Excel canonica hacia `Pro
 
 El PDF del programa permanece como evidencia documental en MinIO y solo deja metadata en `payload_json`. El Excel canonico `.xlsx` tambien se almacena en MinIO como soporte auditable; `payload_json` conserva metadata de preview, validacion, confirmacion e identificadores relacionales creados, nunca el binario.
 
+La organizacion curricular base queda centrada en `Competencia`. Los resultados
+se asocian a la competencia, y los conocimientos y criterios se insertan
+inicialmente asociados a la competencia aunque no tengan `rap_id`. Cuando pueda
+resolverse un resultado especifico se conserva `resultado_id`; cuando no, se
+guarda `resultado_id = NULL` para permitir asignacion secundaria posterior.
+
 Los conocimientos y criterios del Excel que no puedan enlazarse con seguridad a
-competencia o RAP no se insertan aun en `Conocimiento` ni `CriterioEvaluacion`;
-se conservan en `ElementoCurricularPendiente` para conciliacion manual
-posterior.
+una competencia no se insertan aun en `Conocimiento` ni `CriterioEvaluacion`;
+se conservan en `ElementoCurricularPendiente` para conciliacion manual posterior.
 
 ---
 
@@ -321,8 +326,9 @@ Representa criterios de evaluación asociados a una competencia.
 
 ## 5.5.1 ElementoCurricularPendiente
 
-Representa una fila de Excel canonico de tipo conocimiento o criterio que
-requiere asignacion manual antes de materializarse en la estructura final.
+Representa una fila de Excel canonico de tipo conocimiento o criterio que no
+tuvo competencia confiable y requiere asignacion manual antes de materializarse
+en la estructura final.
 
 ### Campos
 - id
@@ -598,10 +604,10 @@ No duplicar codigo_competencia dentro del mismo programa.
 No duplicar `codigo_resultado`/`rap_id` dentro de la misma competencia cuando provenga de Excel canonico. Tampoco se debe duplicar la misma descripcion exacta dentro de la misma competencia.
 
 ## U-04. Conocimiento
-No duplicar descripcion exacta dentro de la misma categoría, competencia y RAP cuando tenga resultado_id. Si resultado_id es nulo, no duplicar dentro de la misma categoría y competencia.
+No duplicar descripcion exacta dentro de la misma categoría y competencia. `resultado_id` es secundario y no debe permitir duplicados del mismo conocimiento dentro de la competencia.
 
 ## U-05. Criterio
-No duplicar descripcion exacta dentro de la misma competencia y RAP cuando tenga resultado_id. Si resultado_id es nulo, no duplicar dentro de la misma competencia.
+No duplicar descripcion exacta dentro de la misma competencia. `resultado_id` es secundario y no debe permitir duplicados del mismo criterio dentro de la competencia.
 
 ## U-06. Actividad
 No duplicar descripcion exacta dentro de la misma fase.

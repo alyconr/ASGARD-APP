@@ -196,11 +196,28 @@ class FakeProgramaExcelRepository:
 
     async def list_competencias(self, programa_id: uuid.UUID) -> list[Competencia]:
         """List competences for a program."""
-        return [
+        competencias = [
             competencia
             for competencia in self.competencias.values()
             if competencia.programa_id == programa_id
         ]
+        for competencia in competencias:
+            competencia.resultados = [
+                item
+                for item in self.resultados.values()
+                if item.competencia_id == competencia.id
+            ]
+            competencia.conocimientos = [
+                item
+                for item in self.conocimientos.values()
+                if item.competencia_id == competencia.id
+            ]
+            competencia.criterios = [
+                item
+                for item in self.criterios.values()
+                if item.competencia_id == competencia.id
+            ]
+        return competencias
 
     async def competencia_code_exists(
         self,
@@ -542,8 +559,11 @@ async def test_preview_valid_canonical_workbook_updates_same_draft() -> None:
     assert result.valid is True
     assert result.resumen.competencias == 1
     assert result.resumen.resultados == 1
-    assert result.resumen.conocimientos == 1
-    assert result.pendientes_resumen.conocimientos == 1
+    assert result.resumen.conocimientos == 2
+    assert result.pendientes_resumen.conocimientos == 0
+    assert result.competencias[0].resultados_detalle[0].rap_id == "RAP-1"
+    assert len(result.competencias[0].conocimientos_detalle) == 2
+    assert len(result.competencias[0].criterios_detalle) == 1
     assert repo.programas == {}
     assert len(storage.objects) == 1
     assert drafts.draft.referencia_id == referencia_id
@@ -602,8 +622,33 @@ async def test_preview_keeps_conocimiento_without_competencia_as_pending() -> No
 
 
 @pytest.mark.anyio
-async def test_preview_keeps_criterio_without_rap_as_pending() -> None:
-    """Criteria rows without rap_id do not invalidate the workbook."""
+async def test_preview_keeps_criterio_without_competencia_as_pending() -> None:
+    """Criterion rows without competencia_id remain true reconciliation pending."""
+    service, _, drafts, _, _ = build_service()
+
+    result = await service.preview_program_excel(
+        referencia_id=drafts.draft.referencia_id,
+        filename="programa.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=build_workbook_bytes(
+            overrides={
+                "Criterios": [
+                    ["", "", "1", "Criterio sin competencia", 1, 14, ""],
+                ],
+            },
+        ),
+    )
+
+    assert result.valid is True
+    assert result.errores == []
+    assert result.resumen.criterios == 0
+    assert result.pendientes_resumen.criterios == 1
+    assert result.pendientes[0].motivo.value == "COMPETENCIA_NO_IDENTIFICADA"
+
+
+@pytest.mark.anyio
+async def test_preview_imports_criterio_with_competencia_without_rap() -> None:
+    """Criteria rows with competence and without rap_id stay under competence."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -621,9 +666,11 @@ async def test_preview_keeps_criterio_without_rap_as_pending() -> None:
 
     assert result.valid is True
     assert result.errores == []
-    assert result.resumen.criterios == 0
-    assert result.pendientes_resumen.criterios == 1
-    assert result.pendientes[0].motivo.value == "RESULTADO_NO_IDENTIFICADO"
+    assert result.resumen.criterios == 1
+    assert result.pendientes_resumen.criterios == 0
+    assert result.competencias[0].criterios_detalle[0].descripcion == (
+        "Criterio pendiente"
+    )
 
 
 @pytest.mark.anyio
@@ -682,9 +729,9 @@ async def test_confirm_import_materializes_full_curriculum_without_new_reference
     assert len(repo.programas) == 1
     assert len(repo.competencias) == 1
     assert len(repo.resultados) == 1
-    assert len(repo.conocimientos) == 1
+    assert len(repo.conocimientos) == 2
     assert len(repo.criterios) == 1
-    assert len(repo.pendientes) == 1
+    assert len(repo.pendientes) == 0
     assert drafts.draft.referencia_id == referencia_id
     assert drafts.draft.payload_json["curricular"]["programa_formacion_id"] == str(
         result.programa_id,
@@ -741,8 +788,8 @@ async def test_preview_rejects_duplicate_resultado_rap_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_preview_allows_same_conocimiento_different_rap() -> None:
-    """The same knowledge description is valid in a different RAP."""
+async def test_preview_moves_duplicate_conocimiento_in_competencia_to_pending() -> None:
+    """The same knowledge description is ambiguous in the same competence."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -764,6 +811,9 @@ async def test_preview_allows_same_conocimiento_different_rap() -> None:
     )
 
     assert result.valid is True
+    assert result.resumen.conocimientos == 1
+    assert result.pendientes_resumen.conocimientos == 1
+    assert result.pendientes[0].motivo.value == "ASOCIACION_AMBIGUA"
 
 
 @pytest.mark.anyio
@@ -791,8 +841,8 @@ async def test_preview_moves_duplicate_conocimiento_same_rap_to_pending() -> Non
 
 
 @pytest.mark.anyio
-async def test_preview_allows_same_criterio_different_rap() -> None:
-    """The same criterion description is valid in a different RAP."""
+async def test_preview_moves_duplicate_criterio_in_competencia_to_pending() -> None:
+    """The same criterion description is ambiguous in the same competence."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -814,6 +864,9 @@ async def test_preview_allows_same_criterio_different_rap() -> None:
     )
 
     assert result.valid is True
+    assert result.resumen.criterios == 1
+    assert result.pendientes_resumen.criterios == 1
+    assert any(item.motivo.value == "ASOCIACION_AMBIGUA" for item in result.pendientes)
 
 
 @pytest.mark.anyio
@@ -841,8 +894,8 @@ async def test_preview_moves_duplicate_criterio_same_rap_to_pending() -> None:
 
 
 @pytest.mark.anyio
-async def test_preview_keeps_items_without_rap_as_pending() -> None:
-    """Items without rap_id should not invalidate the workbook."""
+async def test_preview_imports_items_without_rap_when_competencia_is_clear() -> None:
+    """Items without rap_id should stay importable under their competence."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -865,8 +918,10 @@ async def test_preview_keeps_items_without_rap_as_pending() -> None:
 
     assert result.valid is True
     assert result.errores == []
-    assert result.pendientes_resumen.conocimientos == 2
-    assert result.pendientes_resumen.criterios == 2
+    assert result.resumen.conocimientos == 1
+    assert result.resumen.criterios == 1
+    assert result.pendientes_resumen.conocimientos == 1
+    assert result.pendientes_resumen.criterios == 1
 
 
 @pytest.mark.anyio
@@ -890,7 +945,7 @@ async def test_confirm_import_persists_resultado_id_correctly() -> None:
     assert resultado.codigo_resultado == "RAP-1"
 
     # Verify conocimientos
-    assert len(repo.conocimientos) == 1
+    assert len(repo.conocimientos) == 2
     conocimientos = list(repo.conocimientos.values())
 
     saber = next(c for c in conocimientos if c.tipo == TipoConocimiento.SABER)
@@ -898,8 +953,11 @@ async def test_confirm_import_persists_resultado_id_correctly() -> None:
     # Saber knowledge should have the resultado_id since it was linked to RAP-1
     assert saber.resultado_id == resultado.id
 
-    # Proceso knowledge has no rap_id in the source and waits for manual assignment.
-    assert len(repo.pendientes) == 1
+    proceso = next(c for c in conocimientos if c.tipo == TipoConocimiento.PROCESO)
+
+    # Proceso knowledge has no rap_id in the source and stays attached to competence.
+    assert proceso.resultado_id is None
+    assert len(repo.pendientes) == 0
 
     # Verify criterios
     assert len(repo.criterios) == 1

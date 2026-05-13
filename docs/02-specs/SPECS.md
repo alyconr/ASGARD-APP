@@ -33,6 +33,11 @@ Desde TASK-08.5, el flujo del programa separa dos insumos:
 
 El contrato canonico del workbook contiene las hojas `Programa`, `Competencias`, `Resultados`, `Conocimientos` y `Criterios`.
 
+La organizacion funcional del workbook es por competencia. Cada competencia es
+el nodo principal y contiene sus resultados, conocimientos y criterios. Los
+conocimientos y criterios se importan asociados inicialmente a la competencia;
+su asignacion a un resultado de aprendizaje es opcional y secundaria.
+
 ---
 
 # 2. Objetivo general
@@ -453,9 +458,9 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 - no duplicar criterios exactos dentro de la misma competencia.
 
 Durante preview/importacion Excel, los conocimientos y criterios sin
-competencia o RAP resoluble no se consideran error fatal: se conservan como
-pendientes de asignacion y la duplicidad se evalua cuando el usuario seleccione
-el destino final.
+competencia confiable no se consideran error fatal: se conservan como pendientes
+de asignacion y la duplicidad se evalua cuando el usuario seleccione el destino
+final. La ausencia de `rap_id` no genera pendiente si la competencia esta clara.
 
 ## 12.3 Validaciones del proyecto
 - no duplicar actividad exacta dentro de la misma fase,
@@ -471,9 +476,11 @@ el destino final.
 > del programa se realiza desde Excel canonico `.xlsx` mediante preview y
 > confirmacion explicita.
 
-El Excel canonico puede traer conocimientos y criterios no completamente
-enlazados a competencia o RAP. El sistema debe importar lo resoluble, persistir
-lo no resoluble como pendiente y permitir conciliacion manual posterior.
+El Excel canonico puede traer conocimientos y criterios sin `rap_id` o con un
+`rap_id` que no se pueda resolver. El sistema debe importarlos por competencia
+si `competencia_id` es confiable, dejando `resultado_id = NULL` cuando no exista
+asociacion especifica a resultado. Solo lo que no pueda asociarse a competencia
+queda como pendiente de conciliacion manual posterior.
 
 ## 13.1 Objetivo de extracción del programa
 El sistema debe intentar extraer del PDF del programa:

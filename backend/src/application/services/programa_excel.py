@@ -14,10 +14,13 @@ from openpyxl import load_workbook
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.programa_excel import (
     ExcelCompetenciaPreviewDTO,
+    ExcelConocimientoPreviewDTO,
+    ExcelCriterioPreviewDTO,
     ExcelPendingAssignmentDTO,
     ExcelPendingSummaryDTO,
     ExcelPreviewSummaryDTO,
     ExcelProgramPreviewDTO,
+    ExcelResultadoPreviewDTO,
     ExcelValidationIssueDTO,
     ProgramaExcelImportDTO,
     ProgramaExcelPreviewDTO,
@@ -965,7 +968,6 @@ def _split_assignable_rows(
     criterios: list[CriterioRow],
 ) -> tuple[list[ConocimientoRow], list[CriterioRow], list[ExcelPendingAssignmentDTO]]:
     competencia_ids = {row.competencia_id for row in competencias}
-    rap_keys = {(row.competencia_id, row.rap_id) for row in resultados}
     pending: list[ExcelPendingAssignmentDTO] = []
     assignable_conocimientos: list[ConocimientoRow] = []
     assignable_criterios: list[CriterioRow] = []
@@ -973,9 +975,7 @@ def _split_assignable_rows(
     for conocimiento_row in conocimientos:
         motivo = _pending_reason_for_row(
             competencia_id=conocimiento_row.competencia_id,
-            rap_id=conocimiento_row.rap_id,
             competencia_ids=competencia_ids,
-            rap_keys=rap_keys,
         )
         if motivo is not None:
             pending.append(_pending_from_conocimiento(conocimiento_row, motivo))
@@ -985,9 +985,7 @@ def _split_assignable_rows(
     for criterio_row in criterios:
         motivo = _pending_reason_for_row(
             competencia_id=criterio_row.competencia_id,
-            rap_id=criterio_row.rap_id,
             competencia_ids=competencia_ids,
-            rap_keys=rap_keys,
         )
         if motivo is not None:
             pending.append(_pending_from_criterio(criterio_row, motivo))
@@ -1008,21 +1006,17 @@ def _split_assignable_rows(
 def _pending_reason_for_row(
     *,
     competencia_id: str | None,
-    rap_id: str | None,
     competencia_ids: set[str],
-    rap_keys: set[tuple[str, str]],
 ) -> MotivoPendienteAsignacion | None:
     if competencia_id is None or competencia_id not in competencia_ids:
         return MotivoPendienteAsignacion.COMPETENCIA_NO_IDENTIFICADA
-    if rap_id is None or (competencia_id, rap_id) not in rap_keys:
-        return MotivoPendienteAsignacion.RESULTADO_NO_IDENTIFICADO
     return None
 
 
 def _move_duplicate_conocimientos_to_pending(
     rows: list[ConocimientoRow],
 ) -> tuple[list[ConocimientoRow], list[ExcelPendingAssignmentDTO]]:
-    seen: set[tuple[str | None, str, str, str | None]] = set()
+    seen: set[tuple[str | None, str, str]] = set()
     assignable: list[ConocimientoRow] = []
     pending: list[ExcelPendingAssignmentDTO] = []
     for row in rows:
@@ -1030,7 +1024,6 @@ def _move_duplicate_conocimientos_to_pending(
             row.competencia_id,
             row.tipo_conocimiento.value,
             _norm(row.descripcion),
-            row.rap_id,
         )
         if key in seen:
             pending.append(
@@ -1048,11 +1041,11 @@ def _move_duplicate_conocimientos_to_pending(
 def _move_duplicate_criterios_to_pending(
     rows: list[CriterioRow],
 ) -> tuple[list[CriterioRow], list[ExcelPendingAssignmentDTO]]:
-    seen: set[tuple[str | None, str, str | None]] = set()
+    seen: set[tuple[str | None, str]] = set()
     assignable: list[CriterioRow] = []
     pending: list[ExcelPendingAssignmentDTO] = []
     for row in rows:
-        key = (row.competencia_id, _norm(row.descripcion), row.rap_id)
+        key = (row.competencia_id, _norm(row.descripcion))
         if key in seen:
             pending.append(
                 _pending_from_criterio(
@@ -1117,16 +1110,13 @@ def _validate_cross_references(
     errores: list[ExcelValidationIssueDTO],
 ) -> None:
     competencia_ids = {row.competencia_id for row in competencias}
-    rap_keys = {(row.competencia_id, row.rap_id) for row in resultados}
 
     for resultado_row in resultados:
         _validate_competencia_reference(resultado_row, competencia_ids, errores)
     for conocimiento_row in conocimientos:
         _validate_competencia_reference(conocimiento_row, competencia_ids, errores)
-        _validate_rap_reference(conocimiento_row, rap_keys, errores)
     for criterio_row in criterios:
         _validate_competencia_reference(criterio_row, competencia_ids, errores)
-        _validate_rap_reference(criterio_row, rap_keys, errores)
 
 
 def _validate_competencia_reference(
@@ -1278,6 +1268,7 @@ def _build_preview_dto(
     workbook: CanonicalWorkbook,
     document: StoredDocumentDTO | None,
 ) -> ProgramaExcelPreviewDTO:
+    rap_keys = {(row.competencia_id, row.rap_id) for row in workbook.resultados}
     return ProgramaExcelPreviewDTO(
         referencia_id=referencia_id,
         documento=document,
@@ -1313,6 +1304,32 @@ def _build_preview_dto(
                     for item in workbook.criterios
                     if item.competencia_id == row.competencia_id
                 ),
+                resultados_detalle=[
+                    ExcelResultadoPreviewDTO(
+                        rap_id=item.rap_id,
+                        rap_numero=item.rap_numero,
+                        descripcion=item.resultado_aprendizaje,
+                    )
+                    for item in workbook.resultados
+                    if item.competencia_id == row.competencia_id
+                ],
+                conocimientos_detalle=[
+                    ExcelConocimientoPreviewDTO(
+                        tipo_conocimiento=item.tipo_conocimiento,
+                        descripcion=item.descripcion,
+                        rap_id=_resolved_rap_id(item, rap_keys),
+                    )
+                    for item in workbook.conocimientos
+                    if item.competencia_id == row.competencia_id
+                ],
+                criterios_detalle=[
+                    ExcelCriterioPreviewDTO(
+                        descripcion=item.descripcion,
+                        rap_id=_resolved_rap_id(item, rap_keys),
+                    )
+                    for item in workbook.criterios
+                    if item.competencia_id == row.competencia_id
+                ],
             )
             for row in workbook.competencias
         ],
@@ -1320,6 +1337,15 @@ def _build_preview_dto(
         pendientes=workbook.pendientes,
         errores=workbook.errores,
     )
+
+
+def _resolved_rap_id(
+    row: ConocimientoRow | CriterioRow,
+    rap_keys: set[tuple[str, str]],
+) -> str | None:
+    if row.competencia_id is None or row.rap_id is None:
+        return None
+    return row.rap_id if (row.competencia_id, row.rap_id) in rap_keys else None
 
 
 def _build_summary(workbook: CanonicalWorkbook) -> ExcelPreviewSummaryDTO:
@@ -1452,6 +1478,29 @@ def _preview_to_payload(
                     "resultados": item.resultados,
                     "conocimientos": item.conocimientos,
                     "criterios": item.criterios,
+                    "resultados_detalle": [
+                        {
+                            "rap_id": resultado.rap_id,
+                            "rap_numero": resultado.rap_numero,
+                            "descripcion": resultado.descripcion,
+                        }
+                        for resultado in item.resultados_detalle
+                    ],
+                    "conocimientos_detalle": [
+                        {
+                            "tipo_conocimiento": conocimiento.tipo_conocimiento.value,
+                            "descripcion": conocimiento.descripcion,
+                            "rap_id": conocimiento.rap_id,
+                        }
+                        for conocimiento in item.conocimientos_detalle
+                    ],
+                    "criterios_detalle": [
+                        {
+                            "descripcion": criterio.descripcion,
+                            "rap_id": criterio.rap_id,
+                        }
+                        for criterio in item.criterios_detalle
+                    ],
                 }
                 for item in preview.competencias
             ],
@@ -1563,6 +1612,55 @@ def _competencia_payload_item(competencia: Competencia) -> dict[str, object]:
         "origen_campo": competencia.origen_campo.value,
         "fecha_creacion": competencia.fecha_creacion.isoformat(),
         "fecha_actualizacion": competencia.fecha_actualizacion.isoformat(),
+        "resultados": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "codigo_resultado": item.codigo_resultado,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.resultados,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        "conocimientos": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "resultado_id": str(item.resultado_id) if item.resultado_id else None,
+                "tipo": item.tipo.value,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.conocimientos,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
+        "criterios": [
+            {
+                "id": str(item.id),
+                "competencia_id": str(item.competencia_id),
+                "resultado_id": str(item.resultado_id) if item.resultado_id else None,
+                "descripcion": item.descripcion,
+                "orden": item.orden,
+                "estado": item.estado.value,
+                "fecha_creacion": item.fecha_creacion.isoformat(),
+                "fecha_actualizacion": item.fecha_actualizacion.isoformat(),
+            }
+            for item in sorted(
+                competencia.criterios,
+                key=lambda item: (item.orden is None, item.orden or 0),
+            )
+        ],
     }
 
 

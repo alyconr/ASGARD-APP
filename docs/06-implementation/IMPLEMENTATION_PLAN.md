@@ -43,7 +43,8 @@ Antes de continuar con TASK-09, se introduce una tarea puente:
 - conservar PDF como evidencia documental en MinIO;
 - agregar importacion estructurada desde Excel canonico `.xlsx`;
 - exigir preview sin persistencia relacional antes de confirmacion;
-- confirmar importacion para materializar programa, competencias, resultados, conocimientos y criterios.
+- confirmar importacion para materializar programa, competencias, resultados, conocimientos y criterios;
+- organizar la estructura importada por competencia, dejando `resultado_id` como relacion opcional y secundaria para conocimientos y criterios.
 
 ---
 
@@ -133,7 +134,7 @@ La implementación debe seguir este orden:
 3. Persistencia de borradores
 4. Wizard del programa
 5. Carga PDF del programa como evidencia
-6. Importacion estructurada desde Excel canonico
+6. Importacion estructurada desde Excel canonico organizada por competencia
 7. Gestión curricular
 8. Revisión y cierre del programa
 9. Bloqueo/desbloqueo del proyecto
@@ -366,6 +367,11 @@ Permitir el cargue por PDF del programa con fallback manual.
 
 ### Objetivo
 Permitir CRUD completo de la estructura curricular del programa.
+
+La competencia es el contenedor principal de la estructura. Los resultados,
+conocimientos y criterios se muestran y gestionan bajo la competencia. La
+relacion de conocimientos y criterios con resultados de aprendizaje es opcional
+y secundaria.
 
 ### Tareas
 - CRUD de competencias

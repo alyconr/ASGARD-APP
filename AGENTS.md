@@ -16,6 +16,9 @@ A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF qued
 - el PDF se carga, valida de forma basica, diagnostica y conserva solo como evidencia documental en MinIO;
 - el PDF no se usa como fuente activa para extraer ni prellenar informacion curricular;
 - el Excel canonico `.xlsx` es la fuente estructurada para analizar, validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la organizacion curricular base de la importacion Excel es por competencia: Competencia -> Resultados, Competencia -> Conocimientos y Competencia -> Criterios;
+- conocimientos y criterios se asocian inicialmente a la competencia; `resultado_id` es opcional y secundario para uso posterior;
+- solo quedan pendientes de conciliacion los conocimientos o criterios que no puedan asociarse a una competencia de forma confiable;
 - la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
 
 ---
@@ -196,6 +199,13 @@ El sistema debe soportar:
 
 ## Regla crítica
 La carga documental o la importacion automatizada no equivalen a validacion humana sin revision del usuario.
+
+## Regla de organizacion curricular
+La importacion Excel debe organizar la estructura principalmente por competencia.
+Los resultados se relacionan con la competencia. Los conocimientos y criterios
+tambien se relacionan inicialmente con la competencia, aunque no tengan `rap_id`
+o no pueda resolverse un resultado especifico. La asignacion posterior a un
+resultado es opcional y secundaria.
 
 ## Regla de fallback
 Si el Excel canonico falta, no cumple contrato o no permite importacion confiable:

@@ -111,13 +111,62 @@ function PreviewPanel({
       {preview.pendientes_resumen.total > 0 ? (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-950">
           <p className="font-semibold">
-            {preview.pendientes_resumen.total} pendiente(s) de asignacion
+            {preview.pendientes_resumen.total} excepcion(es) de competencia
           </p>
           <p className="mt-1">
             {preview.pendientes_resumen.conocimientos} conocimiento(s) y{" "}
-            {preview.pendientes_resumen.criterios} criterio(s) pasaran a
-            conciliacion manual despues de confirmar.
+            {preview.pendientes_resumen.criterios} criterio(s) requieren
+            conciliacion porque no tienen competencia confiable.
           </p>
+        </div>
+      ) : null}
+
+      {preview.competencias.length > 0 ? (
+        <div className="mt-4 grid gap-3">
+          {preview.competencias.map((competencia) => (
+            <article
+              key={competencia.competencia_id}
+              className="rounded-lg border border-emerald-200 bg-white/75 p-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold tracking-[0.14em] uppercase">
+                    {competencia.codigo_competencia}
+                  </p>
+                  <h4 className="mt-1 text-sm font-semibold">
+                    {competencia.nombre_competencia}
+                  </h4>
+                </div>
+                <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold">
+                  Nodo competencia
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase">
+                    Resultados
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {competencia.resultados_detalle.length} asociado(s)
+                  </p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase">
+                    Conocimientos
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {competencia.conocimientos_detalle.length} asociado(s)
+                  </p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase">Criterios</p>
+                  <p className="mt-1 text-sm">
+                    {competencia.criterios_detalle.length} asociado(s)
+                  </p>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       ) : null}
 

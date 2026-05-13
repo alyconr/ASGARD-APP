@@ -17,6 +17,11 @@ Codex no debe saltarse tareas ni mezclar varias iteraciones grandes en una sola 
 
 TASK-08.5 se ejecuta entre TASK-08 y TASK-09. Alinea el flujo para que PDF sea solo evidencia documental en MinIO y Excel canonico `.xlsx` sea la fuente estructurada de importacion curricular.
 
+La importacion curricular se organiza principalmente por competencia. Los
+resultados, conocimientos y criterios quedan bajo la competencia; `resultado_id`
+en conocimientos y criterios es opcional y secundario. Solo los elementos sin
+competencia confiable quedan pendientes de conciliacion.
+
 ---
 
 # 2. Instrucción general para todas las tareas
@@ -296,6 +301,8 @@ Desactivar la extraccion curricular desde PDF y habilitar un carril de Excel can
 - validar encabezados exactos, claves cruzadas, tipos minimos y duplicados,
 - generar preview sin persistir tablas relacionales,
 - confirmar importacion para materializar ProgramaFormacion, Competencia, ResultadoAprendizaje, Conocimiento y CriterioEvaluacion,
+- asociar conocimientos y criterios a la competencia aunque no tengan `rap_id`,
+- crear pendientes solo para conocimientos o criterios sin competencia confiable,
 - mantener el mismo `referencia_id` del wizard y sincronizar metadata en `payload_json`.
 
 ### No debe hacer
@@ -307,6 +314,7 @@ Desactivar la extraccion curricular desde PDF y habilitar un carril de Excel can
 - PDF sigue en MinIO como soporte documental,
 - Excel canonico valida y muestra preview,
 - confirmacion importa la estructura curricular completa,
+- conocimientos y criterios quedan organizados por competencia y no dependen de RAP,
 - el borrador conserva el mismo `referencia_id`,
 - TASK-09 puede continuar sobre la base importada.
 

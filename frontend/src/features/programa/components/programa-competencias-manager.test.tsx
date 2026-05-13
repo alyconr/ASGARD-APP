@@ -364,4 +364,71 @@ describe("ProgramaCompetenciasManager", () => {
       buildResponse([{ ...competencia, resultados: [resultado] }]),
     );
   });
+
+  it("should render competencia as the container for resultados, conocimientos and criterios", async () => {
+    const competencia = buildCompetencia({
+      resultados: [buildResultado("aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa")],
+      conocimientos: [
+        {
+          id: "dddddddd-dddd-4ddd-9ddd-dddddddddddd",
+          competencia_id: "aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa",
+          resultado_id: null,
+          tipo: "SABER",
+          descripcion: "Arquitectura por competencia",
+          orden: 1,
+          estado: "VALIDADO",
+          fecha_creacion: "2026-05-13T00:00:00Z",
+          fecha_actualizacion: "2026-05-13T00:00:00Z",
+        },
+        {
+          id: "eeeeeeee-eeee-4eee-9eee-eeeeeeeeeeee",
+          competencia_id: "aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa",
+          resultado_id: null,
+          tipo: "PROCESO",
+          descripcion: "Codificar solucion por competencia",
+          orden: 2,
+          estado: "VALIDADO",
+          fecha_creacion: "2026-05-13T00:00:00Z",
+          fecha_actualizacion: "2026-05-13T00:00:00Z",
+        },
+      ],
+      criterios: [
+        {
+          id: "ffffffff-ffff-4fff-9fff-ffffffffffff",
+          competencia_id: "aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa",
+          resultado_id: null,
+          descripcion: "Verifica componentes por competencia",
+          orden: 1,
+          estado: "VALIDADO",
+          fecha_creacion: "2026-05-13T00:00:00Z",
+          fecha_actualizacion: "2026-05-13T00:00:00Z",
+        },
+      ],
+    });
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, competencia.resultados ?? []),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
+    expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
+    expect(screen.getByText("Arquitectura por competencia")).toBeInTheDocument();
+    expect(
+      screen.getByText("Codificar solucion por competencia"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Verifica componentes por competencia"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Analizar los requisitos del software"),
+    ).toBeInTheDocument();
+  });
 });

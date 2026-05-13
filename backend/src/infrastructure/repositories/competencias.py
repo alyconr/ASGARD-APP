@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.domain.shared.enums import EstadoBloque, EstadoCampo, TipoFuenteCargue
 from src.infrastructure.db.models.curriculum import Competencia, ProgramaFormacion
@@ -62,6 +63,11 @@ class CompetenciaRepository:
         """Return all competences linked to the given program."""
         statement = (
             select(Competencia)
+            .options(
+                selectinload(Competencia.resultados),
+                selectinload(Competencia.conocimientos),
+                selectinload(Competencia.criterios),
+            )
             .where(Competencia.programa_id == programa_id)
             .order_by(Competencia.orden.asc(), Competencia.fecha_creacion.asc())
         )

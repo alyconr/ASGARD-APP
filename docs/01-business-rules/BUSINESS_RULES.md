@@ -28,6 +28,10 @@ Desde TASK-08.5, la estrategia documental del programa cambia:
 - el PDF del programa se carga y conserva solo como evidencia documental en MinIO;
 - el PDF ya no es fuente activa de extraccion curricular;
 - el Excel canonico `.xlsx` es la fuente estructurada para validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la estructura importada se organiza por competencia: cada competencia contiene sus resultados, conocimientos y criterios;
+- los conocimientos y criterios se asocian inicialmente a la competencia, no al resultado de aprendizaje;
+- `resultado_id` en conocimientos y criterios es una relacion opcional y secundaria para asignaciones posteriores;
+- solo quedan en conciliacion manual los elementos sin competencia confiable;
 - cualquier regla anterior de extraccion hibrida desde PDF queda reemplazada por esta decision para el flujo del programa.
 
 ---
@@ -216,6 +220,17 @@ La información podrá ingresar al sistema por dos vías:
 - importacion estructurada desde Excel canonico,
 - diligenciamiento manual.
 
+## RN-13A. Organizacion curricular por competencia
+La importacion estructurada desde Excel canonico debe tratar la competencia como
+contenedor principal. Los resultados de aprendizaje, conocimientos de saber,
+conocimientos de proceso y criterios de evaluacion deben quedar asociados a su
+competencia cuando `competencia_id` sea confiable.
+
+Los conocimientos y criterios no deben quedar pendientes ni fallar solo por no
+tener `rap_id`. Si se puede resolver un resultado especifico, el sistema puede
+guardar `resultado_id`; si no, debe importar el elemento con `resultado_id = NULL`
+y conservarlo asociado a la competencia.
+
 ## RN-14. Fallback manual obligatorio
 Si el PDF no es legible, está escaneado o no permite extracción confiable, el sistema debe habilitar el ingreso manual inmediato.
 
@@ -336,9 +351,12 @@ No deben permitirse criterios idénticos dentro de la misma competencia.
 ---
 
 ## RN-34A. Pendientes de asignacion desde Excel
-Cuando el Excel canonico trae conocimientos o criterios sin competencia o RAP
-resoluble, las filas deben conservarse como pendientes de asignacion manual y no
+Cuando el Excel canonico trae conocimientos o criterios sin competencia
+confiable, las filas deben conservarse como pendientes de asignacion manual y no
 deben bloquear todo el workbook.
+
+La ausencia de `rap_id`, o un `rap_id` que no pueda resolverse a un resultado,
+no convierte por si sola una fila en pendiente si la competencia esta clara.
 
 # 14. Reglas del proyecto formativo
 

@@ -176,6 +176,62 @@ function normalizeProgramaExcel(
                   resultados: asNumber(competencia.resultados),
                   conocimientos: asNumber(competencia.conocimientos),
                   criterios: asNumber(competencia.criterios),
+                  resultados_detalle: Array.isArray(
+                    competencia.resultados_detalle,
+                  )
+                    ? competencia.resultados_detalle.flatMap((raw) => {
+                        const resultado = asRecord(raw);
+                        if (resultado === null) return [];
+                        return [
+                          {
+                            rap_id: asString(resultado.rap_id),
+                            rap_numero:
+                              typeof resultado.rap_numero === "string"
+                                ? resultado.rap_numero
+                                : null,
+                            descripcion: asString(resultado.descripcion),
+                          },
+                        ];
+                      })
+                    : [],
+                  conocimientos_detalle: Array.isArray(
+                    competencia.conocimientos_detalle,
+                  )
+                    ? competencia.conocimientos_detalle.flatMap((raw) => {
+                        const conocimiento = asRecord(raw);
+                        if (conocimiento === null) return [];
+                        return [
+                          {
+                            tipo_conocimiento:
+                              conocimiento.tipo_conocimiento === "PROCESO"
+                                ? "PROCESO"
+                                : "SABER",
+                            descripcion: asString(conocimiento.descripcion),
+                            rap_id:
+                              typeof conocimiento.rap_id === "string"
+                                ? conocimiento.rap_id
+                                : null,
+                          },
+                        ];
+                      })
+                    : [],
+                  criterios_detalle: Array.isArray(
+                    competencia.criterios_detalle,
+                  )
+                    ? competencia.criterios_detalle.flatMap((raw) => {
+                        const criterio = asRecord(raw);
+                        if (criterio === null) return [];
+                        return [
+                          {
+                            descripcion: asString(criterio.descripcion),
+                            rap_id:
+                              typeof criterio.rap_id === "string"
+                                ? criterio.rap_id
+                                : null,
+                          },
+                        ];
+                      })
+                    : [],
                 },
               ];
             }),

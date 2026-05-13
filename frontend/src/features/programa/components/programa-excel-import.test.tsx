@@ -67,6 +67,31 @@ function buildPreview(valid = true): ProgramaExcelPreviewResponse {
             resultados: 1,
             conocimientos: 2,
             criterios: 1,
+            resultados_detalle: [
+              {
+                rap_id: "RAP-1",
+                rap_numero: "1",
+                descripcion: "Construye componentes",
+              },
+            ],
+            conocimientos_detalle: [
+              {
+                tipo_conocimiento: "SABER",
+                descripcion: "Arquitectura",
+                rap_id: null,
+              },
+              {
+                tipo_conocimiento: "PROCESO",
+                descripcion: "Codificar solucion",
+                rap_id: null,
+              },
+            ],
+            criterios_detalle: [
+              {
+                descripcion: "Verifica componentes",
+                rap_id: null,
+              },
+            ],
           },
         ]
       : [],

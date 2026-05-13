@@ -7,6 +7,7 @@ args = ["-y", "@modelcontextprotocol/server-filesystem", "G:\\APPS SENA\\sena-gu
 command = "cmd"
 args = ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres:postgres@localhost:5432/sena_guias_db"]
 
+
 [mcp_servers.context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]

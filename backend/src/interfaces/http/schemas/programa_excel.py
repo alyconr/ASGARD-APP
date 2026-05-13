@@ -67,6 +67,35 @@ class ExcelProgramPreviewResponse(BaseModel):
     version_programa: str | None
 
 
+class ExcelResultadoPreviewResponse(BaseModel):
+    """Learning result nested under a competence in preview."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    rap_id: str
+    rap_numero: str | None
+    descripcion: str
+
+
+class ExcelConocimientoPreviewResponse(BaseModel):
+    """Knowledge item nested under a competence in preview."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    tipo_conocimiento: str
+    descripcion: str
+    rap_id: str | None
+
+
+class ExcelCriterioPreviewResponse(BaseModel):
+    """Evaluation criterion nested under a competence in preview."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    descripcion: str
+    rap_id: str | None
+
+
 class ExcelCompetenciaPreviewResponse(BaseModel):
     """Competence row shown in preview."""
 
@@ -78,6 +107,9 @@ class ExcelCompetenciaPreviewResponse(BaseModel):
     resultados: int
     conocimientos: int
     criterios: int
+    resultados_detalle: list[ExcelResultadoPreviewResponse]
+    conocimientos_detalle: list[ExcelConocimientoPreviewResponse]
+    criterios_detalle: list[ExcelCriterioPreviewResponse]
 
 
 class ProgramaExcelPreviewResponse(BaseModel):

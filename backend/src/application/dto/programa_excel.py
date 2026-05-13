@@ -68,6 +68,32 @@ class ExcelProgramPreviewDTO:
 
 
 @dataclass(frozen=True)
+class ExcelResultadoPreviewDTO:
+    """Learning result shown inside its competence preview."""
+
+    rap_id: str
+    rap_numero: str | None
+    descripcion: str
+
+
+@dataclass(frozen=True)
+class ExcelConocimientoPreviewDTO:
+    """Knowledge item shown inside its competence preview."""
+
+    tipo_conocimiento: TipoConocimiento
+    descripcion: str
+    rap_id: str | None
+
+
+@dataclass(frozen=True)
+class ExcelCriterioPreviewDTO:
+    """Evaluation criterion shown inside its competence preview."""
+
+    descripcion: str
+    rap_id: str | None
+
+
+@dataclass(frozen=True)
 class ExcelCompetenciaPreviewDTO:
     """Competence row displayed in preview."""
 
@@ -77,6 +103,9 @@ class ExcelCompetenciaPreviewDTO:
     resultados: int
     conocimientos: int
     criterios: int
+    resultados_detalle: list[ExcelResultadoPreviewDTO]
+    conocimientos_detalle: list[ExcelConocimientoPreviewDTO]
+    criterios_detalle: list[ExcelCriterioPreviewDTO]
 
 
 @dataclass(frozen=True)

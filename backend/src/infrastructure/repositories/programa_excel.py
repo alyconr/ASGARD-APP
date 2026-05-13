@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.application.dto.programa_excel import ExcelPendingAssignmentDTO
 from src.domain.shared.enums import (
@@ -77,6 +78,11 @@ class ProgramaExcelImportRepository:
         """List all competences of a program."""
         statement = (
             select(Competencia)
+            .options(
+                selectinload(Competencia.resultados),
+                selectinload(Competencia.conocimientos),
+                selectinload(Competencia.criterios),
+            )
             .where(Competencia.programa_id == programa_id)
             .order_by(Competencia.orden.asc(), Competencia.fecha_creacion.asc())
         )

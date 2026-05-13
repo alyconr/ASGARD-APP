@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.domain.shared.enums import EstadoBloque, EstadoCampo
+from src.domain.shared.enums import EstadoBloque, EstadoCampo, TipoConocimiento
 
 
 class CompetenciaRequest(BaseModel):
@@ -26,6 +26,52 @@ class CompetenciaRequest(BaseModel):
         return normalized
 
 
+class ResultadoAprendizajeResumenResponse(BaseModel):
+    """Learning result nested inside a competence response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    codigo_resultado: str | None
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
+class ConocimientoResumenResponse(BaseModel):
+    """Knowledge item nested inside a competence response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    resultado_id: uuid.UUID | None
+    tipo: TipoConocimiento
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
+class CriterioEvaluacionResumenResponse(BaseModel):
+    """Evaluation criterion nested inside a competence response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    resultado_id: uuid.UUID | None
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
 class CompetenciaResponse(BaseModel):
     """Competence representation returned to the frontend."""
 
@@ -40,6 +86,9 @@ class CompetenciaResponse(BaseModel):
     origen_campo: EstadoCampo
     fecha_creacion: datetime
     fecha_actualizacion: datetime
+    resultados: list[ResultadoAprendizajeResumenResponse] = []
+    conocimientos: list[ConocimientoResumenResponse] = []
+    criterios: list[CriterioEvaluacionResumenResponse] = []
 
 
 class CompetenciaListResponse(BaseModel):

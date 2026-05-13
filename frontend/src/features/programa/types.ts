@@ -42,6 +42,29 @@ export interface ResultadoAprendizaje {
   fecha_actualizacion: string;
 }
 
+export interface ConocimientoCurricular {
+  id: string;
+  competencia_id: string;
+  resultado_id: string | null;
+  tipo: "SABER" | "PROCESO";
+  descripcion: string;
+  orden: number | null;
+  estado: string;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
+export interface CriterioEvaluacionCurricular {
+  id: string;
+  competencia_id: string;
+  resultado_id: string | null;
+  descripcion: string;
+  orden: number | null;
+  estado: string;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+}
+
 export interface ResultadoAprendizajePayload {
   descripcion: string;
   codigo_resultado?: string | null;
@@ -71,6 +94,8 @@ export interface ProgramaCompetencia {
   fecha_creacion: string;
   fecha_actualizacion: string;
   resultados?: ResultadoAprendizaje[];
+  conocimientos?: ConocimientoCurricular[];
+  criterios?: CriterioEvaluacionCurricular[];
 }
 
 export interface ProgramaWizardPayload {
@@ -190,6 +215,23 @@ export interface ExcelProgramPreview {
   version_programa: string | null;
 }
 
+export interface ExcelResultadoPreview {
+  rap_id: string;
+  rap_numero: string | null;
+  descripcion: string;
+}
+
+export interface ExcelConocimientoPreview {
+  tipo_conocimiento: "SABER" | "PROCESO";
+  descripcion: string;
+  rap_id: string | null;
+}
+
+export interface ExcelCriterioPreview {
+  descripcion: string;
+  rap_id: string | null;
+}
+
 export interface ExcelCompetenciaPreview {
   competencia_id: string;
   codigo_competencia: string;
@@ -197,6 +239,9 @@ export interface ExcelCompetenciaPreview {
   resultados: number;
   conocimientos: number;
   criterios: number;
+  resultados_detalle: ExcelResultadoPreview[];
+  conocimientos_detalle: ExcelConocimientoPreview[];
+  criterios_detalle: ExcelCriterioPreview[];
 }
 
 export interface ProgramaExcelPreviewResponse {

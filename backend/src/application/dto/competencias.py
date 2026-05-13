@@ -3,10 +3,53 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.domain.shared.enums import EstadoBloque, EstadoCampo
+from src.domain.shared.enums import EstadoBloque, EstadoCampo, TipoConocimiento
+
+
+@dataclass(frozen=True)
+class ResultadoAprendizajeResumenDTO:
+    """Learning result nested inside a competence summary."""
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    codigo_resultado: str | None
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
+@dataclass(frozen=True)
+class ConocimientoResumenDTO:
+    """Knowledge item nested inside a competence summary."""
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    resultado_id: uuid.UUID | None
+    tipo: TipoConocimiento
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
+@dataclass(frozen=True)
+class CriterioEvaluacionResumenDTO:
+    """Evaluation criterion nested inside a competence summary."""
+
+    id: uuid.UUID
+    competencia_id: uuid.UUID
+    resultado_id: uuid.UUID | None
+    descripcion: str
+    orden: int | None
+    estado: EstadoCampo
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
 
 
 @dataclass(frozen=True)
@@ -22,6 +65,9 @@ class CompetenciaDTO:
     origen_campo: EstadoCampo
     fecha_creacion: datetime
     fecha_actualizacion: datetime
+    resultados: list[ResultadoAprendizajeResumenDTO] = field(default_factory=list)
+    conocimientos: list[ConocimientoResumenDTO] = field(default_factory=list)
+    criterios: list[CriterioEvaluacionResumenDTO] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

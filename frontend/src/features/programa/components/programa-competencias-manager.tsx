@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  BookOpen,
   CheckCircle2,
+  ClipboardCheck,
   Edit3,
+  Layers3,
   Loader2,
   Plus,
   Trash2,
@@ -30,6 +33,8 @@ import { cn } from "@/lib/utils";
 import type {
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
+  ConocimientoCurricular,
+  CriterioEvaluacionCurricular,
   ResultadoAprendizaje,
   ResultadoAprendizajeListResponse,
 } from "@/features/programa/types";
@@ -102,6 +107,137 @@ function CompetenciaEmptyState(): React.JSX.Element {
         curricular. El Excel canonico puede importarlas de forma estructurada.
       </p>
     </div>
+  );
+}
+
+function sortByOrder<T extends { orden: number | null }>(items: T[]): T[] {
+  return [...items].sort((left, right) => {
+    const leftOrder = left.orden ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.orden ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+}
+
+function CurriculumEmptyNote({
+  children,
+}: Readonly<{ children: React.ReactNode }>): React.JSX.Element {
+  return (
+    <p className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white/70 px-3 py-3 text-sm leading-6 text-[var(--muted)]">
+      {children}
+    </p>
+  );
+}
+
+function ProgramaConocimientosPanel({
+  conocimientos,
+}: Readonly<{
+  conocimientos: ConocimientoCurricular[];
+}>): React.JSX.Element {
+  const saber = sortByOrder(
+    conocimientos.filter((item) => item.tipo === "SABER"),
+  );
+  const proceso = sortByOrder(
+    conocimientos.filter((item) => item.tipo === "PROCESO"),
+  );
+
+  return (
+    <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
+            <BookOpen className="h-4 w-4" />
+          </span>
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">
+            Conocimientos
+          </h4>
+        </div>
+        <span className="text-xs font-semibold text-[var(--muted)]">
+          {conocimientos.length}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        {[
+          ["Saber", saber],
+          ["Proceso", proceso],
+        ].map(([label, items]) => (
+          <div key={label as string} className="grid gap-2">
+            <p className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+              {label as string}
+            </p>
+            {(items as ConocimientoCurricular[]).length === 0 ? (
+              <CurriculumEmptyNote>Sin registros importados.</CurriculumEmptyNote>
+            ) : (
+              <div className="grid gap-2">
+                {(items as ConocimientoCurricular[]).map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+                  >
+                    <p className="text-sm leading-6 text-[var(--foreground)]">
+                      {item.descripcion}
+                    </p>
+                    {item.resultado_id !== null ? (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        Asignacion secundaria a RAP disponible
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProgramaCriteriosPanel({
+  criterios,
+}: Readonly<{
+  criterios: CriterioEvaluacionCurricular[];
+}>): React.JSX.Element {
+  const sortedCriterios = sortByOrder(criterios);
+
+  return (
+    <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
+            <ClipboardCheck className="h-4 w-4" />
+          </span>
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">
+            Criterios de evaluacion
+          </h4>
+        </div>
+        <span className="text-xs font-semibold text-[var(--muted)]">
+          {sortedCriterios.length}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {sortedCriterios.length === 0 ? (
+          <CurriculumEmptyNote>Sin criterios importados.</CurriculumEmptyNote>
+        ) : (
+          sortedCriterios.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+            >
+              <p className="text-sm leading-6 text-[var(--foreground)]">
+                {item.descripcion}
+              </p>
+              {item.resultado_id !== null ? (
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Asignacion secundaria a RAP disponible
+                </p>
+              ) : null}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -739,49 +875,63 @@ export function ProgramaCompetenciasManager({
             <article
               key={competencia.id}
               className={cn(
-                "grid gap-3 rounded-lg border bg-white p-4 transition sm:grid-cols-[1fr_auto]",
+                "grid gap-4 rounded-lg border bg-white p-4 transition",
                 editingId === competencia.id
                   ? "border-[var(--accent)]"
                   : "border-[color:var(--card-border)]",
               )}
             >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-lg bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                    {competencia.codigo_competencia}
-                  </span>
-                  <span className="text-xs font-semibold text-[var(--muted)]">
-                    {competencia.origen_campo}
-                  </span>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+                      <Layers3 className="h-4 w-4" />
+                    </span>
+                    <span className="rounded-lg bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      {competencia.codigo_competencia}
+                    </span>
+                    <span className="text-xs font-semibold text-[var(--muted)]">
+                      {competencia.origen_campo}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 break-words text-[var(--foreground)]">
+                    {competencia.nombre_competencia}
+                  </p>
                 </div>
-                <p className="mt-2 text-sm leading-6 break-words text-[var(--foreground)]">
-                  {competencia.nombre_competencia}
-                </p>
+
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(competencia)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={state === "deleting"}
+                    onClick={() => void handleDelete(competencia)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
                 <ProgramaResultadosManager
                   competencia={competencia}
                   referenciaId={referenciaId}
                   onResultadosSynced={handleResultadosSynced}
                 />
-              </div>
-
-              <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleEdit(competencia)}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                >
-                  <Edit3 className="h-4 w-4" />
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  disabled={state === "deleting"}
-                  onClick={() => void handleDelete(competencia)}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Eliminar
-                </button>
+                <div className="grid gap-3 xl:grid-cols-2">
+                  <ProgramaConocimientosPanel
+                    conocimientos={competencia.conocimientos ?? []}
+                  />
+                  <ProgramaCriteriosPanel criterios={competencia.criterios ?? []} />
+                </div>
               </div>
             </article>
           ))}
