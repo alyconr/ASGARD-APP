@@ -326,12 +326,15 @@ function StepWorkspace({
                 referenciaId={referenceId}
                 onCompetenciasSynced={onProgramaCompetenciasSynced}
               />
-              <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+              <section
+                aria-label="Zona secundaria de pendientes curriculares"
+                className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3"
+              >
                 <ProgramaPendientesConciliacion
                   competencias={competencias}
                   referenciaId={referenceId}
                 />
-              </div>
+              </section>
             </div>
           ) : (
             <>

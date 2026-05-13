@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Edit3,
   Layers3,
+  ListChecks,
   Loader2,
   Plus,
   Trash2,
@@ -413,23 +414,39 @@ function ProgramaResultadosManager({
   const isBusy = state === "loading" || state === "saving" || state === "deleting";
 
   return (
-    <div className="mt-4 border-t border-[color:var(--card-border)] pt-4">
+    <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-[var(--foreground)]">
-            Resultados de aprendizaje
-          </h4>
-          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-            Asociados a esta competencia y guardados en el mismo borrador.
-          </p>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
+            <ListChecks className="h-4 w-4" />
+          </span>
+          <div>
+            <h4 className="text-sm font-semibold text-[var(--foreground)]">
+              Resultados de aprendizaje
+            </h4>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+              Asociados a esta competencia y guardados en el mismo borrador.
+            </p>
+          </div>
         </div>
-        <span className="inline-flex min-h-7 items-center rounded-full border border-[color:var(--card-border)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
-          {sortedResultados.length} registrado(s)
+        <span className="text-xs font-semibold text-[var(--muted)]">
+          {sortedResultados.length}
         </span>
       </div>
 
+      <div className="mt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">
+            Registro manual de resultados
+          </h4>
+          <span className="inline-flex min-h-7 items-center rounded-full border border-[color:var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
+            {sortedResultados.length} registrado(s)
+          </span>
+        </div>
+      </div>
+
       {state === "loading" ? (
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-[var(--paper-strong)] px-3 py-2 text-xs text-[var(--muted)]">
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs text-[var(--muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Cargando resultados...
         </div>
@@ -457,7 +474,7 @@ function ProgramaResultadosManager({
 
       <form
         onSubmit={(event) => void handleSubmit(event)}
-        className="mt-3 grid gap-3 rounded-lg bg-[var(--paper-strong)] p-3"
+        className="mt-3 grid gap-3 rounded-lg bg-white p-3"
       >
         <div className="grid gap-3 sm:grid-cols-[minmax(10rem,14rem)_1fr]">
           <label className="grid gap-2">
@@ -523,8 +540,8 @@ function ProgramaResultadosManager({
       </form>
 
       {sortedResultados.length === 0 ? (
-        <p className="mt-3 rounded-lg border border-dashed border-[color:var(--card-border)] px-3 py-3 text-sm text-[var(--muted)]">
-          No hay resultados asociados a esta competencia.
+        <p className="mt-3 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white/70 px-3 py-3 text-sm text-[var(--muted)]">
+          Sin resultados de aprendizaje registrados para esta competencia.
         </p>
       ) : (
         <div className="mt-3 grid gap-2">
@@ -576,7 +593,7 @@ function ProgramaResultadosManager({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

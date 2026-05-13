@@ -420,6 +420,8 @@ describe("ProgramaCompetenciasManager", () => {
     expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
     expect(screen.getByText("Conocimientos")).toBeInTheDocument();
     expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
+    expect(screen.getByText("Saber")).toBeInTheDocument();
+    expect(screen.getByText("Proceso")).toBeInTheDocument();
     expect(screen.getByText("Arquitectura por competencia")).toBeInTheDocument();
     expect(
       screen.getByText("Codificar solucion por competencia"),
@@ -430,5 +432,38 @@ describe("ProgramaCompetenciasManager", () => {
     expect(
       await screen.findByText("Analizar los requisitos del software"),
     ).toBeInTheDocument();
+  });
+
+  it("should keep practical-stage competencias readable when they have no children", async () => {
+    const competencia = buildCompetencia({
+      codigo_competencia: "999999999",
+      nombre_competencia: "Etapa practica",
+      resultados: [],
+      conocimientos: [],
+      criterios: [],
+    });
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, []),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Etapa practica")).toBeInTheDocument();
+    expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
+    expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Sin resultados de aprendizaje registrados para esta competencia.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Sin registros importados.")).toHaveLength(2);
+    expect(screen.getByText("Sin criterios importados.")).toBeInTheDocument();
   });
 });
