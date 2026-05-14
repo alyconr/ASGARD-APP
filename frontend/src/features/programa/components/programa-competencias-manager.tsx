@@ -31,6 +31,13 @@ import {
   updateProgramaConocimientoSaber,
 } from "@/features/programa/conocimientos-saber-api";
 import {
+  createProgramaConocimientoProceso,
+  deleteProgramaConocimientoProceso,
+  listProgramaConocimientosProceso,
+  ProgramaConocimientoProcesoError,
+  updateProgramaConocimientoProceso,
+} from "@/features/programa/conocimientos-proceso-api";
+import {
   createProgramaResultado,
   deleteProgramaResultado,
   listProgramaResultados,
@@ -42,6 +49,7 @@ import type {
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
   ConocimientoCurricular,
+  ConocimientoProcesoListResponse,
   ConocimientoSaberListResponse,
   CriterioEvaluacionCurricular,
   ResultadoAprendizaje,
@@ -60,7 +68,7 @@ interface ResultadoFormState {
   descripcion: string;
 }
 
-interface ConocimientoSaberFormState {
+interface ConocimientoFormState {
   descripcion: string;
 }
 
@@ -74,7 +82,7 @@ const EMPTY_RESULTADO_FORM: ResultadoFormState = {
   descripcion: "",
 };
 
-const EMPTY_CONOCIMIENTO_SABER_FORM: ConocimientoSaberFormState = {
+const EMPTY_CONOCIMIENTO_FORM: ConocimientoFormState = {
   descripcion: "",
 };
 
@@ -82,7 +90,8 @@ function getErrorMessage(error: unknown): string {
   if (
     error instanceof ProgramaCompetenciaError ||
     error instanceof ProgramaResultadoError ||
-    error instanceof ProgramaConocimientoSaberError
+    error instanceof ProgramaConocimientoSaberError ||
+    error instanceof ProgramaConocimientoProcesoError
   ) {
     return error.detail;
   }
@@ -114,8 +123,8 @@ function validateResultadoForm(form: ResultadoFormState): string | null {
   return null;
 }
 
-function validateConocimientoSaberForm(
-  form: ConocimientoSaberFormState,
+function validateConocimientoForm(
+  form: ConocimientoFormState,
 ): string | null {
   if (form.descripcion.trim().length === 0) {
     return "descripcion es obligatoria.";
@@ -160,31 +169,46 @@ function ProgramaConocimientosPanel({
   competencia,
   conocimientos,
   onConocimientosSaberSynced,
+  onConocimientosProcesoSynced,
   referenciaId,
 }: Readonly<{
   competencia: ProgramaCompetencia;
   conocimientos: ConocimientoCurricular[];
   onConocimientosSaberSynced: (result: ConocimientoSaberListResponse) => void;
+  onConocimientosProcesoSynced: (
+    result: ConocimientoProcesoListResponse,
+  ) => void;
   referenciaId: string;
 }>): React.JSX.Element {
   const [saberes, setSaberes] = useState<ConocimientoCurricular[]>(
     conocimientos.filter((item) => item.tipo === "SABER"),
   );
-  const [form, setForm] = useState<ConocimientoSaberFormState>(
-    EMPTY_CONOCIMIENTO_SABER_FORM,
-  );
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [state, setState] = useState<OperationState>("idle");
-  const [message, setMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const saber = useMemo(() => sortByOrder(saberes), [saberes]);
-  const proceso = sortByOrder(
+  const [procesos, setProcesos] = useState<ConocimientoCurricular[]>(
     conocimientos.filter((item) => item.tipo === "PROCESO"),
   );
+  const [form, setForm] = useState<ConocimientoFormState>(
+    EMPTY_CONOCIMIENTO_FORM,
+  );
+  const [procesoForm, setProcesoForm] = useState<ConocimientoFormState>(
+    EMPTY_CONOCIMIENTO_FORM,
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [procesoEditingId, setProcesoEditingId] = useState<string | null>(null);
+  const [state, setState] = useState<OperationState>("idle");
+  const [procesoState, setProcesoState] = useState<OperationState>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [procesoMessage, setProcesoMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [procesoErrorMessage, setProcesoErrorMessage] = useState<string | null>(
+    null,
+  );
+
+  const saber = useMemo(() => sortByOrder(saberes), [saberes]);
+  const proceso = useMemo(() => sortByOrder(procesos), [procesos]);
 
   useEffect(() => {
     setSaberes(conocimientos.filter((item) => item.tipo === "SABER"));
+    setProcesos(conocimientos.filter((item) => item.tipo === "PROCESO"));
   }, [conocimientos]);
 
   useEffect(() => {
@@ -220,9 +244,47 @@ function ProgramaConocimientosPanel({
     };
   }, [competencia.id, referenciaId]);
 
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadProcesos = async (): Promise<void> => {
+      setProcesoState("loading");
+      setProcesoErrorMessage(null);
+
+      try {
+        const result = await listProgramaConocimientosProceso(
+          referenciaId,
+          competencia.id,
+        );
+        if (isCurrent) {
+          setProcesos(result.conocimientos);
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setProcesoErrorMessage(getErrorMessage(error));
+        }
+      } finally {
+        if (isCurrent) {
+          setProcesoState("idle");
+        }
+      }
+    };
+
+    void loadProcesos();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competencia.id, referenciaId]);
+
   const resetForm = (): void => {
-    setForm(EMPTY_CONOCIMIENTO_SABER_FORM);
+    setForm(EMPTY_CONOCIMIENTO_FORM);
     setEditingId(null);
+  };
+
+  const resetProcesoForm = (): void => {
+    setProcesoForm(EMPTY_CONOCIMIENTO_FORM);
+    setProcesoEditingId(null);
   };
 
   const syncSaberes = (result: ConocimientoSaberListResponse): void => {
@@ -230,11 +292,16 @@ function ProgramaConocimientosPanel({
     onConocimientosSaberSynced(result);
   };
 
+  const syncProcesos = (result: ConocimientoProcesoListResponse): void => {
+    setProcesos(result.conocimientos);
+    onConocimientosProcesoSynced(result);
+  };
+
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
   ): Promise<void> => {
     event.preventDefault();
-    const validationMessage = validateConocimientoSaberForm(form);
+    const validationMessage = validateConocimientoForm(form);
     if (validationMessage !== null) {
       setErrorMessage(validationMessage);
       notify.warning("Revisa el conocimiento SABER", {
@@ -334,7 +401,115 @@ function ProgramaConocimientosPanel({
     }
   };
 
+  const handleProcesoSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event.preventDefault();
+    const validationMessage = validateConocimientoForm(procesoForm);
+    if (validationMessage !== null) {
+      setProcesoErrorMessage(validationMessage);
+      notify.warning("Revisa el conocimiento PROCESO", {
+        description: validationMessage,
+      });
+      return;
+    }
+
+    setProcesoState("saving");
+    setProcesoErrorMessage(null);
+    setProcesoMessage(null);
+
+    try {
+      const payload = { descripcion: procesoForm.descripcion.trim() };
+      const result =
+        procesoEditingId === null
+          ? await createProgramaConocimientoProceso(
+              referenciaId,
+              competencia.id,
+              payload,
+            )
+          : await updateProgramaConocimientoProceso(
+              referenciaId,
+              competencia.id,
+              procesoEditingId,
+              payload,
+            );
+
+      syncProcesos(result);
+      resetProcesoForm();
+      setProcesoMessage(
+        procesoEditingId === null
+          ? "Conocimiento PROCESO registrado."
+          : "Conocimiento PROCESO actualizado.",
+      );
+      notify.success("Conocimientos PROCESO sincronizados", {
+        description: "El borrador conserva la estructura curricular actual.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setProcesoErrorMessage(detail);
+      notify.error("No fue posible guardar el conocimiento PROCESO", {
+        description: detail,
+      });
+    } finally {
+      setProcesoState("idle");
+    }
+  };
+
+  const handleProcesoEdit = (conocimiento: ConocimientoCurricular): void => {
+    setProcesoEditingId(conocimiento.id);
+    setProcesoForm({ descripcion: conocimiento.descripcion });
+    setProcesoMessage(null);
+    setProcesoErrorMessage(null);
+  };
+
+  const handleProcesoDelete = async (
+    conocimiento: ConocimientoCurricular,
+  ): Promise<void> => {
+    const confirmed = window.confirm(
+      "Eliminar este conocimiento PROCESO? Esta accion requiere confirmacion.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setProcesoState("deleting");
+    setProcesoErrorMessage(null);
+    setProcesoMessage(null);
+
+    try {
+      await deleteProgramaConocimientoProceso(
+        referenciaId,
+        competencia.id,
+        conocimiento.id,
+      );
+      const result = await listProgramaConocimientosProceso(
+        referenciaId,
+        competencia.id,
+      );
+      syncProcesos(result);
+      if (procesoEditingId === conocimiento.id) {
+        resetProcesoForm();
+      }
+      setProcesoMessage("Conocimiento PROCESO eliminado.");
+      notify.success("Conocimiento PROCESO eliminado", {
+        description: "El borrador fue actualizado con la lista vigente.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setProcesoErrorMessage(detail);
+      notify.error("No fue posible eliminar el conocimiento PROCESO", {
+        description: detail,
+      });
+    } finally {
+      setProcesoState("idle");
+    }
+  };
+
   const isBusy = state === "loading" || state === "saving" || state === "deleting";
+  const isProcesoBusy =
+    procesoState === "loading" ||
+    procesoState === "saving" ||
+    procesoState === "deleting";
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
@@ -488,26 +663,133 @@ function ProgramaConocimientosPanel({
         </div>
 
         <div className="grid gap-2">
-          <p className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
-            Proceso
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+              Proceso
+            </p>
+            <span className="inline-flex min-h-7 items-center rounded-full border border-[color:var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
+              {proceso.length} registrado(s)
+            </span>
+          </div>
+
+          {procesoState === "loading" ? (
+            <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs text-[var(--muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando conocimientos PROCESO...
+            </div>
+          ) : null}
+
+          {procesoErrorMessage !== null ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-900"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{procesoErrorMessage}</p>
+            </div>
+          ) : null}
+
+          {procesoMessage !== null ? (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-900"
+            >
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{procesoMessage}</p>
+            </div>
+          ) : null}
+
+          <form
+            onSubmit={(event) => void handleProcesoSubmit(event)}
+            className="grid gap-3 rounded-lg bg-white p-3"
+          >
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+                descripcion
+              </span>
+              <textarea
+                value={procesoForm.descripcion}
+                onChange={(event) =>
+                  setProcesoForm({ descripcion: event.target.value })
+                }
+                rows={3}
+                placeholder="Describe el conocimiento de proceso."
+                className="min-h-24 resize-none rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={isProcesoBusy}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                {procesoState === "saving" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : procesoEditingId === null ? (
+                  <Plus className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {procesoEditingId === null ? "Crear PROCESO" : "Guardar PROCESO"}
+              </button>
+              {procesoEditingId !== null ? (
+                <button
+                  type="button"
+                  onClick={resetProcesoForm}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+          </form>
+
           {proceso.length === 0 ? (
-            <CurriculumEmptyNote>Sin registros importados.</CurriculumEmptyNote>
+            <CurriculumEmptyNote>
+              Sin conocimientos PROCESO registrados para esta competencia.
+            </CurriculumEmptyNote>
           ) : (
             <div className="grid gap-2">
               {proceso.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+                  className={cn(
+                    "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                    procesoEditingId === item.id
+                      ? "border-[var(--accent)]"
+                      : "border-[color:var(--card-border)]",
+                  )}
                 >
-                  <p className="text-sm leading-6 text-[var(--foreground)]">
-                    {item.descripcion}
-                  </p>
-                  {item.resultado_id !== null ? (
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      Asignacion secundaria a RAP disponible
+                  <div className="min-w-0">
+                    <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+                      {item.descripcion}
                     </p>
-                  ) : null}
+                    {item.resultado_id !== null ? (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        Asignacion secundaria a RAP disponible
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleProcesoEdit(item)}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={procesoState === "deleting"}
+                      onClick={() => void handleProcesoDelete(item)}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -986,6 +1268,31 @@ export function ProgramaCompetenciasManager({
     [competencias, onCompetenciasSynced],
   );
 
+  const handleConocimientosProcesoSynced = useCallback(
+    (result: ConocimientoProcesoListResponse): void => {
+      onCompetenciasSynced({
+        referencia_id: result.referencia_id,
+        programa_id:
+          competencias.find((item) => item.id === result.competencia_id)
+            ?.programa_id ?? null,
+        competencias: competencias.map((item) => {
+          if (item.id !== result.competencia_id) {
+            return item;
+          }
+
+          const saberes = (item.conocimientos ?? []).filter(
+            (conocimiento) => conocimiento.tipo === "SABER",
+          );
+          return {
+            ...item,
+            conocimientos: [...saberes, ...result.conocimientos],
+          };
+        }),
+      });
+    },
+    [competencias, onCompetenciasSynced],
+  );
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -1298,6 +1605,9 @@ export function ProgramaCompetenciasManager({
                     conocimientos={competencia.conocimientos ?? []}
                     referenciaId={referenciaId}
                     onConocimientosSaberSynced={handleConocimientosSaberSynced}
+                    onConocimientosProcesoSynced={
+                      handleConocimientosProcesoSynced
+                    }
                   />
                   <ProgramaCriteriosPanel criterios={competencia.criterios ?? []} />
                 </div>

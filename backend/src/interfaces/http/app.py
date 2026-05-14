@@ -7,6 +7,9 @@ from src.infrastructure.config.settings import get_settings
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
 )
+from src.interfaces.http.controllers.conocimientos_proceso import (
+    router as conocimientos_proceso_router,
+)
 from src.interfaces.http.controllers.conocimientos_saber import (
     router as conocimientos_saber_router,
 )
@@ -50,6 +53,7 @@ def create_application() -> FastAPI:
     application.include_router(competencias_router)
     application.include_router(resultados_aprendizaje_router)
     application.include_router(conocimientos_saber_router)
+    application.include_router(conocimientos_proceso_router)
     application.include_router(pendientes_curriculares_router)
 
     return application

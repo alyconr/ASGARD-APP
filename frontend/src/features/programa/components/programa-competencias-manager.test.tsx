@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaCompetenciasManager } from "./programa-competencias-manager";
 import * as competenciasApi from "@/features/programa/competencias-api";
+import * as conocimientosProcesoApi from "@/features/programa/conocimientos-proceso-api";
 import * as conocimientosSaberApi from "@/features/programa/conocimientos-saber-api";
 import * as resultadosApi from "@/features/programa/resultados-api";
 import type {
   ConocimientoCurricular,
+  ConocimientoProcesoListResponse,
   ConocimientoSaberListResponse,
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
@@ -74,6 +76,24 @@ vi.mock("@/features/programa/conocimientos-saber-api", () => ({
   deleteProgramaConocimientoSaber: vi.fn(),
   listProgramaConocimientosSaber: vi.fn(),
   updateProgramaConocimientoSaber: vi.fn(),
+}));
+
+vi.mock("@/features/programa/conocimientos-proceso-api", () => ({
+  ProgramaConocimientoProcesoError: class ProgramaConocimientoProcesoError extends Error {
+    readonly status: number;
+
+    readonly detail: string;
+
+    constructor(status: number, detail: string) {
+      super(detail);
+      this.status = status;
+      this.detail = detail;
+    }
+  },
+  createProgramaConocimientoProceso: vi.fn(),
+  deleteProgramaConocimientoProceso: vi.fn(),
+  listProgramaConocimientosProceso: vi.fn(),
+  updateProgramaConocimientoProceso: vi.fn(),
 }));
 
 const referenciaId = "12345678-1234-4234-9234-123456789abc";
@@ -162,6 +182,35 @@ function buildConocimientoSaberResponse(
   };
 }
 
+function buildConocimientoProceso(
+  competenciaId: string,
+  overrides: Partial<ConocimientoCurricular> = {},
+): ConocimientoCurricular {
+  return {
+    id: "eeeeeeee-eeee-4eee-9eee-eeeeeeeeeeee",
+    competencia_id: competenciaId,
+    resultado_id: null,
+    tipo: "PROCESO",
+    descripcion: "Codificar solucion por competencia",
+    orden: 1,
+    estado: "MANUAL",
+    fecha_creacion: "2026-05-14T00:00:00Z",
+    fecha_actualizacion: "2026-05-14T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function buildConocimientoProcesoResponse(
+  competenciaId: string,
+  conocimientos: ConocimientoCurricular[],
+): ConocimientoProcesoListResponse {
+  return {
+    referencia_id: referenciaId,
+    competencia_id: competenciaId,
+    conocimientos,
+  };
+}
+
 describe("ProgramaCompetenciasManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -176,6 +225,11 @@ describe("ProgramaCompetenciasManager", () => {
       conocimientosSaberApi.listProgramaConocimientosSaber,
     ).mockImplementation(async (_referenciaId: string, competenciaId: string) =>
       buildConocimientoSaberResponse(competenciaId, []),
+    );
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockImplementation(async (_referenciaId: string, competenciaId: string) =>
+      buildConocimientoProcesoResponse(competenciaId, []),
     );
   });
 
@@ -816,6 +870,226 @@ describe("ProgramaCompetenciasManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("should create a PROCESO knowledge item without affecting SABER", async () => {
+    const saber = buildConocimientoSaber(
+      "aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa",
+    );
+    const competencia = buildCompetencia({ conocimientos: [saber] });
+    const proceso = buildConocimientoProceso(competencia.id);
+    vi.mocked(
+      conocimientosProcesoApi.createProgramaConocimientoProceso,
+    ).mockResolvedValue(buildConocimientoProcesoResponse(competencia.id, [proceso]));
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.listProgramaConocimientosProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id);
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el conocimiento de proceso."),
+      {
+        target: { value: " Codificar solucion por competencia " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear proceso/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.createProgramaConocimientoProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id, {
+        descripcion: "Codificar solucion por competencia",
+      });
+    });
+    expect(onCompetenciasSynced).toHaveBeenCalledWith(
+      buildResponse([{ ...competencia, conocimientos: [saber, proceso] }]),
+    );
+  });
+
+  it("should edit a PROCESO knowledge item inside a competencia", async () => {
+    const competencia = buildCompetencia();
+    const proceso = buildConocimientoProceso(competencia.id);
+    const updated = buildConocimientoProceso(competencia.id, {
+      id: proceso.id,
+      descripcion: "Automatizar despliegue por competencia",
+    });
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockResolvedValue(buildConocimientoProcesoResponse(competencia.id, [proceso]));
+    vi.mocked(
+      conocimientosProcesoApi.updateProgramaConocimientoProceso,
+    ).mockResolvedValue(buildConocimientoProcesoResponse(competencia.id, [updated]));
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[{ ...competencia, conocimientos: [proceso] }]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Codificar solucion por competencia"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[1]);
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el conocimiento de proceso."),
+      {
+        target: { value: " Automatizar despliegue por competencia " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /guardar proceso/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.updateProgramaConocimientoProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id, proceso.id, {
+        descripcion: "Automatizar despliegue por competencia",
+      });
+    });
+    expect(onCompetenciasSynced).toHaveBeenCalledWith(
+      buildResponse([{ ...competencia, conocimientos: [updated] }]),
+    );
+  });
+
+  it("should delete a PROCESO knowledge item after confirmation", async () => {
+    const competencia = buildCompetencia();
+    const proceso = buildConocimientoProceso(competencia.id);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(conocimientosProcesoApi.listProgramaConocimientosProceso)
+      .mockResolvedValueOnce(
+        buildConocimientoProcesoResponse(competencia.id, [proceso]),
+      )
+      .mockResolvedValueOnce(buildConocimientoProcesoResponse(competencia.id, []));
+    vi.mocked(
+      conocimientosProcesoApi.deleteProgramaConocimientoProceso,
+    ).mockResolvedValue({
+      referencia_id: referenciaId,
+      competencia_id: competencia.id,
+      conocimiento_id: proceso.id,
+      eliminado: true,
+    });
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[{ ...competencia, conocimientos: [proceso] }]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Codificar solucion por competencia"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[1]);
+
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.deleteProgramaConocimientoProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id, proceso.id);
+    });
+    expect(onCompetenciasSynced).toHaveBeenLastCalledWith(
+      buildResponse([{ ...competencia, conocimientos: [] }]),
+    );
+  });
+
+  it("should reject blank PROCESO descriptions before calling the API", async () => {
+    const competencia = buildCompetencia();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.listProgramaConocimientosProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id);
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el conocimiento de proceso."),
+      {
+        target: { value: "   " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear proceso/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText("descripcion es obligatoria."),
+    ).toBeInTheDocument();
+    expect(
+      conocimientosProcesoApi.createProgramaConocimientoProceso,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("should show API errors such as duplicate PROCESO knowledge", async () => {
+    const competencia = buildCompetencia();
+    vi.mocked(
+      conocimientosProcesoApi.createProgramaConocimientoProceso,
+    ).mockRejectedValue(
+      new conocimientosProcesoApi.ProgramaConocimientoProcesoError(
+        409,
+        "Ya existe un conocimiento PROCESO con esta descripcion exacta en la competencia",
+      ),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        conocimientosProcesoApi.listProgramaConocimientosProceso,
+      ).toHaveBeenCalledWith(referenciaId, competencia.id);
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el conocimiento de proceso."),
+      {
+        target: { value: "Codificar solucion" },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear proceso/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText(
+        "Ya existe un conocimiento PROCESO con esta descripcion exacta en la competencia",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("should render competencia as the container for resultados, conocimientos and criterios", async () => {
     const competencia = buildCompetencia({
       resultados: [buildResultado("aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa")],
@@ -858,6 +1132,26 @@ describe("ProgramaCompetenciasManager", () => {
     });
     vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
       buildResultadoResponse(competencia.id, competencia.resultados ?? []),
+    );
+    vi.mocked(
+      conocimientosSaberApi.listProgramaConocimientosSaber,
+    ).mockResolvedValue(
+      buildConocimientoSaberResponse(
+        competencia.id,
+        (competencia.conocimientos ?? []).filter(
+          (item) => item.tipo === "SABER",
+        ),
+      ),
+    );
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockResolvedValue(
+      buildConocimientoProcesoResponse(
+        competencia.id,
+        (competencia.conocimientos ?? []).filter(
+          (item) => item.tipo === "PROCESO",
+        ),
+      ),
     );
 
     render(
@@ -917,7 +1211,9 @@ describe("ProgramaCompetenciasManager", () => {
     expect(
       screen.getByText("Sin conocimientos SABER registrados para esta competencia."),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Sin registros importados.")).toHaveLength(1);
+    expect(
+      screen.getByText("Sin conocimientos PROCESO registrados para esta competencia."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Sin criterios importados.")).toBeInTheDocument();
   });
 });

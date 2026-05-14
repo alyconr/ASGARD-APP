@@ -100,6 +100,23 @@ export interface ConocimientoSaberDeleteResponse {
   eliminado: boolean;
 }
 
+export interface ConocimientoProcesoPayload {
+  descripcion: string;
+}
+
+export interface ConocimientoProcesoListResponse {
+  referencia_id: string;
+  competencia_id: string;
+  conocimientos: ConocimientoCurricular[];
+}
+
+export interface ConocimientoProcesoDeleteResponse {
+  referencia_id: string;
+  competencia_id: string;
+  conocimiento_id: string;
+  eliminado: boolean;
+}
+
 export interface ProgramaCompetencia {
   id: string;
   programa_id: string;
