@@ -60,6 +60,8 @@ async def list_resultados(
         result = await service.list_resultados(referencia_id, competencia_id)
     except ResultadoAprendizajeDraftNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    except ResultadoAprendizajeCompetenciaNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
     return ResultadoAprendizajeListResponse.model_validate(result)
 
 

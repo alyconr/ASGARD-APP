@@ -11,7 +11,10 @@ import pytest
 from src.application.dto.resultados_aprendizaje import ResultadoAprendizajePayloadDTO
 from src.application.services.resultados_aprendizaje import (
     ProgramaResultadoAprendizajeService,
+    ResultadoAprendizajeCompetenciaNotFoundError,
     ResultadoAprendizajeDuplicateError,
+    ResultadoAprendizajeNotFoundError,
+    ResultadoAprendizajeValidationError,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque, EstadoCampo
@@ -165,6 +168,24 @@ class ResultadoServiceSetup:
     competencia: Competencia
 
 
+def build_resultado(
+    competencia_id: uuid.UUID,
+    descripcion: str = "Resultado base",
+    codigo_resultado: str | None = None,
+) -> ResultadoAprendizaje:
+    resultado = ResultadoAprendizaje(
+        id=uuid.uuid4(),
+        competencia_id=competencia_id,
+        descripcion=descripcion,
+        codigo_resultado=codigo_resultado,
+        orden=1,
+        estado=EstadoCampo.MANUAL,
+    )
+    resultado.fecha_creacion = datetime.datetime.now(datetime.UTC)
+    resultado.fecha_actualizacion = datetime.datetime.now(datetime.UTC)
+    return resultado
+
+
 @pytest.fixture
 def base_setup() -> ResultadoServiceSetup:
     referencia_id = uuid.uuid4()
@@ -225,16 +246,11 @@ def build_service(
 async def test_list_resultados(base_setup: ResultadoServiceSetup) -> None:
     draft = base_setup.draft
     competencia = base_setup.competencia
-    resultado = ResultadoAprendizaje(
-        id=uuid.uuid4(),
-        competencia_id=competencia.id,
+    resultado = build_resultado(
+        competencia.id,
         descripcion="Test rap",
         codigo_resultado="1",
-        orden=1,
-        estado=EstadoCampo.MANUAL,
     )
-    resultado.fecha_creacion = datetime.datetime.now(datetime.UTC)
-    resultado.fecha_actualizacion = datetime.datetime.now(datetime.UTC)
     service, *_ = build_service(
         drafts=[draft],
         competencias=[competencia],
@@ -274,20 +290,50 @@ async def test_create_resultado(base_setup: ResultadoServiceSetup) -> None:
 
 
 @pytest.mark.anyio
+async def test_create_resultado_rejects_blank_description(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[base_setup.competencia],
+    )
+
+    with pytest.raises(ResultadoAprendizajeValidationError):
+        await service.create_resultado(
+            base_setup.referencia_id,
+            base_setup.competencia.id,
+            ResultadoAprendizajePayloadDTO(descripcion="   "),
+        )
+
+
+@pytest.mark.anyio
+async def test_create_resultado_normalizes_blank_codigo_to_none(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[base_setup.competencia],
+    )
+
+    dto = await service.create_resultado(
+        base_setup.referencia_id,
+        base_setup.competencia.id,
+        ResultadoAprendizajePayloadDTO(
+            descripcion="Resultado con codigo vacio",
+            codigo_resultado="   ",
+        ),
+    )
+
+    assert dto.resultados[0].codigo_resultado is None
+
+
+@pytest.mark.anyio
 async def test_create_resultado_duplicate(
     base_setup: ResultadoServiceSetup,
 ) -> None:
     draft = base_setup.draft
     competencia = base_setup.competencia
-    resultado = ResultadoAprendizaje(
-        id=uuid.uuid4(),
-        competencia_id=competencia.id,
-        descripcion="Duplicate",
-        orden=1,
-        estado=EstadoCampo.MANUAL,
-    )
-    resultado.fecha_creacion = datetime.datetime.now(datetime.UTC)
-    resultado.fecha_actualizacion = datetime.datetime.now(datetime.UTC)
+    resultado = build_resultado(competencia.id, descripcion="Duplicate")
     service, *_ = build_service(
         drafts=[draft],
         competencias=[competencia],
@@ -302,18 +348,43 @@ async def test_create_resultado_duplicate(
 
 
 @pytest.mark.anyio
+async def test_create_resultado_allows_same_description_in_different_competencias(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    other_competencia = Competencia(
+        id=uuid.uuid4(),
+        programa_id=base_setup.programa_id,
+        codigo_competencia="C2",
+        nombre_competencia="Comp 2",
+        orden=2,
+        estado=EstadoBloque.BORRADOR,
+        origen_campo=EstadoCampo.MANUAL,
+    )
+    existing = build_resultado(
+        base_setup.competencia.id,
+        descripcion="Descripcion compartida",
+    )
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[base_setup.competencia, other_competencia],
+        resultados=[existing],
+    )
+
+    dto = await service.create_resultado(
+        base_setup.referencia_id,
+        other_competencia.id,
+        ResultadoAprendizajePayloadDTO(descripcion="Descripcion compartida"),
+    )
+
+    assert len(dto.resultados) == 1
+    assert dto.resultados[0].competencia_id == other_competencia.id
+
+
+@pytest.mark.anyio
 async def test_update_resultado(base_setup: ResultadoServiceSetup) -> None:
     draft = base_setup.draft
     competencia = base_setup.competencia
-    resultado = ResultadoAprendizaje(
-        id=uuid.uuid4(),
-        competencia_id=competencia.id,
-        descripcion="Old desc",
-        orden=1,
-        estado=EstadoCampo.MANUAL,
-    )
-    resultado.fecha_creacion = datetime.datetime.now(datetime.UTC)
-    resultado.fecha_actualizacion = datetime.datetime.now(datetime.UTC)
+    resultado = build_resultado(competencia.id, descripcion="Old desc")
     service, *_ = build_service(
         drafts=[draft],
         competencias=[competencia],
@@ -333,18 +404,32 @@ async def test_update_resultado(base_setup: ResultadoServiceSetup) -> None:
 
 
 @pytest.mark.anyio
+async def test_update_resultado_rejects_duplicate_description(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    competencia = base_setup.competencia
+    resultado = build_resultado(competencia.id, descripcion="Old desc")
+    existing = build_resultado(competencia.id, descripcion="Existing desc")
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[competencia],
+        resultados=[resultado, existing],
+    )
+
+    with pytest.raises(ResultadoAprendizajeDuplicateError):
+        await service.update_resultado(
+            base_setup.referencia_id,
+            competencia.id,
+            resultado.id,
+            ResultadoAprendizajePayloadDTO(descripcion="existing desc"),
+        )
+
+
+@pytest.mark.anyio
 async def test_delete_resultado(base_setup: ResultadoServiceSetup) -> None:
     draft = base_setup.draft
     competencia = base_setup.competencia
-    resultado = ResultadoAprendizaje(
-        id=uuid.uuid4(),
-        competencia_id=competencia.id,
-        descripcion="To delete",
-        orden=1,
-        estado=EstadoCampo.MANUAL,
-    )
-    resultado.fecha_creacion = datetime.datetime.now(datetime.UTC)
-    resultado.fecha_actualizacion = datetime.datetime.now(datetime.UTC)
+    resultado = build_resultado(competencia.id, descripcion="To delete")
     service, draft_repo, resultado_repo, _ = build_service(
         drafts=[draft],
         competencias=[competencia],
@@ -364,3 +449,66 @@ async def test_delete_resultado(base_setup: ResultadoServiceSetup) -> None:
     payload_comps = cast(list[dict[str, object]], curricular["competencias"])
     resultados = cast(list[dict[str, object]], payload_comps[0]["resultados"])
     assert len(resultados) == 0
+
+
+@pytest.mark.anyio
+async def test_operations_reject_unknown_or_foreign_competencia(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    foreign_competencia = Competencia(
+        id=uuid.uuid4(),
+        programa_id=uuid.uuid4(),
+        codigo_competencia="C3",
+        nombre_competencia="Comp externa",
+        orden=1,
+        estado=EstadoBloque.BORRADOR,
+        origen_campo=EstadoCampo.MANUAL,
+    )
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[foreign_competencia],
+    )
+
+    with pytest.raises(ResultadoAprendizajeCompetenciaNotFoundError):
+        await service.list_resultados(
+            base_setup.referencia_id,
+            foreign_competencia.id,
+        )
+
+    with pytest.raises(ResultadoAprendizajeCompetenciaNotFoundError):
+        await service.create_resultado(
+            base_setup.referencia_id,
+            foreign_competencia.id,
+            ResultadoAprendizajePayloadDTO(descripcion="No debe guardarse"),
+        )
+
+
+@pytest.mark.anyio
+async def test_update_and_delete_reject_resultado_from_other_competencia(
+    base_setup: ResultadoServiceSetup,
+) -> None:
+    other_competencia_id = uuid.uuid4()
+    resultado = build_resultado(
+        other_competencia_id,
+        descripcion="Resultado ajeno",
+    )
+    service, *_ = build_service(
+        drafts=[base_setup.draft],
+        competencias=[base_setup.competencia],
+        resultados=[resultado],
+    )
+
+    with pytest.raises(ResultadoAprendizajeNotFoundError):
+        await service.update_resultado(
+            base_setup.referencia_id,
+            base_setup.competencia.id,
+            resultado.id,
+            ResultadoAprendizajePayloadDTO(descripcion="Intento invalido"),
+        )
+
+    with pytest.raises(ResultadoAprendizajeNotFoundError):
+        await service.delete_resultado(
+            base_setup.referencia_id,
+            base_setup.competencia.id,
+            resultado.id,
+        )

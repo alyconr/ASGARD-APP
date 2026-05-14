@@ -14,7 +14,9 @@ from src.application.dto.resultados_aprendizaje import (
     ResultadoAprendizajePayloadDTO,
 )
 from src.application.services.resultados_aprendizaje import (
+    ResultadoAprendizajeCompetenciaNotFoundError,
     ResultadoAprendizajeDuplicateError,
+    ResultadoAprendizajeNotFoundError,
 )
 from src.domain.shared.enums import EstadoCampo
 from src.interfaces.http.app import app
@@ -37,6 +39,10 @@ class FakeProgramaResultadoService:
         competencia_id: uuid.UUID,
     ) -> ResultadoAprendizajeListDTO:
         """Return stored learning outcomes."""
+        if competencia_id != self.competencia_id:
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "La competencia no existe o no pertenece al programa actual"
+            )
         return ResultadoAprendizajeListDTO(
             referencia_id=referencia_id,
             competencia_id=competencia_id,
@@ -50,6 +56,10 @@ class FakeProgramaResultadoService:
         payload: ResultadoAprendizajePayloadDTO,
     ) -> ResultadoAprendizajeListDTO:
         """Create a learning outcome unless the description is duplicated."""
+        if competencia_id != self.competencia_id:
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "La competencia no existe o no pertenece al programa actual"
+            )
         if any(
             item.descripcion.lower() == payload.descripcion.lower()
             for item in self.resultados
@@ -84,6 +94,14 @@ class FakeProgramaResultadoService:
         payload: ResultadoAprendizajePayloadDTO,
     ) -> ResultadoAprendizajeListDTO:
         """Update a learning outcome in memory."""
+        if competencia_id != self.competencia_id:
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "La competencia no existe o no pertenece al programa actual"
+            )
+        if not any(item.id == resultado_id for item in self.resultados):
+            raise ResultadoAprendizajeNotFoundError(
+                "No existe el resultado solicitado para esta competencia"
+            )
         now = datetime.now(UTC)
         self.resultados = [
             ResultadoAprendizajeDTO(
@@ -116,6 +134,14 @@ class FakeProgramaResultadoService:
         resultado_id: uuid.UUID,
     ) -> ResultadoAprendizajeDeleteDTO:
         """Delete a learning outcome in memory."""
+        if competencia_id != self.competencia_id:
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "La competencia no existe o no pertenece al programa actual"
+            )
+        if not any(item.id == resultado_id for item in self.resultados):
+            raise ResultadoAprendizajeNotFoundError(
+                "No existe el resultado solicitado para esta competencia"
+            )
         self.resultados = [
             item for item in self.resultados if item.id != resultado_id
         ]
@@ -133,7 +159,7 @@ def test_resultados_endpoints_create_list_update_delete() -> None:
     app.dependency_overrides[get_programa_resultado_service] = lambda: fake_service
     client = TestClient(app)
     referencia_id = uuid.uuid4()
-    competencia_id = uuid.uuid4()
+    competencia_id = fake_service.competencia_id
 
     create_response = client.post(
         f"/api/v1/programas/{referencia_id}/competencias/{competencia_id}/resultados",
@@ -186,7 +212,7 @@ def test_resultados_endpoint_rejects_duplicate_description() -> None:
     app.dependency_overrides[get_programa_resultado_service] = lambda: fake_service
     client = TestClient(app)
     referencia_id = uuid.uuid4()
-    competencia_id = uuid.uuid4()
+    competencia_id = fake_service.competencia_id
 
     client.post(
         f"/api/v1/programas/{referencia_id}/competencias/{competencia_id}/resultados",
@@ -203,4 +229,47 @@ def test_resultados_endpoint_rejects_duplicate_description() -> None:
     assert response.json()["detail"] == (
         "Ya existe un resultado de aprendizaje con esta descripcion exacta "
         "en la competencia"
+    )
+
+
+def test_resultados_endpoint_rejects_blank_description() -> None:
+    """The HTTP API should reject blank learning outcome descriptions."""
+    fake_service = FakeProgramaResultadoService()
+    app.dependency_overrides[get_programa_resultado_service] = lambda: fake_service
+    client = TestClient(app)
+    referencia_id = uuid.uuid4()
+
+    response = client.post(
+        (
+            f"/api/v1/programas/{referencia_id}/competencias/"
+            f"{fake_service.competencia_id}/resultados"
+        ),
+        json={"descripcion": "   "},
+    )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+def test_resultados_endpoint_rejects_foreign_competencia() -> None:
+    """The HTTP API should reject operations outside the current program."""
+    fake_service = FakeProgramaResultadoService()
+    app.dependency_overrides[get_programa_resultado_service] = lambda: fake_service
+    client = TestClient(app)
+    referencia_id = uuid.uuid4()
+    foreign_competencia_id = uuid.uuid4()
+
+    response = client.get(
+        (
+            f"/api/v1/programas/{referencia_id}/competencias/"
+            f"{foreign_competencia_id}/resultados"
+        )
+    )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "La competencia no existe o no pertenece al programa actual"
     )

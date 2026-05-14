@@ -365,6 +365,183 @@ describe("ProgramaCompetenciasManager", () => {
     );
   });
 
+  it("should edit a learning outcome inside a competencia", async () => {
+    const competencia = buildCompetencia();
+    const resultado = buildResultado(competencia.id);
+    const updated = buildResultado(competencia.id, {
+      id: resultado.id,
+      codigo_resultado: "RAP-02",
+      descripcion: "Disenar la solucion de software",
+    });
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, [resultado]),
+    );
+    vi.mocked(resultadosApi.updateProgramaResultado).mockResolvedValue(
+      buildResultadoResponse(competencia.id, [updated]),
+    );
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[{ ...competencia, resultados: [resultado] }]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Analizar los requisitos del software"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[1]);
+    fireEvent.change(screen.getByPlaceholderText("Ej. RAP-01"), {
+      target: { value: " RAP-02 " },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
+      {
+        target: { value: " Disenar la solucion de software " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /guardar resultado/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(resultadosApi.updateProgramaResultado).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+        resultado.id,
+        {
+          codigo_resultado: "RAP-02",
+          descripcion: "Disenar la solucion de software",
+        },
+      );
+    });
+    expect(onCompetenciasSynced).toHaveBeenCalledWith(
+      buildResponse([{ ...competencia, resultados: [updated] }]),
+    );
+  });
+
+  it("should delete a learning outcome after confirmation", async () => {
+    const competencia = buildCompetencia();
+    const resultado = buildResultado(competencia.id);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(resultadosApi.listProgramaResultados)
+      .mockResolvedValueOnce(buildResultadoResponse(competencia.id, [resultado]))
+      .mockResolvedValueOnce(buildResultadoResponse(competencia.id, []));
+    vi.mocked(resultadosApi.deleteProgramaResultado).mockResolvedValue({
+      referencia_id: referenciaId,
+      competencia_id: competencia.id,
+      resultado_id: resultado.id,
+      eliminado: true,
+    });
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[{ ...competencia, resultados: [resultado] }]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Analizar los requisitos del software"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[1]);
+
+    await waitFor(() => {
+      expect(resultadosApi.deleteProgramaResultado).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+        resultado.id,
+      );
+    });
+    expect(onCompetenciasSynced).toHaveBeenLastCalledWith(
+      buildResponse([{ ...competencia, resultados: [] }]),
+    );
+  });
+
+  it("should reject blank learning outcome descriptions before calling the API", async () => {
+    const competencia = buildCompetencia();
+    const onCompetenciasSynced = vi.fn();
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={onCompetenciasSynced}
+      />,
+    );
+    await waitFor(() => {
+      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+      );
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
+      {
+        target: { value: "   " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear resultado/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText("descripcion es obligatoria."),
+    ).toBeInTheDocument();
+    expect(resultadosApi.createProgramaResultado).not.toHaveBeenCalled();
+  });
+
+  it("should show API errors such as duplicate learning outcomes", async () => {
+    const competencia = buildCompetencia();
+    vi.mocked(resultadosApi.createProgramaResultado).mockRejectedValue(
+      new resultadosApi.ProgramaResultadoError(
+        409,
+        "Ya existe un resultado de aprendizaje con esta descripcion exacta en la competencia",
+      ),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+      );
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
+      {
+        target: { value: "Analizar requisitos" },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear resultado/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText(
+        "Ya existe un resultado de aprendizaje con esta descripcion exacta en la competencia",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("should render competencia as the container for resultados, conocimientos and criterios", async () => {
     const competencia = buildCompetencia({
       resultados: [buildResultado("aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa")],

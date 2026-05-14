@@ -154,20 +154,16 @@ class ProgramaResultadoAprendizajeService:
         programa_id = _extract_programa_id(draft.payload_json)
 
         if programa_id is None:
-            return ResultadoAprendizajeListDTO(
-                referencia_id=referencia_id,
-                competencia_id=competencia_id,
-                resultados=[],
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "No hay un programa asociado al borrador actual"
             )
 
         competencia = await self._resultado_repository.get_competencia(
             competencia_id, programa_id
         )
         if competencia is None:
-            return ResultadoAprendizajeListDTO(
-                referencia_id=referencia_id,
-                competencia_id=competencia_id,
-                resultados=[],
+            raise ResultadoAprendizajeCompetenciaNotFoundError(
+                "La competencia no existe o no pertenece al programa actual"
             )
 
         resultados = await self._resultado_repository.list_by_competencia(
@@ -418,7 +414,10 @@ def _normalize_payload(
     payload: ResultadoAprendizajePayloadDTO,
 ) -> ResultadoAprendizajePayloadDTO:
     descripcion = payload.descripcion.strip()
-    codigo = payload.codigo_resultado.strip() if payload.codigo_resultado else None
+    codigo = None
+    if payload.codigo_resultado is not None:
+        normalized_codigo = payload.codigo_resultado.strip()
+        codigo = normalized_codigo or None
     if not descripcion:
         raise ResultadoAprendizajeValidationError("La descripcion es obligatoria")
     return ResultadoAprendizajePayloadDTO(
