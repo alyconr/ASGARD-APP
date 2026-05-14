@@ -1,13 +1,19 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaConsolidadoRevision } from "./programa-consolidado-revision";
 import type {
   CriterioEvaluacionCurricular,
   ConocimientoCurricular,
+  ProgramaCompletitudResponse,
   ProgramaCompetencia,
   ResultadoAprendizaje,
 } from "@/features/programa/types";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function buildCompetencia(
   overrides: Partial<ProgramaCompetencia> = {},
@@ -90,6 +96,46 @@ function buildCriterio(
     fecha_actualizacion: "2026-05-14T00:00:00Z",
     ...overrides,
   };
+}
+
+function buildCompletitudResponse(
+  overrides: Partial<ProgramaCompletitudResponse> = {},
+): ProgramaCompletitudResponse {
+  return {
+    referencia_id: "11111111-1111-4111-9111-111111111111",
+    programa_id: "bbbbbbbb-bbbb-4bbb-9bbb-bbbbbbbbbbbb",
+    estado_actual: "BORRADOR",
+    cerrable: false,
+    resumen: {
+      competencias: 0,
+      resultados: 0,
+      conocimientos_saber: 0,
+      conocimientos_proceso: 0,
+      criterios: 0,
+    },
+    faltantes: [
+      {
+        codigo: "programa.competencias",
+        campo: "competencias",
+        mensaje: "Registra al menos una competencia asociada al programa.",
+        competencia_id: null,
+        competencia_codigo: null,
+        competencia_nombre: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function mockFetchJson(payload: unknown, status = 200): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => payload,
+    }),
+  );
 }
 
 describe("ProgramaConsolidadoRevision", () => {
@@ -280,5 +326,255 @@ describe("ProgramaConsolidadoRevision", () => {
 
     expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders not ready for close after validation", async () => {
+    mockFetchJson(buildCompletitudResponse());
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId="11111111-1111-4111-9111-111111111111"
+        entryMode="MANUAL"
+        competencias={[]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+
+    expect(await screen.findByText(/Faltantes para cierre: 1/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /confirmar y cerrar programa/i }),
+    ).toBeDisabled();
+  });
+
+  it("renders missing items list from completion validator", async () => {
+    mockFetchJson(
+      buildCompletitudResponse({
+        faltantes: [
+          {
+            codigo: "competencia.resultados",
+            campo: "resultados",
+            mensaje: "Agrega al menos un resultado de aprendizaje.",
+            competencia_id: "aaaaaaaa-aaaa-4aaa-9aaa-aaaaaaaaaaaa",
+            competencia_codigo: "220501046",
+            competencia_nombre: "Desarrollar software",
+          },
+        ],
+      }),
+    );
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId="11111111-1111-4111-9111-111111111111"
+        entryMode="MANUAL"
+        competencias={[]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+
+    expect(
+      await screen.findByText(/Agrega al menos un resultado de aprendizaje/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/220501046/i)).toBeInTheDocument();
+  });
+
+  it("navigates to corrections from missing items", async () => {
+    mockFetchJson(buildCompletitudResponse());
+    const onNavigate = vi.fn();
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma=""
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId="11111111-1111-4111-9111-111111111111"
+        entryMode="MANUAL"
+        competencias={[]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={onNavigate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /corregir datos/i }));
+    fireEvent.click(screen.getByRole("button", { name: /corregir estructura/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith("datos-programa");
+    expect(onNavigate).toHaveBeenCalledWith("estructura-curricular");
+  });
+
+  it("requires explicit confirmation before closing", async () => {
+    const validation = buildCompletitudResponse({
+      cerrable: true,
+      resumen: {
+        competencias: 1,
+        resultados: 1,
+        conocimientos_saber: 1,
+        conocimientos_proceso: 1,
+        criterios: 1,
+      },
+      faltantes: [],
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => validation,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          referencia_id: validation.referencia_id,
+          programa_id: validation.programa_id,
+          estado: "COMPLETO",
+          mensaje: "Programa cerrado correctamente.",
+          completitud: { ...validation, estado_actual: "COMPLETO" },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId={validation.referencia_id}
+        entryMode="MANUAL"
+        competencias={[buildCompetencia()]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+        onProgramaCerrado={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+    await screen.findByText(/listo para cierre/i);
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y cerrar programa/i }));
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/cierre"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("renders success when program is closed", async () => {
+    const validation = buildCompletitudResponse({ cerrable: true, faltantes: [] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => validation,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            referencia_id: validation.referencia_id,
+            programa_id: validation.programa_id,
+            estado: "COMPLETO",
+            mensaje: "Programa cerrado correctamente.",
+            completitud: { ...validation, estado_actual: "COMPLETO" },
+          }),
+        }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId={validation.referencia_id}
+        entryMode="MANUAL"
+        competencias={[buildCompetencia()]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+    await screen.findByText(/listo para cierre/i);
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y cerrar programa/i }));
+
+    expect(
+      await screen.findByText("Programa cerrado correctamente."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Estado actual:/i)).toBeInTheDocument();
+    expect(screen.getByText("COMPLETO")).toBeInTheDocument();
+  });
+
+  it("does not allow close when backend returns structured errors", async () => {
+    const validation = buildCompletitudResponse({ cerrable: true, faltantes: [] });
+    const rejected = buildCompletitudResponse({
+      faltantes: [
+        {
+          codigo: "programa.criterios",
+          campo: "criterios",
+          mensaje: "El programa debe tener al menos un criterio de evaluacion.",
+          competencia_id: null,
+          competencia_codigo: null,
+          competencia_nombre: null,
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => validation,
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 409,
+          json: async () => ({ detail: rejected }),
+        }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        referenciaId={validation.referencia_id}
+        entryMode="MANUAL"
+        competencias={[buildCompetencia()]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
+    await screen.findByText(/listo para cierre/i);
+    fireEvent.click(screen.getByRole("button", { name: /confirmar y cerrar programa/i }));
+
+    expect(
+      await screen.findByText(/El programa debe tener al menos un criterio/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("COMPLETO")).not.toBeInTheDocument();
   });
 });

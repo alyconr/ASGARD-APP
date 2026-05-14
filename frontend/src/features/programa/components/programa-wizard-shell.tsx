@@ -223,10 +223,12 @@ function StepWorkspace({
   onPersistDraftBeforeExcelPreview,
   onNoteChange,
   onNavigateToStep,
+  onProgramaCerrado,
   programaExcelResult,
   programaPdfResult,
   competencias,
   referenceId,
+  estadoBorrador,
 }: Readonly<{
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
@@ -234,6 +236,7 @@ function StepWorkspace({
   programaExcelResult: ProgramaExcelImportState | null;
   programaPdfResult: ProgramaPdfUploadResult | null;
   referenceId: string;
+  estadoBorrador: ProgramaCompetencia["estado"];
   programaValue: {
     codigo_programa: string;
     nombre_programa: string;
@@ -250,6 +253,9 @@ function StepWorkspace({
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+  onProgramaCerrado: Parameters<
+    typeof ProgramaConsolidadoRevision
+  >[0]["onProgramaCerrado"];
   competencias: ProgramaCompetencia[];
 }>): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
@@ -349,6 +355,9 @@ function StepWorkspace({
               pdfResult={programaPdfResult}
               excelResult={programaExcelResult}
               onNavigateToStep={onNavigateToStep}
+              referenciaId={referenceId}
+              estadoBorrador={estadoBorrador}
+              onProgramaCerrado={onProgramaCerrado}
             />
           )}
         </div>
@@ -658,6 +667,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 controller.activeReferenceId ??
                 controller.payload.meta.referenciaId
               }
+              estadoBorrador={controller.draftStatus}
               programaValue={controller.payload.programa}
               onEntryModeChange={controller.setEntryMode}
               onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
@@ -672,6 +682,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 controller.updateStepNote(controller.currentStepId, value)
               }
               onNavigateToStep={controller.goToStep}
+              onProgramaCerrado={controller.markProgramaClosed}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   BookOpenCheck,
   CheckCircle2,
   ClipboardCheck,
@@ -11,17 +12,24 @@ import {
   Layers3,
   ListChecks,
   NotebookText,
+  RefreshCcw,
+  ShieldCheck,
 } from "lucide-react";
 
+import {
+  cerrarPrograma,
+  ProgramaCierreError,
+  validarCompletitudPrograma,
+} from "@/features/programa/programa-cierre-api";
 import type {
-  CriterioEvaluacionCurricular,
-  ConocimientoCurricular,
+  ProgramaCierreResponse,
   ProgramaCompetencia,
+  ProgramaCompletitudFaltante,
+  ProgramaCompletitudResponse,
   ProgramaEntryMode,
   ProgramaExcelImportState,
   ProgramaPdfUploadResult,
   ProgramaWizardStepId,
-  ResultadoAprendizaje,
 } from "@/features/programa/types";
 
 type FieldOrigin = "MANUAL" | "EXTRAIDO" | "CORREGIDO" | "PENDIENTE" | "VALIDADO";
@@ -80,22 +88,34 @@ export function ProgramaConsolidadoRevision({
   codigoPrograma,
   nombrePrograma,
   versionPrograma,
+  referenciaId = "",
+  estadoBorrador = "BORRADOR",
   entryMode,
   competencias,
   pdfResult,
   excelResult,
   onNavigateToStep,
+  onProgramaCerrado = () => {},
 }: Readonly<{
   codigoPrograma: string;
   nombrePrograma: string;
   versionPrograma: string;
+  referenciaId?: string;
+  estadoBorrador?: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
   entryMode: ProgramaEntryMode;
   competencias: ProgramaCompetencia[];
   pdfResult: ProgramaPdfUploadResult | null;
   excelResult: ProgramaExcelImportState | null;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+  onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
 }>): React.JSX.Element {
   const source = (entryMode ?? null) as EntrySource | null;
+  const [validation, setValidation] =
+    useState<ProgramaCompletitudResponse | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [closeMessage, setCloseMessage] = useState<string | null>(null);
 
   const totalResultados = useMemo(
     () => competencias.reduce((sum, c) => sum + (c.resultados?.length ?? 0), 0),
@@ -131,9 +151,80 @@ export function ProgramaConsolidadoRevision({
     excelResult?.documento !== null && excelResult?.documento !== undefined;
   const hasCurricular = competencias.length > 0;
   const hasPrograma = codigoPrograma.trim().length > 0 || nombrePrograma.trim().length > 0;
+  const isCompleted =
+    estadoBorrador === "COMPLETO" || validation?.estado_actual === "COMPLETO";
+
+  const runValidation = useCallback(async (): Promise<ProgramaCompletitudResponse | null> => {
+    setIsValidating(true);
+    setValidationError(null);
+    setCloseMessage(null);
+    try {
+      const result = await validarCompletitudPrograma(referenciaId);
+      setValidation(result);
+      return result;
+    } catch (error) {
+      const message =
+        error instanceof ProgramaCierreError
+          ? error.detail
+          : "No fue posible validar la completitud del programa.";
+      setValidationError(message);
+      return null;
+    } finally {
+      setIsValidating(false);
+    }
+  }, [referenciaId]);
+
+  const handleCloseProgram = useCallback(async (): Promise<void> => {
+    const currentValidation = validation?.cerrable
+      ? validation
+      : await runValidation();
+    if (currentValidation === null || !currentValidation.cerrable) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Confirma que revisaste el consolidado y quieres cerrar el programa como COMPLETO.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsClosing(true);
+    setValidationError(null);
+    setCloseMessage(null);
+    try {
+      const result = await cerrarPrograma(referenciaId);
+      setValidation(result.completitud);
+      setCloseMessage(result.mensaje);
+      onProgramaCerrado(result);
+    } catch (error) {
+      if (error instanceof ProgramaCierreError) {
+        setValidationError(error.detail);
+        if (error.completitud !== null) {
+          setValidation(error.completitud);
+        }
+      } else {
+        setValidationError("No fue posible cerrar el programa.");
+      }
+    } finally {
+      setIsClosing(false);
+    }
+  }, [onProgramaCerrado, referenciaId, runValidation, validation]);
 
   return (
     <div className="grid gap-6">
+      <CompletionPanel
+        closeMessage={closeMessage}
+        estadoBorrador={estadoBorrador}
+        isClosing={isClosing}
+        isCompleted={isCompleted}
+        isValidating={isValidating}
+        onCloseProgram={() => void handleCloseProgram()}
+        onNavigateToStep={onNavigateToStep}
+        onValidate={() => void runValidation()}
+        validation={validation}
+        validationError={validationError}
+      />
+
       <SummaryBanner
         totalResultados={totalResultados}
         totalSaber={totalSaber}
@@ -322,6 +413,199 @@ export function ProgramaConsolidadoRevision({
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function CompletionPanel({
+  closeMessage,
+  estadoBorrador,
+  isClosing,
+  isCompleted,
+  isValidating,
+  onCloseProgram,
+  onNavigateToStep,
+  onValidate,
+  validation,
+  validationError,
+}: Readonly<{
+  closeMessage: string | null;
+  estadoBorrador: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
+  isClosing: boolean;
+  isCompleted: boolean;
+  isValidating: boolean;
+  onCloseProgram: () => void;
+  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+  onValidate: () => void;
+  validation: ProgramaCompletitudResponse | null;
+  validationError: string | null;
+}>): React.JSX.Element {
+  const canClose = validation?.cerrable === true && !isCompleted;
+  const pendingCount = validation?.faltantes.length ?? 0;
+
+  return (
+    <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${
+                isCompleted
+                  ? "bg-emerald-50 text-emerald-700"
+                  : validation?.cerrable
+                    ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                    : "bg-amber-50 text-amber-700"
+              }`}
+            >
+              {isCompleted ? (
+                <ShieldCheck className="h-5 w-5" />
+              ) : validation?.cerrable ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5" />
+              )}
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-[var(--foreground)]">
+                Validacion y cierre del programa
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                Estado actual:{" "}
+                <span className="font-semibold text-[var(--foreground)]">
+                  {isCompleted ? "COMPLETO" : estadoBorrador}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {validation === null && !isCompleted ? (
+            <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+              Ejecuta la validacion para confirmar si el programa cumple codigo,
+              nombre y estructura curricular minima.
+            </p>
+          ) : null}
+          {validation?.cerrable === true && !isCompleted ? (
+            <p className="mt-3 text-sm leading-6 text-emerald-800">
+              El programa esta listo para cierre. La accion requiere confirmacion
+              explicita.
+            </p>
+          ) : null}
+          {isCompleted ? (
+            <p className="mt-3 text-sm leading-6 text-emerald-800">
+              {closeMessage ?? "El programa quedo cerrado como COMPLETO."}
+            </p>
+          ) : null}
+          {validationError !== null ? (
+            <p role="alert" className="mt-3 text-sm leading-6 text-rose-800">
+              {validationError}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onValidate}
+            disabled={isValidating || isClosing || isCompleted}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCcw className={`h-4 w-4 ${isValidating ? "animate-spin" : ""}`} />
+            Validar completitud
+          </button>
+          <button
+            type="button"
+            onClick={onCloseProgram}
+            disabled={!canClose || isClosing}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Confirmar y cerrar programa
+          </button>
+        </div>
+      </div>
+
+      {validation !== null ? (
+        <div className="mt-4 grid gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <CompletionMetric label="Competencias" value={validation.resumen.competencias} />
+            <CompletionMetric label="Resultados" value={validation.resumen.resultados} />
+            <CompletionMetric label="Saber" value={validation.resumen.conocimientos_saber} />
+            <CompletionMetric label="Proceso" value={validation.resumen.conocimientos_proceso} />
+            <CompletionMetric label="Criterios" value={validation.resumen.criterios} />
+          </div>
+
+          {!validation.cerrable ? (
+            <MissingList
+              faltantes={validation.faltantes}
+              pendingCount={pendingCount}
+              onNavigateToStep={onNavigateToStep}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CompletionMetric({
+  label,
+  value,
+}: Readonly<{ label: string; value: number }>): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2">
+      <p className="text-xs leading-5 text-[var(--muted)]">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">{value}</p>
+    </div>
+  );
+}
+
+function MissingList({
+  faltantes,
+  pendingCount,
+  onNavigateToStep,
+}: Readonly<{
+  faltantes: ProgramaCompletitudFaltante[];
+  pendingCount: number;
+  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+}>): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-amber-900">
+          Faltantes para cierre: {pendingCount}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onNavigateToStep("datos-programa")}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <Edit3 className="h-4 w-4" />
+            Corregir datos
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateToStep("estructura-curricular")}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <Layers3 className="h-4 w-4" />
+            Corregir estructura
+          </button>
+        </div>
+      </div>
+      <ul className="mt-3 grid gap-2">
+        {faltantes.map((item) => (
+          <li
+            key={`${item.codigo}-${item.competencia_id ?? "programa"}`}
+            className="rounded-lg bg-white px-3 py-2 text-sm leading-6 text-amber-950"
+          >
+            <span className="font-semibold">
+              {item.competencia_codigo ?? "Programa"}
+            </span>
+            : {item.mensaje}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

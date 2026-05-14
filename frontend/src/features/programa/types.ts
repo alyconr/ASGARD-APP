@@ -378,3 +378,37 @@ export interface ProgramaDraftSnapshot {
   payload: ProgramaWizardPayload;
   estado: DraftStatus;
 }
+
+export interface ProgramaCompletitudFaltante {
+  codigo: string;
+  campo: string;
+  mensaje: string;
+  competencia_id: string | null;
+  competencia_codigo: string | null;
+  competencia_nombre: string | null;
+}
+
+export interface ProgramaCompletitudResumen {
+  competencias: number;
+  resultados: number;
+  conocimientos_saber: number;
+  conocimientos_proceso: number;
+  criterios: number;
+}
+
+export interface ProgramaCompletitudResponse {
+  referencia_id: string;
+  programa_id: string | null;
+  estado_actual: DraftStatus | null;
+  cerrable: boolean;
+  resumen: ProgramaCompletitudResumen;
+  faltantes: ProgramaCompletitudFaltante[];
+}
+
+export interface ProgramaCierreResponse {
+  referencia_id: string;
+  programa_id: string;
+  estado: "COMPLETO";
+  mensaje: string;
+  completitud: ProgramaCompletitudResponse;
+}

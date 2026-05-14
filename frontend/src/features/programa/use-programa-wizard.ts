@@ -9,7 +9,11 @@ import {
   useState,
 } from "react";
 
-import { DraftApiError, type DraftResponse } from "@/features/drafts/types";
+import {
+  DraftApiError,
+  type DraftResponse,
+  type DraftStatus,
+} from "@/features/drafts/types";
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import {
@@ -60,12 +64,13 @@ function buildSnapshot(
   referenciaId: string,
   pasoActual: ProgramaWizardStepId,
   payload: ProgramaWizardPayload,
+  estado: DraftStatus,
 ): ProgramaDraftSnapshot {
   return {
     referenciaId,
     pasoActual,
     payload,
-    estado: "BORRADOR",
+    estado,
   };
 }
 
@@ -163,6 +168,7 @@ export interface ProgramaWizardController {
   knownDrafts: KnownDraftSummary[];
   lastSavedAt: string | null;
   payload: ProgramaWizardPayload | null;
+  draftStatus: DraftStatus;
   startNewFlow: (entryMode: Exclude<ProgramaEntryMode, null>) => Promise<void>;
   recoverDraftByReference: (
     referenceId: string,
@@ -178,6 +184,7 @@ export interface ProgramaWizardController {
   updateProgramaExcelPreview: (result: ProgramaExcelPreviewResponse) => void;
   updateProgramaExcelImport: (result: ProgramaExcelImportResponse) => void;
   updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
+  markProgramaClosed: () => void;
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
@@ -193,6 +200,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     DEFAULT_PROGRAMA_STEP_ID,
   );
   const [payload, setPayload] = useState<ProgramaWizardPayload | null>(null);
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>("BORRADOR");
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [continueReferenceInput, setContinueReferenceInput] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -211,8 +219,8 @@ export function useProgramaWizard(): ProgramaWizardController {
       return null;
     }
 
-    return buildSnapshot(activeReferenceId, currentStepId, payload);
-  }, [activeReferenceId, currentStepId, payload]);
+    return buildSnapshot(activeReferenceId, currentStepId, payload, draftStatus);
+  }, [activeReferenceId, currentStepId, draftStatus, payload]);
 
   const persistSnapshot = useCallback(
     async (
@@ -306,6 +314,7 @@ export function useProgramaWizard(): ProgramaWizardController {
           setActiveReferenceId(draft.referencia_id);
           setCurrentStepId(nextStepId);
           setPayload(nextPayload);
+          setDraftStatus(draft.estado_borrador);
           setContinueReferenceInput(draft.referencia_id);
           setLastSavedAt(draft.ultima_edicion);
           setAutosave({
@@ -316,7 +325,12 @@ export function useProgramaWizard(): ProgramaWizardController {
 
         setActiveProgramaDraftReference(draft.referencia_id);
         lastPersistedSnapshotRef.current = serializeSnapshot(
-          buildSnapshot(draft.referencia_id, nextStepId, nextPayload),
+          buildSnapshot(
+            draft.referencia_id,
+            nextStepId,
+            nextPayload,
+            draft.estado_borrador,
+          ),
         );
         setKnownDrafts(
           rememberProgramaDraft(
@@ -399,6 +413,7 @@ export function useProgramaWizard(): ProgramaWizardController {
 
       setActiveReferenceId(nextReferenceId);
       setPayload(nextPayload);
+      setDraftStatus("BORRADOR");
       setCurrentStepId(targetStepId);
       setContinueReferenceInput(nextReferenceId);
       setLastSavedAt(null);
@@ -415,7 +430,7 @@ export function useProgramaWizard(): ProgramaWizardController {
       );
 
       await persistSnapshot(
-        buildSnapshot(nextReferenceId, targetStepId, nextPayload),
+        buildSnapshot(nextReferenceId, targetStepId, nextPayload, "BORRADOR"),
       );
       notify.success("Borrador iniciado", {
         description: "Se creo una referencia estable para este flujo.",
@@ -719,6 +734,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     lastPersistedSnapshotRef.current = null;
     setActiveReferenceId(null);
     setPayload(null);
+    setDraftStatus("BORRADOR");
     setCurrentStepId(DEFAULT_PROGRAMA_STEP_ID);
     setLastSavedAt(null);
     setErrorMessage(null);
@@ -728,6 +744,22 @@ export function useProgramaWizard(): ProgramaWizardController {
     });
     setKnownDrafts(listKnownProgramaDrafts());
   }, []);
+
+  const markProgramaClosed = useCallback((): void => {
+    setDraftStatus("COMPLETO");
+    setKnownDrafts((currentDrafts) => {
+      if (activeReferenceId === null || payload === null) {
+        return currentDrafts;
+      }
+      return rememberProgramaDraft({
+        referenciaId: activeReferenceId,
+        pasoActual: "revision-programa",
+        updatedAt: new Date().toISOString(),
+        estado: "COMPLETO",
+        label: buildDraftLabel(payload),
+      });
+    });
+  }, [activeReferenceId, payload]);
 
   const currentStepIndex = Math.max(0, getStepIndex(currentStepId));
 
@@ -746,6 +778,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     knownDrafts,
     lastSavedAt,
     payload,
+    draftStatus,
     startNewFlow,
     recoverDraftByReference,
     goToNextStep,
@@ -758,6 +791,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateProgramaExcelPreview,
     updateProgramaExcelImport,
     updateProgramaCompetencias,
+    markProgramaClosed,
     updateContinueReferenceInput,
     forgetKnownDraft,
     clearKnownDrafts,
