@@ -83,6 +83,23 @@ export interface ResultadoAprendizajeDeleteResponse {
   eliminado: boolean;
 }
 
+export interface CriterioPayload {
+  descripcion: string;
+}
+
+export interface CriterioListResponse {
+  referencia_id: string;
+  competencia_id: string;
+  criterios: CriterioEvaluacionCurricular[];
+}
+
+export interface CriterioDeleteResponse {
+  referencia_id: string;
+  competencia_id: string;
+  criterio_id: string;
+  eliminado: boolean;
+}
+
 export interface ConocimientoSaberPayload {
   descripcion: string;
 }

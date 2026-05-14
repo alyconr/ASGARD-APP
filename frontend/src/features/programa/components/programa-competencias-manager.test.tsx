@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaCompetenciasManager } from "./programa-competencias-manager";
 import * as competenciasApi from "@/features/programa/competencias-api";
+import * as criteriosApi from "@/features/programa/criterios-api";
 import * as conocimientosProcesoApi from "@/features/programa/conocimientos-proceso-api";
 import * as conocimientosSaberApi from "@/features/programa/conocimientos-saber-api";
 import * as resultadosApi from "@/features/programa/resultados-api";
@@ -10,6 +11,7 @@ import type {
   ConocimientoCurricular,
   ConocimientoProcesoListResponse,
   ConocimientoSaberListResponse,
+  CriterioListResponse,
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
   ResultadoAprendizaje,
@@ -94,6 +96,24 @@ vi.mock("@/features/programa/conocimientos-proceso-api", () => ({
   deleteProgramaConocimientoProceso: vi.fn(),
   listProgramaConocimientosProceso: vi.fn(),
   updateProgramaConocimientoProceso: vi.fn(),
+}));
+
+vi.mock("@/features/programa/criterios-api", () => ({
+  ProgramaCriterioError: class ProgramaCriterioError extends Error {
+    readonly status: number;
+
+    readonly detail: string;
+
+    constructor(status: number, detail: string) {
+      super(detail);
+      this.status = status;
+      this.detail = detail;
+    }
+  },
+  createProgramaCriterio: vi.fn(),
+  deleteProgramaCriterio: vi.fn(),
+  listProgramaCriterios: vi.fn(),
+  updateProgramaCriterio: vi.fn(),
 }));
 
 const referenciaId = "12345678-1234-4234-9234-123456789abc";
@@ -211,6 +231,17 @@ function buildConocimientoProcesoResponse(
   };
 }
 
+function buildCriterioResponse(
+  competenciaId: string,
+  criterios: import("@/features/programa/types").CriterioEvaluacionCurricular[],
+): CriterioListResponse {
+  return {
+    referencia_id: referenciaId,
+    competencia_id: competenciaId,
+    criterios,
+  };
+}
+
 describe("ProgramaCompetenciasManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -230,6 +261,10 @@ describe("ProgramaCompetenciasManager", () => {
       conocimientosProcesoApi.listProgramaConocimientosProceso,
     ).mockImplementation(async (_referenciaId: string, competenciaId: string) =>
       buildConocimientoProcesoResponse(competenciaId, []),
+    );
+    vi.mocked(criteriosApi.listProgramaCriterios).mockImplementation(
+      async (_referenciaId: string, competenciaId: string) =>
+        buildCriterioResponse(competenciaId, []),
     );
   });
 
@@ -1153,6 +1188,9 @@ describe("ProgramaCompetenciasManager", () => {
         ),
       ),
     );
+    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
+      buildCriterioResponse(competencia.id, competencia.criterios ?? []),
+    );
 
     render(
       <ProgramaCompetenciasManager
@@ -1214,6 +1252,175 @@ describe("ProgramaCompetenciasManager", () => {
     expect(
       screen.getByText("Sin conocimientos PROCESO registrados para esta competencia."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Sin criterios importados.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Sin criterios de evaluacion registrados para esta competencia.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("should create a criterio from panel form", async () => {
+    const competencia = buildCompetencia();
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosSaberApi.listProgramaConocimientosSaber,
+    ).mockResolvedValue(
+      buildConocimientoSaberResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockResolvedValue(
+      buildConocimientoProcesoResponse(competencia.id, []),
+    );
+    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
+      buildCriterioResponse(competencia.id, []),
+    );
+    vi.mocked(criteriosApi.createProgramaCriterio).mockImplementation(
+      async (_ref, _comp, payload) =>
+        buildCriterioResponse(competencia.id, [
+          {
+            id: "11111111-1111-4111-9111-111111111111",
+            competencia_id: competencia.id,
+            resultado_id: null,
+            descripcion: payload.descripcion,
+            orden: 1,
+            estado: "MANUAL",
+            fecha_creacion: "2026-05-14T00:00:00Z",
+            fecha_actualizacion: "2026-05-14T00:00:00Z",
+          },
+        ]),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalledWith(
+        referenciaId,
+        competencia.id,
+      );
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el criterio de evaluacion."),
+      {
+        target: { value: "  Realiza pruebas unitarias  " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear criterio/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText("Realiza pruebas unitarias"),
+    ).toBeInTheDocument();
+  });
+
+  it("should reject empty criterio form", async () => {
+    const competencia = buildCompetencia();
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosSaberApi.listProgramaConocimientosSaber,
+    ).mockResolvedValue(
+      buildConocimientoSaberResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockResolvedValue(
+      buildConocimientoProcesoResponse(competencia.id, []),
+    );
+    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
+      buildCriterioResponse(competencia.id, []),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalled();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el criterio de evaluacion."),
+      {
+        target: { value: "   " },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear criterio/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(await screen.findByText(/descripcion es obligatoria/i)).toBeInTheDocument();
+  });
+
+  it("should show duplicate error for criterio", async () => {
+    const competencia = buildCompetencia();
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosSaberApi.listProgramaConocimientosSaber,
+    ).mockResolvedValue(
+      buildConocimientoSaberResponse(competencia.id, []),
+    );
+    vi.mocked(
+      conocimientosProcesoApi.listProgramaConocimientosProceso,
+    ).mockResolvedValue(
+      buildConocimientoProcesoResponse(competencia.id, []),
+    );
+    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
+      buildCriterioResponse(competencia.id, []),
+    );
+    vi.mocked(criteriosApi.createProgramaCriterio).mockRejectedValue(
+      new criteriosApi.ProgramaCriterioError(
+        409,
+        "Ya existe un criterio de evaluacion con esta descripcion exacta en la competencia",
+      ),
+    );
+
+    render(
+      <ProgramaCompetenciasManager
+        competencias={[competencia]}
+        referenciaId={referenciaId}
+        onCompetenciasSynced={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalled();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe el criterio de evaluacion."),
+      {
+        target: { value: "Duplicado" },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: /crear criterio/i })
+        .closest("form") as HTMLFormElement,
+    );
+
+    expect(
+      await screen.findByText(
+        "Ya existe un criterio de evaluacion con esta descripcion exacta en la competencia",
+      ),
+    ).toBeInTheDocument();
   });
 });

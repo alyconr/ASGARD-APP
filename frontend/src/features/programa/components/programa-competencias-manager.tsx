@@ -38,6 +38,13 @@ import {
   updateProgramaConocimientoProceso,
 } from "@/features/programa/conocimientos-proceso-api";
 import {
+  createProgramaCriterio,
+  deleteProgramaCriterio,
+  listProgramaCriterios,
+  ProgramaCriterioError,
+  updateProgramaCriterio,
+} from "@/features/programa/criterios-api";
+import {
   createProgramaResultado,
   deleteProgramaResultado,
   listProgramaResultados,
@@ -52,6 +59,7 @@ import type {
   ConocimientoProcesoListResponse,
   ConocimientoSaberListResponse,
   CriterioEvaluacionCurricular,
+  CriterioListResponse,
   ResultadoAprendizaje,
   ResultadoAprendizajeListResponse,
 } from "@/features/programa/types";
@@ -89,6 +97,7 @@ const EMPTY_CONOCIMIENTO_FORM: ConocimientoFormState = {
 function getErrorMessage(error: unknown): string {
   if (
     error instanceof ProgramaCompetenciaError ||
+    error instanceof ProgramaCriterioError ||
     error instanceof ProgramaResultadoError ||
     error instanceof ProgramaConocimientoSaberError ||
     error instanceof ProgramaConocimientoProcesoError
@@ -801,11 +810,180 @@ function ProgramaConocimientosPanel({
 }
 
 function ProgramaCriteriosPanel({
+  competencia,
   criterios,
+  onCriteriosSynced,
+  referenciaId,
 }: Readonly<{
+  competencia: ProgramaCompetencia;
   criterios: CriterioEvaluacionCurricular[];
+  onCriteriosSynced: (result: CriterioListResponse) => void;
+  referenciaId: string;
 }>): React.JSX.Element {
-  const sortedCriterios = sortByOrder(criterios);
+  const [items, setItems] = useState<CriterioEvaluacionCurricular[]>(criterios);
+  const [form, setForm] = useState<ConocimientoFormState>(
+    EMPTY_CONOCIMIENTO_FORM,
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [state, setState] = useState<OperationState>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const sorted = useMemo(() => sortByOrder(items), [items]);
+
+  useEffect(() => {
+    setItems(criterios);
+  }, [criterios]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadCriterios = async (): Promise<void> => {
+      setState("loading");
+      setErrorMessage(null);
+
+      try {
+        const result = await listProgramaCriterios(
+          referenciaId,
+          competencia.id,
+        );
+        if (isCurrent) {
+          setItems(result.criterios);
+          onCriteriosSynced(result);
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setErrorMessage(getErrorMessage(error));
+        }
+      } finally {
+        if (isCurrent) {
+          setState("idle");
+        }
+      }
+    };
+
+    void loadCriterios();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competencia.id, onCriteriosSynced, referenciaId]);
+
+  const resetForm = (): void => {
+    setForm(EMPTY_CONOCIMIENTO_FORM);
+    setEditingId(null);
+  };
+
+  const syncItems = (result: CriterioListResponse): void => {
+    setItems(result.criterios);
+    onCriteriosSynced(result);
+  };
+
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event.preventDefault();
+    const validationMessage = validateConocimientoForm(form);
+    if (validationMessage !== null) {
+      setErrorMessage(validationMessage);
+      notify.warning("Revisa el criterio de evaluacion", {
+        description: validationMessage,
+      });
+      return;
+    }
+
+    setState("saving");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      const payload = { descripcion: form.descripcion.trim() };
+      const result =
+        editingId === null
+          ? await createProgramaCriterio(
+              referenciaId,
+              competencia.id,
+              payload,
+            )
+          : await updateProgramaCriterio(
+              referenciaId,
+              competencia.id,
+              editingId,
+              payload,
+            );
+
+      syncItems(result);
+      resetForm();
+      setMessage(
+        editingId === null
+          ? "Criterio de evaluacion registrado."
+          : "Criterio de evaluacion actualizado.",
+      );
+      notify.success("Criterios de evaluacion sincronizados", {
+        description: "El borrador conserva la estructura curricular actual.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible guardar el criterio de evaluacion", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const handleEdit = (criterio: CriterioEvaluacionCurricular): void => {
+    setEditingId(criterio.id);
+    setForm({ descripcion: criterio.descripcion });
+    setMessage(null);
+    setErrorMessage(null);
+  };
+
+  const handleDelete = async (
+    criterio: CriterioEvaluacionCurricular,
+  ): Promise<void> => {
+    const confirmed = window.confirm(
+      "Eliminar este criterio de evaluacion? Esta accion requiere confirmacion.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setState("deleting");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      await deleteProgramaCriterio(
+        referenciaId,
+        competencia.id,
+        criterio.id,
+      );
+      const result = await listProgramaCriterios(
+        referenciaId,
+        competencia.id,
+      );
+      syncItems(result);
+      if (editingId === criterio.id) {
+        resetForm();
+      }
+      setMessage("Criterio de evaluacion eliminado.");
+      notify.success("Criterio de evaluacion eliminado", {
+        description: "El borrador fue actualizado con la lista vigente.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible eliminar el criterio de evaluacion", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const isBusy = state === "loading" || state === "saving" || state === "deleting";
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
@@ -819,29 +997,132 @@ function ProgramaCriteriosPanel({
           </h4>
         </div>
         <span className="text-xs font-semibold text-[var(--muted)]">
-          {sortedCriterios.length}
+          {sorted.length}
         </span>
       </div>
 
       <div className="mt-3 grid gap-2">
-        {sortedCriterios.length === 0 ? (
-          <CurriculumEmptyNote>Sin criterios importados.</CurriculumEmptyNote>
-        ) : (
-          sortedCriterios.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+        {state === "loading" ? (
+          <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs text-[var(--muted)]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Cargando criterios de evaluacion...
+          </div>
+        ) : null}
+
+        {errorMessage !== null ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-900"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{errorMessage}</p>
+          </div>
+        ) : null}
+
+        {message !== null ? (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-900"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{message}</p>
+          </div>
+        ) : null}
+
+        <form
+          onSubmit={(event) => void handleSubmit(event)}
+          className="grid gap-3 rounded-lg bg-white p-3"
+        >
+          <label className="grid gap-2">
+            <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+              descripcion
+            </span>
+            <textarea
+              value={form.descripcion}
+              onChange={(event) =>
+                setForm({ descripcion: event.target.value })
+              }
+              rows={3}
+              placeholder="Describe el criterio de evaluacion."
+              className="min-h-24 resize-none rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={isBusy}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
             >
-              <p className="text-sm leading-6 text-[var(--foreground)]">
-                {item.descripcion}
-              </p>
-              {item.resultado_id !== null ? (
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  Asignacion secundaria a RAP disponible
-                </p>
-              ) : null}
-            </div>
-          ))
+              {state === "saving" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : editingId === null ? (
+                <Plus className="h-4 w-4" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              {editingId === null ? "Crear criterio" : "Guardar criterio"}
+            </button>
+            {editingId !== null ? (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              >
+                <X className="h-4 w-4" />
+                Cancelar
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        {sorted.length === 0 ? (
+          <CurriculumEmptyNote>
+            Sin criterios de evaluacion registrados para esta competencia.
+          </CurriculumEmptyNote>
+        ) : (
+          <div className="grid gap-2">
+            {sorted.map((item) => (
+              <div
+                key={item.id}
+                className={cn(
+                  "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                  editingId === item.id
+                    ? "border-[var(--accent)]"
+                    : "border-[color:var(--card-border)]",
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+                    {item.descripcion}
+                  </p>
+                  {item.resultado_id !== null ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Asignacion secundaria a RAP disponible
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(item)}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={state === "deleting"}
+                    onClick={() => void handleDelete(item)}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </section>
@@ -1293,6 +1574,23 @@ export function ProgramaCompetenciasManager({
     [competencias, onCompetenciasSynced],
   );
 
+  const handleCriteriosSynced = useCallback(
+    (result: CriterioListResponse): void => {
+      onCompetenciasSynced({
+        referencia_id: result.referencia_id,
+        programa_id:
+          competencias.find((item) => item.id === result.competencia_id)
+            ?.programa_id ?? null,
+        competencias: competencias.map((item) =>
+          item.id === result.competencia_id
+            ? { ...item, criterios: result.criterios }
+            : item,
+        ),
+      });
+    },
+    [competencias, onCompetenciasSynced],
+  );
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -1609,7 +1907,12 @@ export function ProgramaCompetenciasManager({
                       handleConocimientosProcesoSynced
                     }
                   />
-                  <ProgramaCriteriosPanel criterios={competencia.criterios ?? []} />
+                  <ProgramaCriteriosPanel
+                    competencia={competencia}
+                    criterios={competencia.criterios ?? []}
+                    referenciaId={referenciaId}
+                    onCriteriosSynced={handleCriteriosSynced}
+                  />
                 </div>
               </div>
             </article>
