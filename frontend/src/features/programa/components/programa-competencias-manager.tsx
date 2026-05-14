@@ -24,6 +24,13 @@ import {
   updateProgramaCompetencia,
 } from "@/features/programa/competencias-api";
 import {
+  createProgramaConocimientoSaber,
+  deleteProgramaConocimientoSaber,
+  listProgramaConocimientosSaber,
+  ProgramaConocimientoSaberError,
+  updateProgramaConocimientoSaber,
+} from "@/features/programa/conocimientos-saber-api";
+import {
   createProgramaResultado,
   deleteProgramaResultado,
   listProgramaResultados,
@@ -35,6 +42,7 @@ import type {
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
   ConocimientoCurricular,
+  ConocimientoSaberListResponse,
   CriterioEvaluacionCurricular,
   ResultadoAprendizaje,
   ResultadoAprendizajeListResponse,
@@ -52,6 +60,10 @@ interface ResultadoFormState {
   descripcion: string;
 }
 
+interface ConocimientoSaberFormState {
+  descripcion: string;
+}
+
 const EMPTY_FORM: CompetenciaFormState = {
   codigo_competencia: "",
   nombre_competencia: "",
@@ -62,10 +74,15 @@ const EMPTY_RESULTADO_FORM: ResultadoFormState = {
   descripcion: "",
 };
 
+const EMPTY_CONOCIMIENTO_SABER_FORM: ConocimientoSaberFormState = {
+  descripcion: "",
+};
+
 function getErrorMessage(error: unknown): string {
   if (
     error instanceof ProgramaCompetenciaError ||
-    error instanceof ProgramaResultadoError
+    error instanceof ProgramaResultadoError ||
+    error instanceof ProgramaConocimientoSaberError
   ) {
     return error.detail;
   }
@@ -90,6 +107,16 @@ function validateForm(form: CompetenciaFormState): string | null {
 }
 
 function validateResultadoForm(form: ResultadoFormState): string | null {
+  if (form.descripcion.trim().length === 0) {
+    return "descripcion es obligatoria.";
+  }
+
+  return null;
+}
+
+function validateConocimientoSaberForm(
+  form: ConocimientoSaberFormState,
+): string | null {
   if (form.descripcion.trim().length === 0) {
     return "descripcion es obligatoria.";
   }
@@ -130,16 +157,184 @@ function CurriculumEmptyNote({
 }
 
 function ProgramaConocimientosPanel({
+  competencia,
   conocimientos,
+  onConocimientosSaberSynced,
+  referenciaId,
 }: Readonly<{
+  competencia: ProgramaCompetencia;
   conocimientos: ConocimientoCurricular[];
+  onConocimientosSaberSynced: (result: ConocimientoSaberListResponse) => void;
+  referenciaId: string;
 }>): React.JSX.Element {
-  const saber = sortByOrder(
+  const [saberes, setSaberes] = useState<ConocimientoCurricular[]>(
     conocimientos.filter((item) => item.tipo === "SABER"),
   );
+  const [form, setForm] = useState<ConocimientoSaberFormState>(
+    EMPTY_CONOCIMIENTO_SABER_FORM,
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [state, setState] = useState<OperationState>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const saber = useMemo(() => sortByOrder(saberes), [saberes]);
   const proceso = sortByOrder(
     conocimientos.filter((item) => item.tipo === "PROCESO"),
   );
+
+  useEffect(() => {
+    setSaberes(conocimientos.filter((item) => item.tipo === "SABER"));
+  }, [conocimientos]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadSaberes = async (): Promise<void> => {
+      setState("loading");
+      setErrorMessage(null);
+
+      try {
+        const result = await listProgramaConocimientosSaber(
+          referenciaId,
+          competencia.id,
+        );
+        if (isCurrent) {
+          setSaberes(result.conocimientos);
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setErrorMessage(getErrorMessage(error));
+        }
+      } finally {
+        if (isCurrent) {
+          setState("idle");
+        }
+      }
+    };
+
+    void loadSaberes();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [competencia.id, referenciaId]);
+
+  const resetForm = (): void => {
+    setForm(EMPTY_CONOCIMIENTO_SABER_FORM);
+    setEditingId(null);
+  };
+
+  const syncSaberes = (result: ConocimientoSaberListResponse): void => {
+    setSaberes(result.conocimientos);
+    onConocimientosSaberSynced(result);
+  };
+
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ): Promise<void> => {
+    event.preventDefault();
+    const validationMessage = validateConocimientoSaberForm(form);
+    if (validationMessage !== null) {
+      setErrorMessage(validationMessage);
+      notify.warning("Revisa el conocimiento SABER", {
+        description: validationMessage,
+      });
+      return;
+    }
+
+    setState("saving");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      const payload = { descripcion: form.descripcion.trim() };
+      const result =
+        editingId === null
+          ? await createProgramaConocimientoSaber(
+              referenciaId,
+              competencia.id,
+              payload,
+            )
+          : await updateProgramaConocimientoSaber(
+              referenciaId,
+              competencia.id,
+              editingId,
+              payload,
+            );
+
+      syncSaberes(result);
+      resetForm();
+      setMessage(
+        editingId === null
+          ? "Conocimiento SABER registrado."
+          : "Conocimiento SABER actualizado.",
+      );
+      notify.success("Conocimientos SABER sincronizados", {
+        description: "El borrador conserva la estructura curricular actual.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible guardar el conocimiento SABER", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const handleEdit = (conocimiento: ConocimientoCurricular): void => {
+    setEditingId(conocimiento.id);
+    setForm({ descripcion: conocimiento.descripcion });
+    setMessage(null);
+    setErrorMessage(null);
+  };
+
+  const handleDelete = async (
+    conocimiento: ConocimientoCurricular,
+  ): Promise<void> => {
+    const confirmed = window.confirm(
+      "Eliminar este conocimiento SABER? Esta accion requiere confirmacion.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setState("deleting");
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      await deleteProgramaConocimientoSaber(
+        referenciaId,
+        competencia.id,
+        conocimiento.id,
+      );
+      const result = await listProgramaConocimientosSaber(
+        referenciaId,
+        competencia.id,
+      );
+      syncSaberes(result);
+      if (editingId === conocimiento.id) {
+        resetForm();
+      }
+      setMessage("Conocimiento SABER eliminado.");
+      notify.success("Conocimiento SABER eliminado", {
+        description: "El borrador fue actualizado con la lista vigente.",
+      });
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      setErrorMessage(detail);
+      notify.error("No fue posible eliminar el conocimiento SABER", {
+        description: detail,
+      });
+    } finally {
+      setState("idle");
+    }
+  };
+
+  const isBusy = state === "loading" || state === "saving" || state === "deleting";
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
@@ -153,29 +348,112 @@ function ProgramaConocimientosPanel({
           </h4>
         </div>
         <span className="text-xs font-semibold text-[var(--muted)]">
-          {conocimientos.length}
+          {saber.length + proceso.length}
         </span>
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {[
-          ["Saber", saber],
-          ["Proceso", proceso],
-        ].map(([label, items]) => (
-          <div key={label as string} className="grid gap-2">
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
-              {label as string}
+              Saber
             </p>
-            {(items as ConocimientoCurricular[]).length === 0 ? (
-              <CurriculumEmptyNote>Sin registros importados.</CurriculumEmptyNote>
-            ) : (
-              <div className="grid gap-2">
-                {(items as ConocimientoCurricular[]).map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
-                  >
-                    <p className="text-sm leading-6 text-[var(--foreground)]">
+            <span className="inline-flex min-h-7 items-center rounded-full border border-[color:var(--card-border)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
+              {saber.length} registrado(s)
+            </span>
+          </div>
+
+          {state === "loading" ? (
+            <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs text-[var(--muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando conocimientos SABER...
+            </div>
+          ) : null}
+
+          {errorMessage !== null ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-900"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{errorMessage}</p>
+            </div>
+          ) : null}
+
+          {message !== null ? (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-900"
+            >
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{message}</p>
+            </div>
+          ) : null}
+
+          <form
+            onSubmit={(event) => void handleSubmit(event)}
+            className="grid gap-3 rounded-lg bg-white p-3"
+          >
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+                descripcion
+              </span>
+              <textarea
+                value={form.descripcion}
+                onChange={(event) =>
+                  setForm({ descripcion: event.target.value })
+                }
+                rows={3}
+                placeholder="Describe el conocimiento de saber."
+                className="min-h-24 resize-none rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                {state === "saving" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : editingId === null ? (
+                  <Plus className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {editingId === null ? "Crear SABER" : "Guardar SABER"}
+              </button>
+              {editingId !== null ? (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {saber.length === 0 ? (
+            <CurriculumEmptyNote>
+              Sin conocimientos SABER registrados para esta competencia.
+            </CurriculumEmptyNote>
+          ) : (
+            <div className="grid gap-2">
+              {saber.map((item) => (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                    editingId === item.id
+                      ? "border-[var(--accent)]"
+                      : "border-[color:var(--card-border)]",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm leading-6 break-words text-[var(--foreground)]">
                       {item.descripcion}
                     </p>
                     {item.resultado_id !== null ? (
@@ -184,11 +462,57 @@ function ProgramaConocimientosPanel({
                       </p>
                     ) : null}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(item)}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={state === "deleting"}
+                      onClick={() => void handleDelete(item)}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-2">
+          <p className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+            Proceso
+          </p>
+          {proceso.length === 0 ? (
+            <CurriculumEmptyNote>Sin registros importados.</CurriculumEmptyNote>
+          ) : (
+            <div className="grid gap-2">
+              {proceso.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+                >
+                  <p className="text-sm leading-6 text-[var(--foreground)]">
+                    {item.descripcion}
+                  </p>
+                  {item.resultado_id !== null ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Asignacion secundaria a RAP disponible
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -637,6 +961,31 @@ export function ProgramaCompetenciasManager({
     [competencias, onCompetenciasSynced],
   );
 
+  const handleConocimientosSaberSynced = useCallback(
+    (result: ConocimientoSaberListResponse): void => {
+      onCompetenciasSynced({
+        referencia_id: result.referencia_id,
+        programa_id:
+          competencias.find((item) => item.id === result.competencia_id)
+            ?.programa_id ?? null,
+        competencias: competencias.map((item) => {
+          if (item.id !== result.competencia_id) {
+            return item;
+          }
+
+          const procesos = (item.conocimientos ?? []).filter(
+            (conocimiento) => conocimiento.tipo === "PROCESO",
+          );
+          return {
+            ...item,
+            conocimientos: [...result.conocimientos, ...procesos],
+          };
+        }),
+      });
+    },
+    [competencias, onCompetenciasSynced],
+  );
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -945,7 +1294,10 @@ export function ProgramaCompetenciasManager({
                 />
                 <div className="grid gap-3 xl:grid-cols-2">
                   <ProgramaConocimientosPanel
+                    competencia={competencia}
                     conocimientos={competencia.conocimientos ?? []}
+                    referenciaId={referenciaId}
+                    onConocimientosSaberSynced={handleConocimientosSaberSynced}
                   />
                   <ProgramaCriteriosPanel criterios={competencia.criterios ?? []} />
                 </div>

@@ -7,6 +7,9 @@ from src.infrastructure.config.settings import get_settings
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
 )
+from src.interfaces.http.controllers.conocimientos_saber import (
+    router as conocimientos_saber_router,
+)
 from src.interfaces.http.controllers.drafts import router as drafts_router
 from src.interfaces.http.controllers.health import router as health_router
 from src.interfaces.http.controllers.pendientes_curriculares import (
@@ -46,6 +49,7 @@ def create_application() -> FastAPI:
     application.include_router(programa_excel_router)
     application.include_router(competencias_router)
     application.include_router(resultados_aprendizaje_router)
+    application.include_router(conocimientos_saber_router)
     application.include_router(pendientes_curriculares_router)
 
     return application
