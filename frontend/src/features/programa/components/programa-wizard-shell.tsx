@@ -22,6 +22,7 @@ import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
 import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
+import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
 import { ProgramaExcelImport } from "@/features/programa/components/programa-excel-import";
 import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
@@ -115,7 +116,7 @@ const STEP_CONTENT: Record<
     checks: [
       "Vista consolidada",
       "Correccion antes de cierre",
-      "Sin cierre implementado",
+      "Navegacion a edicion",
     ],
     icon: BookOpenCheck,
   },
@@ -221,6 +222,7 @@ function StepWorkspace({
   onProgramaFieldChange,
   onPersistDraftBeforeExcelPreview,
   onNoteChange,
+  onNavigateToStep,
   programaExcelResult,
   programaPdfResult,
   competencias,
@@ -247,6 +249,7 @@ function StepWorkspace({
   onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
+  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   competencias: ProgramaCompetencia[];
 }>): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
@@ -337,21 +340,16 @@ function StepWorkspace({
               </section>
             </div>
           ) : (
-            <>
-              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-                {content.slotLabel}
-              </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                {content.checks.map((check) => (
-                  <div
-                    key={check}
-                    className="rounded-lg bg-[var(--paper-strong)] px-3 py-3 text-sm leading-5 text-[var(--foreground)]"
-                  >
-                    {check}
-                  </div>
-                ))}
-              </div>
-            </>
+            <ProgramaConsolidadoRevision
+              codigoPrograma={programaValue.codigo_programa}
+              nombrePrograma={programaValue.nombre_programa}
+              versionPrograma={programaValue.version_programa}
+              entryMode={entryMode}
+              competencias={competencias}
+              pdfResult={programaPdfResult}
+              excelResult={programaExcelResult}
+              onNavigateToStep={onNavigateToStep}
+            />
           )}
         </div>
 
@@ -673,6 +671,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }
+              onNavigateToStep={controller.goToStep}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
