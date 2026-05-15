@@ -28,6 +28,7 @@ import { ProgramaExcelImport } from "@/features/programa/components/programa-exc
 import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
+import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
 import type {
   ProgramaEntryMode,
@@ -658,9 +659,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 ] ?? ""
               }
               entryMode={controller.payload.meta.entryMode}
-              programaExcelResult={
-                controller.payload.documental.programa_excel
-              }
+              programaExcelResult={controller.payload.documental.programa_excel}
               programaPdfResult={controller.payload.documental.programa_pdf}
               competencias={controller.payload.curricular.competencias}
               referenceId={
@@ -677,12 +676,23 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               onProgramaPdfUploaded={controller.updateProgramaPdfResult}
               onProgramaFieldChange={controller.updateProgramaBaseField}
-              onPersistDraftBeforeExcelPreview={controller.persistActiveDraftNow}
+              onPersistDraftBeforeExcelPreview={
+                controller.persistActiveDraftNow
+              }
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }
               onNavigateToStep={controller.goToStep}
               onProgramaCerrado={controller.markProgramaClosed}
+            />
+
+            <ProyectoDisponibilidadPanel
+              referenciaId={
+                controller.activeReferenceId ??
+                controller.payload.meta.referenciaId
+              }
+              programaEstado={controller.draftStatus}
+              onNavigateToStep={controller.goToStep}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
