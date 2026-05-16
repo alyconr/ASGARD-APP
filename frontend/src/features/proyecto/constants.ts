@@ -64,6 +64,10 @@ function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function asCleanString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value.trim() : fallback;
+}
+
 function asNullableString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -104,6 +108,9 @@ export function createEmptyProyectoPayload(
     },
     proyecto: {
       proyecto_formativo_id: null,
+      codigo_proyecto: "",
+      nombre_proyecto: "",
+      version_proyecto: "",
     },
     documental: {
       proyecto_pdf: null,
@@ -165,6 +172,9 @@ export function normalizeProyectoPayload(
       proyecto_formativo_id: asNullableString(
         proyecto?.proyecto_formativo_id,
       ),
+      codigo_proyecto: asCleanString(proyecto?.codigo_proyecto),
+      nombre_proyecto: asCleanString(proyecto?.nombre_proyecto),
+      version_proyecto: asCleanString(proyecto?.version_proyecto),
     },
   };
 }

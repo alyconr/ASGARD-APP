@@ -29,6 +29,9 @@ export interface ProyectoWizardPayload {
   };
   proyecto: {
     proyecto_formativo_id: string | null;
+    codigo_proyecto: string;
+    nombre_proyecto: string;
+    version_proyecto: string;
   };
   documental: {
     proyecto_pdf: null;

@@ -49,6 +49,7 @@ function mockInactiveController(overrides = {}) {
     resetFlow: vi.fn(),
     startNewFlow: vi.fn(),
     updateContinueReferenceInput: vi.fn(),
+    updateProyectoBaseField: vi.fn(),
     updateStepNote: vi.fn(),
     ...overrides,
   } as unknown as ReturnType<typeof useProyectoWizardModule.useProyectoWizard>);
@@ -104,15 +105,17 @@ describe("ProyectoWizardShell", () => {
     expect(updateContinueReferenceInput).toHaveBeenCalledWith(nextInputValue);
   });
 
-  it("navigates between base project steps without rendering task 17 fields", () => {
+  it("renders the project base form in the datos-proyecto step", () => {
     const goToNextStep = vi.fn();
     const goToPreviousStep = vi.fn();
+    const updateProyectoBaseField = vi.fn();
     mockInactiveController({
       activeReferenceId: projectReferenceId,
       canMoveNext: true,
       canMovePrevious: false,
       goToNextStep,
       goToPreviousStep,
+      updateProyectoBaseField,
       isWizardActive: true,
       lastSavedAt: "2026-05-16T10:00:00.000Z",
       payload: {
@@ -125,7 +128,12 @@ describe("ProyectoWizardShell", () => {
           lastInteractionAt: "2026-05-16T09:00:00.000Z",
         },
         wizard: { notesByStep: {} },
-        proyecto: { proyecto_formativo_id: null },
+        proyecto: {
+          proyecto_formativo_id: null,
+          codigo_proyecto: "",
+          nombre_proyecto: "",
+          version_proyecto: "",
+        },
         documental: { proyecto_pdf: null, fuente_estructurada: null },
         estructura: { fases: [], actividades: [] },
       },
@@ -133,8 +141,20 @@ describe("ProyectoWizardShell", () => {
 
     render(<ProyectoWizardShell availability={availability} />);
 
-    expect(screen.getByText("Slot reservado")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/codigo del proyecto/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Datos minimos del proyecto")).toBeInTheDocument();
+    expect(screen.getByLabelText(/codigo del proyecto/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre del proyecto/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/version del proyecto/i)).toBeInTheDocument();
+    expect(screen.queryByText("Slot reservado")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/codigo del proyecto/i), {
+      target: { value: "PR-001" },
+    });
+
+    expect(updateProyectoBaseField).toHaveBeenCalledWith(
+      "codigo_proyecto",
+      "PR-001",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
 

@@ -15,13 +15,16 @@ import {
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
+import { ProyectoBaseForm } from "@/features/proyecto/components/proyecto-base-form";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
 import type {
   ProyectoDisponibilidadResponse,
+  ProyectoWizardPayload,
   ProyectoWizardStepDefinition,
   ProyectoWizardStepId,
 } from "@/features/proyecto/types";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
+import type { ProyectoBaseField } from "@/features/proyecto/validation";
 import { cn } from "@/lib/utils";
 
 const STEP_ICONS: Record<
@@ -134,10 +137,14 @@ function StepWorkspace({
   currentStep,
   currentStepNote,
   onNoteChange,
+  onProyectoFieldChange,
+  proyectoValue,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   currentStepNote: string;
   onNoteChange: (value: string) => void;
+  onProyectoFieldChange: (field: ProyectoBaseField, value: string) => void;
+  proyectoValue: ProyectoWizardPayload["proyecto"];
 }>): React.JSX.Element {
   const Icon = STEP_ICONS[currentStep.id];
 
@@ -164,14 +171,23 @@ function StepWorkspace({
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
-          <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-            Slot reservado
-          </p>
-          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            {currentStep.taskRef} conectara aqui su modulo especifico. Por
-            ahora este espacio solo guarda navegacion, notas y estado del
-            borrador.
-          </p>
+          {currentStep.id === "datos-proyecto" ? (
+            <ProyectoBaseForm
+              value={proyectoValue}
+              onFieldChange={onProyectoFieldChange}
+            />
+          ) : (
+            <>
+              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
+                Slot reservado
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                {currentStep.taskRef} conectara aqui su modulo especifico. Por
+                ahora este espacio solo guarda navegacion, notas y estado del
+                borrador.
+              </p>
+            </>
+          )}
         </div>
 
         <label className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
@@ -399,6 +415,8 @@ export function ProyectoWizardShell({
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }
+              onProyectoFieldChange={controller.updateProyectoBaseField}
+              proyectoValue={controller.payload.proyecto}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">

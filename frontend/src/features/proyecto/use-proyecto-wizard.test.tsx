@@ -58,6 +58,9 @@ function buildProjectPayload(referenceId = projectReferenceId): ProyectoWizardPa
     },
     proyecto: {
       proyecto_formativo_id: null,
+      codigo_proyecto: "PR-001",
+      nombre_proyecto: "Proyecto formativo base",
+      version_proyecto: "1",
     },
     documental: {
       proyecto_pdf: null,
@@ -105,6 +108,11 @@ describe("useProyectoWizard", () => {
           programaReferenciaId: programReferenceId,
           programaId: programId,
         }),
+        proyecto: expect.objectContaining({
+          codigo_proyecto: "",
+          nombre_proyecto: "",
+          version_proyecto: "",
+        }),
       }),
       estado_borrador: "BORRADOR",
     });
@@ -142,6 +150,66 @@ describe("useProyectoWizard", () => {
     expect(result.current.payload?.wizard.notesByStep["fuente-proyecto"]).toBe(
       "Revisar soporte despues",
     );
+    expect(result.current.payload?.proyecto.codigo_proyecto).toBe("PR-001");
+    expect(result.current.payload?.proyecto.nombre_proyecto).toBe(
+      "Proyecto formativo base",
+    );
+    expect(result.current.payload?.proyecto.version_proyecto).toBe("1");
+  });
+
+  it("updates and autosaves the base project fields in the PROYECTO draft", async () => {
+    const { result } = renderHook(() =>
+      useProyectoWizard({
+        programaId: programId,
+        programaReferenciaId: programReferenceId,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.isBootstrapping).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.startNewFlow();
+    });
+
+    act(() => {
+      result.current.updateProyectoBaseField("codigo_proyecto", " PR-001 ");
+      result.current.updateProyectoBaseField(
+        "nombre_proyecto",
+        " Proyecto formativo base ",
+      );
+      result.current.updateProyectoBaseField("version_proyecto", " 1 ");
+    });
+
+    expect(result.current.payload?.proyecto).toEqual(
+      expect.objectContaining({
+        codigo_proyecto: "PR-001",
+        nombre_proyecto: "Proyecto formativo base",
+        version_proyecto: "1",
+      }),
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 600));
+    });
+
+    await waitFor(() => {
+      expect(mockSaveDraft).toHaveBeenLastCalledWith(
+        "PROYECTO",
+        projectReferenceId,
+        expect.objectContaining({
+          paso_actual: "datos-proyecto",
+          payload_json: expect.objectContaining({
+            proyecto: expect.objectContaining({
+              codigo_proyecto: "PR-001",
+              nombre_proyecto: "Proyecto formativo base",
+              version_proyecto: "1",
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   it("navigates and autosaves the current project step", async () => {
@@ -161,10 +229,12 @@ describe("useProyectoWizard", () => {
     });
 
     act(() => {
+      result.current.updateProyectoBaseField("codigo_proyecto", "PR-001");
       result.current.goToNextStep();
     });
 
     expect(result.current.currentStepId).toBe("fuente-proyecto");
+    expect(result.current.payload?.proyecto.codigo_proyecto).toBe("PR-001");
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 600));
@@ -176,9 +246,13 @@ describe("useProyectoWizard", () => {
         projectReferenceId,
         expect.objectContaining({
           paso_actual: "fuente-proyecto",
+          payload_json: expect.objectContaining({
+            proyecto: expect.objectContaining({
+              codigo_proyecto: "PR-001",
+            }),
+          }),
         }),
       );
     });
-
   });
 });
