@@ -2,6 +2,8 @@ import type { DraftStatus } from "@/features/drafts/types";
 
 const ACTIVE_PROGRAMA_DRAFT_KEY = "sena.active-programa-draft-reference";
 const KNOWN_PROGRAMA_DRAFTS_KEY = "sena.known-programa-drafts";
+const ACTIVE_PROYECTO_DRAFT_KEY = "sena.active-proyecto-draft-reference";
+const KNOWN_PROYECTO_DRAFTS_KEY = "sena.known-proyecto-drafts";
 
 export interface KnownDraftSummary {
   referenciaId: string;
@@ -108,5 +110,77 @@ export function forgetProgramaDraft(referenceId: string): KnownDraftSummary[] {
 
 export function clearKnownProgramaDrafts(): KnownDraftSummary[] {
   removeLocalStorage(KNOWN_PROGRAMA_DRAFTS_KEY);
+  return [];
+}
+
+export function getActiveProyectoDraftReference(): string | null {
+  return readLocalStorage(ACTIVE_PROYECTO_DRAFT_KEY);
+}
+
+export function setActiveProyectoDraftReference(referenceId: string): void {
+  writeLocalStorage(ACTIVE_PROYECTO_DRAFT_KEY, referenceId);
+}
+
+export function clearActiveProyectoDraftReference(): void {
+  removeLocalStorage(ACTIVE_PROYECTO_DRAFT_KEY);
+}
+
+export function listKnownProyectoDrafts(): KnownDraftSummary[] {
+  const rawValue = readLocalStorage(KNOWN_PROYECTO_DRAFTS_KEY);
+  if (rawValue === null) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item): item is KnownDraftSummary => {
+        if (typeof item !== "object" || item === null) {
+          return false;
+        }
+
+        const candidate = item as Partial<KnownDraftSummary>;
+        return (
+          typeof candidate.referenciaId === "string" &&
+          typeof candidate.pasoActual === "string" &&
+          typeof candidate.updatedAt === "string" &&
+          typeof candidate.estado === "string" &&
+          typeof candidate.label === "string"
+        );
+      })
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  } catch {
+    return [];
+  }
+}
+
+export function rememberProyectoDraft(
+  summary: KnownDraftSummary,
+): KnownDraftSummary[] {
+  const nextDrafts = [
+    summary,
+    ...listKnownProyectoDrafts().filter(
+      (draft) => draft.referenciaId !== summary.referenciaId,
+    ),
+  ].slice(0, 8);
+
+  writeLocalStorage(KNOWN_PROYECTO_DRAFTS_KEY, JSON.stringify(nextDrafts));
+  return nextDrafts;
+}
+
+export function forgetProyectoDraft(referenceId: string): KnownDraftSummary[] {
+  const nextDrafts = listKnownProyectoDrafts().filter(
+    (draft) => draft.referenciaId !== referenceId,
+  );
+  writeLocalStorage(KNOWN_PROYECTO_DRAFTS_KEY, JSON.stringify(nextDrafts));
+  return nextDrafts;
+}
+
+export function clearKnownProyectoDrafts(): KnownDraftSummary[] {
+  removeLocalStorage(KNOWN_PROYECTO_DRAFTS_KEY);
   return [];
 }

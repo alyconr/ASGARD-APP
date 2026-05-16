@@ -7,6 +7,7 @@ import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
 const referenciaId = "11111111-1111-4111-9111-111111111111";
 
 afterEach(() => {
+  localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -59,6 +60,9 @@ describe("ProyectoDisponibilidadPanel", () => {
       screen.getByText(/bloqueado hasta que el programa/i),
     ).toBeInTheDocument();
     expect(screen.getByText("BLOQUEADO")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Wizard base del proyecto"),
+    ).not.toBeInTheDocument();
   });
 
   it("navigates to program close corrections from blocked panel", async () => {
@@ -110,6 +114,9 @@ describe("ProyectoDisponibilidadPanel", () => {
     expect(
       screen.getByRole("button", { name: /completar programa/i }),
     ).toBeDisabled();
+    expect(
+      await screen.findByLabelText("Wizard base del proyecto"),
+    ).toBeInTheDocument();
   });
 
   it("updates visually when the program status changes to complete", async () => {

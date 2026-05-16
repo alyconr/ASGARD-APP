@@ -12,6 +12,7 @@ import {
   ProyectoGateError,
   consultarDisponibilidadProyecto,
 } from "@/features/proyecto/proyecto-gate-api";
+import { ProyectoWizardShell } from "@/features/proyecto/components/proyecto-wizard-shell";
 import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
 import type { DraftStatus } from "@/features/drafts/types";
@@ -179,6 +180,12 @@ export function ProyectoDisponibilidadPanel({
           </span>
         </p>
       </div>
+
+      {!isBlocked ? (
+        <div className="mt-4 border-t border-[var(--line)] pt-4">
+          <ProyectoWizardShell availability={availability} />
+        </div>
+      ) : null}
     </section>
   );
 }
