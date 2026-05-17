@@ -11,6 +11,6 @@ args = ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql:
 [mcp_servers.context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]
-env = { CONTEXT7_API_KEY = "ctx7sk-5833125b-4c6f-4ed4-b55a-0851cf188baa" }
+env = { CONTEXT7_API_KEY = "" }
 # END RAPID OS MCP
 
