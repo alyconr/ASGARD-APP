@@ -114,15 +114,12 @@ describe("programa constants", () => {
               etag: "etag",
             },
             diagnostico: {
-              estado_legibilidad: "PARCIALMENTE_LEGIBLE",
-              motivo: "ESTRUCTURA_NO_RECONOCIDA",
               resumen: "Texto parcial",
               has_text_layer: true,
               analyzed_pages: 3,
               pages_with_text: 1,
               text_character_count: 120,
-              can_attempt_extraction: false,
-              requires_manual_entry: true,
+              almacenamiento_exitoso: true,
             },
             uso: "EVIDENCIA_DOCUMENTAL",
             updated_at: "2026-04-27T00:00:00Z",
@@ -135,9 +132,9 @@ describe("programa constants", () => {
       expect(normalized.documental.programa_pdf?.documento.storage_key).toBe(
         "programas/ref/documentos/programa.pdf",
       );
-      expect(
-        normalized.documental.programa_pdf?.diagnostico.estado_legibilidad,
-      ).toBe("PARCIALMENTE_LEGIBLE");
+      expect(normalized.documental.programa_pdf?.diagnostico.resumen).toBe(
+        "Texto parcial",
+      );
       expect(normalized.documental.programa_pdf?.uso).toBe(
         "EVIDENCIA_DOCUMENTAL",
       );

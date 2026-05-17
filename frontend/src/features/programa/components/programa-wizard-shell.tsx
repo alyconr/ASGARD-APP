@@ -7,11 +7,9 @@ import {
   ArrowRight,
   BookOpenCheck,
   ClipboardList,
-  FileText,
   FileSpreadsheet,
   FolderOpen,
   ListX,
-  NotebookText,
   RefreshCcw,
   Route,
   Save,
@@ -20,7 +18,7 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
-import { ProgramaBaseForm } from "@/features/programa/components/programa-base-form";
+import { ProgramaBaseInfo } from "@/features/programa/components/programa-base-info";
 import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
@@ -31,7 +29,6 @@ import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
 import type {
-  ProgramaEntryMode,
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
   ProgramaExcelImportResponse,
@@ -42,77 +39,37 @@ import type {
   ProgramaWizardStepDefinition,
   ProgramaWizardStepId,
 } from "@/features/programa/types";
-import type { ProgramaBaseField } from "@/features/programa/validation";
-
-const ENTRY_MODE_COPY: Record<
-  Exclude<ProgramaEntryMode, null>,
-  {
-    label: string;
-    description: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }
-> = {
-  PDF: {
-    label: "PDF",
-    description: "Documento soporte: se almacena en MinIO y no extrae datos.",
-    icon: FileText,
-  },
-  EXCEL: {
-    label: "Excel",
-    description:
-      "Workbook canonico para preview e importacion curricular estructurada.",
-    icon: FileSpreadsheet,
-  },
-};
 
 const STEP_CONTENT: Record<
   ProgramaWizardStepId,
   {
     label: string;
     description: string;
-    slotLabel: string;
-    checks: string[];
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
   "datos-programa": {
     label: "Datos base del programa",
     description:
-      "Captura los campos minimos del programa y conserva avances parciales.",
-    slotLabel: "Formulario base",
-    checks: [
-      "Misma referencia del flujo",
-      "Paso actual persistido",
-      "Borrador editable",
-    ],
+      "Los datos del programa provienen de la importacion Excel canonica. Este paso muestra el estado actual de los datos en el borrador.",
     icon: ClipboardList,
   },
   "origen-documental": {
     label: "Origen de informacion",
     description:
       "PDF como evidencia documental y Excel canonico como fuente curricular.",
-    slotLabel: "PDF soporte y Excel canonico",
-    checks: ["PDF en MinIO", "Preview Excel", "Importacion confirmada"],
     icon: FileSpreadsheet,
   },
   "estructura-curricular": {
     label: "Estructura curricular",
     description:
       "El contenedor ya separa el trabajo curricular de la captura inicial.",
-    slotLabel: "Slot curricular",
-    checks: ["Competencias", "Resultados", "Saberes, procesos y criterios"],
     icon: FolderOpen,
   },
   "revision-programa": {
     label: "Revision del programa",
     description:
       "La revision se mantiene como paso independiente antes de cualquier cierre.",
-    slotLabel: "Slot de revision consolidada",
-    checks: [
-      "Vista consolidada",
-      "Correccion antes de cierre",
-      "Navegacion a edicion",
-    ],
     icon: BookOpenCheck,
   },
 };
@@ -161,35 +118,6 @@ function ActionButton({
   );
 }
 
-function EntryModeButton({
-  mode,
-  onSelect,
-}: Readonly<{
-  mode: Exclude<ProgramaEntryMode, null>;
-  onSelect: () => void;
-}>): React.JSX.Element {
-  const copy = ENTRY_MODE_COPY[mode];
-  const Icon = copy.icon;
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white p-4 text-left transition hover:border-[var(--accent)] hover:shadow-[0_12px_28px_rgba(23,53,47,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-    >
-      <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="text-base font-semibold text-[var(--foreground)]">
-        {copy.label}
-      </span>
-      <span className="text-sm leading-6 text-[var(--muted)]">
-        {copy.description}
-      </span>
-    </button>
-  );
-}
-
 function ErrorBanner({
   message,
 }: Readonly<{ message: string }>): React.JSX.Element {
@@ -207,27 +135,23 @@ function ErrorBanner({
 function StepWorkspace({
   currentStep,
   currentStepNote,
-  entryMode,
+  programaExcelResult,
+  programaPdfResult,
+  referenceId,
+  estadoBorrador,
   programaValue,
-  onEntryModeChange,
-  onProgramaPdfUploaded,
   onProgramaExcelPreviewed,
   onProgramaExcelImported,
   onProgramaCompetenciasSynced,
-  onProgramaFieldChange,
+  onProgramaPdfUploaded,
   onPersistDraftBeforeExcelPreview,
   onNoteChange,
   onNavigateToStep,
   onProgramaCerrado,
-  programaExcelResult,
-  programaPdfResult,
   competencias,
-  referenceId,
-  estadoBorrador,
 }: Readonly<{
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
-  entryMode: ProgramaEntryMode;
   programaExcelResult: ProgramaExcelImportState | null;
   programaPdfResult: ProgramaPdfUploadResult | null;
   referenceId: string;
@@ -237,14 +161,12 @@ function StepWorkspace({
     nombre_programa: string;
     version_programa: string;
   };
-  onEntryModeChange: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
   onProgramaExcelPreviewed: (result: ProgramaExcelPreviewResponse) => void;
   onProgramaExcelImported: (result: ProgramaExcelImportResponse) => void;
   onProgramaCompetenciasSynced: (
     result: ProgramaCompetenciaListResponse,
   ) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
-  onProgramaFieldChange: (field: ProgramaBaseField, value: string) => void;
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
@@ -252,7 +174,7 @@ function StepWorkspace({
     typeof ProgramaConsolidadoRevision
   >[0]["onProgramaCerrado"];
   competencias: ProgramaCompetencia[];
-}>): React.JSX.Element {
+}>: React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
 
@@ -276,38 +198,10 @@ function StepWorkspace({
         </span>
       </header>
 
-          {currentStep.id === "origen-documental" ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {(["PDF", "EXCEL"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => onEntryModeChange(mode)}
-              className={cn(
-                "rounded-lg border px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
-                entryMode === mode
-                  ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                  : "border-[color:var(--card-border)] bg-white hover:border-[var(--accent)]/50",
-              )}
-            >
-              <p className="text-sm font-semibold text-[var(--foreground)]">
-                {ENTRY_MODE_COPY[mode].label}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                {ENTRY_MODE_COPY[mode].description}
-              </p>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "datos-programa" ? (
-            <ProgramaBaseForm
-              value={programaValue}
-              onFieldChange={onProgramaFieldChange}
-            />
+            <ProgramaBaseInfo value={programaValue} />
           ) : currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
               <ProgramaDocumentUpload
@@ -345,7 +239,6 @@ function StepWorkspace({
               codigoPrograma={programaValue.codigo_programa}
               nombrePrograma={programaValue.nombre_programa}
               versionPrograma={programaValue.version_programa}
-              entryMode={entryMode}
               competencias={competencias}
               pdfResult={programaPdfResult}
               excelResult={programaExcelResult}
@@ -375,11 +268,9 @@ function StepWorkspace({
 }
 
 function DraftSummary({
-  entryMode,
   referenceId,
   stepLabel,
 }: Readonly<{
-  entryMode: ProgramaEntryMode;
   referenceId: string | null;
   stepLabel: string;
 }>): React.JSX.Element {
@@ -394,9 +285,9 @@ function DraftSummary({
         </dd>
       </div>
       <div>
-        <dt className="text-[var(--muted)]">Modalidad</dt>
+        <dt className="text-[var(--muted)]">Fuente</dt>
         <dd className="mt-1 font-semibold text-[var(--foreground)]">
-          {entryMode === null ? "Pendiente" : ENTRY_MODE_COPY[entryMode].label}
+          Excel canonico
         </dd>
       </div>
       <div>
@@ -451,8 +342,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
               Wizard base del programa
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Flujo de captura con borrador persistente, navegacion por pasos y
-              recuperacion por referencia estable.
+              Flujo de importacion con borrador persistente, navegacion por pasos
+              y recuperacion por referencia estable. La fuente estructurada del
+              programa es la matriz Excel canonica.
             </p>
           </div>
 
@@ -487,19 +379,28 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <EntryModeButton
-                mode="PDF"
-                onSelect={() => void controller.startNewFlow("PDF")}
-              />
-              <EntryModeButton
-                mode="EXCEL"
-                onSelect={() => void controller.startNewFlow("EXCEL")}
-              />
+              <button
+                type="button"
+                onClick={() => void controller.startNewFlow("EXCEL")}
+                className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white p-4 text-left transition hover:border-[var(--accent)] hover:shadow-[0_12px_28px_rgba(23,53,47,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              >
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+                  <FileSpreadsheet className="h-5 w-5" />
+                </span>
+                <span className="text-base font-semibold text-[var(--foreground)]">
+                  Excel canonico
+                </span>
+                <span className="text-sm leading-6 text-[var(--muted)]">
+                  Workbook canonico para preview e importacion curricular
+                  estructurada.
+                </span>
+              </button>
             </div>
 
             <div className="mt-5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--muted)]">
               El proceso inicia en estado BORRADOR y conserva el mismo
-              referencia_id durante todo el wizard.
+              referencia_id durante todo el wizard. La fuente estructurada del
+              programa es la matriz Excel canonica.
             </div>
           </section>
 
@@ -627,7 +528,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </section>
 
             <DraftSummary
-              entryMode={controller.payload.meta.entryMode}
               referenceId={
                 controller.activeReferenceId ??
                 controller.payload.meta.referenciaId
@@ -648,7 +548,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
                   controller.currentStepId
                 ] ?? ""
               }
-              entryMode={controller.payload.meta.entryMode}
               programaExcelResult={controller.payload.documental.programa_excel}
               programaPdfResult={controller.payload.documental.programa_pdf}
               competencias={controller.payload.curricular.competencias}
@@ -658,14 +557,12 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               estadoBorrador={controller.draftStatus}
               programaValue={controller.payload.programa}
-              onEntryModeChange={controller.setEntryMode}
               onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
               onProgramaExcelImported={controller.updateProgramaExcelImport}
               onProgramaCompetenciasSynced={
                 controller.updateProgramaCompetencias
               }
               onProgramaPdfUploaded={controller.updateProgramaPdfResult}
-              onProgramaFieldChange={controller.updateProgramaBaseField}
               onPersistDraftBeforeExcelPreview={
                 controller.persistActiveDraftNow
               }

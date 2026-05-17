@@ -88,7 +88,6 @@ export function ProgramaConsolidadoRevision({
   versionPrograma,
   referenciaId = "",
   estadoBorrador = "BORRADOR",
-  entryMode,
   competencias,
   pdfResult,
   excelResult,
@@ -100,14 +99,12 @@ export function ProgramaConsolidadoRevision({
   versionPrograma: string;
   referenciaId?: string;
   estadoBorrador?: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
-  entryMode: ProgramaEntryMode;
   competencias: ProgramaCompetencia[];
   pdfResult: ProgramaPdfUploadResult | null;
   excelResult: ProgramaExcelImportState | null;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
-}>): React.JSX.Element {
-  const source = (entryMode ?? "EXCEL") as EntrySource;
+}>: React.JSX.Element {
   const [validation, setValidation] =
     useState<ProgramaCompletitudResponse | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -243,9 +240,8 @@ export function ProgramaConsolidadoRevision({
               Datos del programa
             </h3>
             <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-              {source !== null
-                ? `Fuente: ${ENTRY_SOURCE_COPY[source]}`
-                : "Sin fuente documental definida"}
+              Fuente del programa: Excel canonico. El PDF se conserva como
+              evidencia documental en MinIO.
             </p>
           </div>
           <button
@@ -265,15 +261,6 @@ export function ProgramaConsolidadoRevision({
         </dl>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {source !== null ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-              {(() => {
-                const Icon = ENTRY_SOURCE_ICON[source];
-                return <Icon className="h-3.5 w-3.5" />;
-              })()}
-              {ENTRY_SOURCE_COPY[source]}
-            </span>
-          ) : null}
           {hasPdf ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
               <FileText className="h-3.5 w-3.5" />

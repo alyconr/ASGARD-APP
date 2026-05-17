@@ -82,7 +82,7 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 
 ---
 
-## HU-06. Completar manualmente campos faltantes del programa
+## HU-06. Completar campos faltantes post-importacion
 **Como** usuario gestor pedagógico  
 **Quiero** completar manualmente los campos no importados por Excel  
 **Para** continuar el proceso sin bloqueos.
@@ -230,16 +230,16 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ### Criterios de aceptación
 - Los datos importados deben revisarse.
 - Deben guardarse en borrador.
-- Debe permitirse correccion manual de lo faltante.
+- Debe permitirse correccion post-importacion de lo faltante.
 
-## HU-19. Completar manualmente el proyecto
+## HU-19. Completar campos faltantes post-importacion del proyecto
 **Como** usuario gestor pedagógico  
 **Quiero** completar manualmente el proyecto  
 **Para** terminar la captura si la importacion no fue suficiente.
 
 ### Criterios de aceptación
 - Debe permitirse ingresar los campos faltantes que la matriz no resolvió.
-- Debe validarse la relación fase-actividad.
+- Debe validarse la relacion fase-actividad.
 - El ingreso manual NO es fuente alternativa de construccion curricular.
 
 ---

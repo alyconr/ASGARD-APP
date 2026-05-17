@@ -247,8 +247,8 @@ tener `rap_id`. Si se puede resolver un resultado especifico, el sistema puede
 guardar `resultado_id`; si no, debe importar el elemento con `resultado_id = NULL`
 y conservarlo asociado a la competencia.
 
-## RN-14. Fallback manual para lo estrictamente faltante
-Si la importacion Excel no permite resolver ciertos campos de forma confiable, el sistema debe habilitar el ingreso manual inmediato **solo para completar lo faltante**, nunca como fuente alternativa de construccion curricular.
+## RN-14. Correccion editorial post-importacion
+Si la importacion Excel no permite resolver ciertos campos de forma confiable, el sistema debe habilitar la correccion editorial **solo para completar lo faltante**, nunca como fuente alternativa de construccion curricular.
 
 ## RN-15. Confirmacion humana obligatoria
 Ningun dato importado automaticamente se considera definitivo sin revision y confirmacion explícita del usuario.

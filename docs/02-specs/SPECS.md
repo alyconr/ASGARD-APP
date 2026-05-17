@@ -27,7 +27,7 @@ La Fase 1 debe permitir:
 - cargar información del proyecto formativo desde fuente estructurada,
 - conservar PDF como evidencia documental cuando exista,
 - importar datos desde Excel canonico cuando se use fuente estructurada,
-- permitir diligenciamiento manual SOLO para completar lo estrictamente faltante,
+- permitir diligenciamiento post-importacion SOLO para completar lo estrictamente faltante,
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta completar el programa,
@@ -64,7 +64,7 @@ Implementar un módulo web que permita registrar, extraer, revisar, editar y val
 - Permitir el cargue asistido desde fuente estructurada del proyecto.
 - Permitir la gestión completa de competencias y su estructura curricular.
 - Validar la completitud del programa antes de habilitar el proyecto.
-- Permitir el cargue manual o asistido del proyecto formativo.
+- Permitir la carga del proyecto formativo desde fuente estructurada.
 - Permitir la gestión de fases y actividades del proyecto.
 - Validar la completitud del proyecto antes de cerrar la Fase 1.
 - Mantener guardado automático del avance en todo momento.
@@ -122,8 +122,7 @@ Responsable de:
 
 - iniciar el proceso,
 - cargar documentos,
-- completar datos manualmente SOLO para lo estrictamente faltante,
-- revisar la información,
+- revisar la informacion,
 - cerrar el programa,
 - habilitar el proyecto,
 - revisar y cerrar el proyecto.
@@ -173,7 +172,7 @@ El sistema importa desde Excel canónico:
 - conocimientos de proceso,
 - criterios.
 
-El usuario puede completar manualmente SOLO lo estrictamente faltante o no resuelto por el Excel.
+El usuario puede revisar el consolidado del programa antes del cierre.
 
 ## Paso 5. Revisión del programa
 El sistema debe mostrar el consolidado del programa antes del cierre.
@@ -193,8 +192,6 @@ El sistema importa desde fuente estructurada (Excel/matriz):
 - datos del proyecto,
 - fases,
 - actividades.
-
-El usuario puede completar manualmente SOLO lo estrictamente faltante.
 
 ## Paso 10. Gestión estructural del proyecto
 El usuario debe poder crear, editar o eliminar:
@@ -243,7 +240,7 @@ El sistema debe importar desde Excel canonico:
 - conocimientos de proceso,
 - criterios.
 
-### RF-07. Completar manualmente lo estrictamente faltante
+### RF-07. Correccion post-importacion de lo faltante
 Si la importacion Excel no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
 
 ### RF-08. Gestionar competencias
@@ -308,7 +305,7 @@ El sistema debe importar desde Excel/matriz:
 - fases,
 - actividades.
 
-### RF-24. Completar manualmente lo estrictamente faltante del proyecto
+### RF-24. Correccion post-importacion del proyecto
 Si la importacion no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
 
 ### RF-25. Gestionar fases
@@ -494,7 +491,7 @@ Cuando la importacion Excel no pueda resolver un campo de forma confiable, el si
 
 1. informar el motivo,
 2. marcar el campo como pendiente,
-3. habilitar edicion manual SOLO para completar lo faltante.
+3. habilitar correccion post-importacion SOLO para completar lo faltante.
 
 ## 13.4 Motivos mínimos de fallo
 - archivo Excel no canonico
@@ -674,11 +671,8 @@ No deben implementarse funcionalidades de fases futuras dentro de este alcance.
 
 # 18. Criterios de aceptación globales
 
-## CA-01
-El programa puede iniciarse desde Excel canonico; el PDF queda como soporte documental.
-
 ## CA-02
-Si la importacion Excel no resuelve ciertos campos, el sistema permite completar manualmente lo faltante.
+El programa puede iniciarse desde Excel canonico; el PDF queda como soporte documental.
 
 ## CA-03
 El sistema guarda automáticamente el avance en borrador.
@@ -694,9 +688,6 @@ El proyecto puede iniciarse cuando el programa esté completo.
 
 ## CA-07
 El proyecto puede iniciarse cuando el programa esté completo.
-
-## CA-08
-Si la importacion Excel del proyecto no es confiable, el sistema permite completar manualmente lo faltante.
 
 ## CA-08
 El proyecto no puede cerrarse si faltan fases o actividades válidas.
@@ -726,13 +717,11 @@ La Fase 1 se considera terminada cuando el sistema permite:
 
 - crear y revisar el programa,
 - guardar borradores del programa,
-- extraer y completar manualmente información del programa,
 - gestionar la estructura curricular,
 - validar y cerrar el programa,
 - bloquear y habilitar el proyecto correctamente,
 - crear y revisar el proyecto,
 - guardar borradores del proyecto,
-- extraer y completar manualmente información del proyecto,
 - gestionar fases y actividades,
 - validar y cerrar el proyecto,
 - y mantener trazabilidad básica del proceso.

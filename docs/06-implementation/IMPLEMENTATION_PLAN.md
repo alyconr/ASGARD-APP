@@ -54,7 +54,7 @@ Construir la Fase 1 de una aplicación web que permita:
 - cargar información del proyecto formativo,
 - conservar PDF como evidencia documental,
 - importar datos desde Excel canonico cuando aplique,
-- permitir fallback manual cuando no sea posible,
+- permitir correccion post-importacion cuando no sea posible,
 - guardar siempre el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta que el programa esté completo,
@@ -115,8 +115,8 @@ Los estados del programa y del proyecto deben manejarse de forma centralizada y 
 ## PI-06. Confirmación explícita
 El cierre de cada bloque debe requerir validación funcional y confirmación explícita del usuario.
 
-## PI-07. Soporte a extracción parcial
-La extracción automática debe diseñarse para convivir con edición manual sin romper el flujo.
+## PI-07. Soporte a correccion post-importacion
+La correccion editorial post-importacion debe diseñarse para convivir con la importacion Excel sin romper el flujo.
 
 ## PI-08. Preparación para crecimiento
 La arquitectura debe quedar lista para futuras fases sin necesidad de rehacer el núcleo de datos.
@@ -613,13 +613,13 @@ Validar:
 - cierre del proyecto
 
 ## 12.3 Pruebas end-to-end
-Escenarios mínimos:
-1. Programa manual completo
-2. Programa con extracción parcial + completado manual
+Escenarios minimos:
+1. Programa importado desde Excel canonico
+2. Programa con correccion post-importacion
 3. Proyecto bloqueado por programa incompleto
-4. Proyecto habilitado después del cierre del programa
+4. Proyecto habilitado despues del cierre del programa
 5. Proyecto completo con fases y actividades
-6. Programa editado después del cierre y advertencia de impacto
+6. Programa editado despues del cierre y advertencia de impacto
 
 ---
 

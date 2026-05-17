@@ -5,7 +5,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardList,
-  FileText,
+  FileSpreadsheet,
   FolderKanban,
   ListChecks,
   RefreshCcw,
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
-import { ProyectoBaseForm } from "@/features/proyecto/components/proyecto-base-form";
+import { ProyectoBaseInfo } from "@/features/proyecto/components/proyecto-base-info";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
 import type {
   ProyectoDisponibilidadResponse,
@@ -24,7 +24,6 @@ import type {
   ProyectoWizardStepId,
 } from "@/features/proyecto/types";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
-import type { ProyectoBaseField } from "@/features/proyecto/validation";
 import { cn } from "@/lib/utils";
 
 const STEP_ICONS: Record<
@@ -32,7 +31,7 @@ const STEP_ICONS: Record<
   typeof ClipboardList
 > = {
   "datos-proyecto": ClipboardList,
-  "fuente-proyecto": FileText,
+  "fuente-proyecto": FileSpreadsheet,
   "estructura-proyecto": FolderKanban,
   "revision-proyecto": ListChecks,
 };
@@ -137,13 +136,11 @@ function StepWorkspace({
   currentStep,
   currentStepNote,
   onNoteChange,
-  onProyectoFieldChange,
   proyectoValue,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   currentStepNote: string;
   onNoteChange: (value: string) => void;
-  onProyectoFieldChange: (field: ProyectoBaseField, value: string) => void;
   proyectoValue: ProyectoWizardPayload["proyecto"];
 }>): React.JSX.Element {
   const Icon = STEP_ICONS[currentStep.id];
@@ -172,10 +169,7 @@ function StepWorkspace({
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "datos-proyecto" ? (
-            <ProyectoBaseForm
-              value={proyectoValue}
-              onFieldChange={onProyectoFieldChange}
-            />
+            <ProyectoBaseInfo value={proyectoValue} />
           ) : (
             <>
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
@@ -259,8 +253,8 @@ export function ProyectoWizardShell({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
             El proyecto ya esta habilitado porque el programa esta COMPLETO.
-            Este flujo guarda el borrador del proyecto sin capturar aun los
-            campos de TASK-17.
+            Este flujo guarda el borrador del proyecto. La fuente estructurada
+            del proyecto sera la matriz Excel (TASK-19).
           </p>
         </div>
 
@@ -293,7 +287,8 @@ export function ProyectoWizardShell({
             </h3>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
               Crea un borrador independiente de tipo PROYECTO asociado al
-              programa completo.
+              programa completo. La fuente estructurada del proyecto sera la
+              matriz Excel (TASK-19).
             </p>
             <ActionButton
               className="mt-4"
@@ -415,7 +410,6 @@ export function ProyectoWizardShell({
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }
-              onProyectoFieldChange={controller.updateProyectoBaseField}
               proyectoValue={controller.payload.proyecto}
             />
 

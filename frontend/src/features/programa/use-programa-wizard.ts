@@ -105,14 +105,6 @@ function buildDraftLabel(payload: ProgramaWizardPayload): string {
     return parts.join(" - ");
   }
 
-  if (payload.meta.entryMode === "PDF") {
-    return "Borrador de programa con PDF soporte";
-  }
-
-  if (payload.meta.entryMode === "EXCEL") {
-    return "Borrador de programa desde Excel canonico";
-  }
-
   return "Borrador de programa";
 }
 
@@ -165,7 +157,7 @@ export interface ProgramaWizardController {
   lastSavedAt: string | null;
   payload: ProgramaWizardPayload | null;
   draftStatus: DraftStatus;
-  startNewFlow: (entryMode: Exclude<ProgramaEntryMode, null>) => Promise<void>;
+  startNewFlow: () => Promise<void>;
   recoverDraftByReference: (
     referenceId: string,
     silent?: boolean,
@@ -184,7 +176,6 @@ export interface ProgramaWizardController {
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
-  setEntryMode: (entryMode: Exclude<ProgramaEntryMode, null>) => void;
   resetFlow: () => void;
 }
 
@@ -393,14 +384,12 @@ export function useProgramaWizard(): ProgramaWizardController {
     };
   }, [isBootstrapping, isRecovering, persistSnapshot, snapshot]);
 
-  const startNewFlow = useCallback(
-    async (entryMode: Exclude<ProgramaEntryMode, null>): Promise<void> => {
+  const startNewFlow = useCallback(async (): Promise<void> => {
       const nextReferenceId = crypto.randomUUID();
       const nextPayload = createEmptyProgramaPayload(nextReferenceId);
       const targetStepId = DEFAULT_PROGRAMA_STEP_ID;
       const now = new Date().toISOString();
 
-      nextPayload.meta.entryMode = entryMode;
       nextPayload.meta.touchedSteps = addTouchedStep(
         nextPayload.meta.touchedSteps,
         targetStepId,
@@ -552,7 +541,6 @@ export function useProgramaWizard(): ProgramaWizardController {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
-            entryMode: "PDF",
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
               "origen-documental",
@@ -587,7 +575,6 @@ export function useProgramaWizard(): ProgramaWizardController {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
-            entryMode: "EXCEL",
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
               "origen-documental",
@@ -622,7 +609,6 @@ export function useProgramaWizard(): ProgramaWizardController {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
-            entryMode: "EXCEL",
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
               "estructura-curricular",
@@ -687,30 +673,9 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
-  const setEntryMode = useCallback(
-    (entryMode: Exclude<ProgramaEntryMode, null>): void => {
-      setPayload((currentPayload) => {
-        if (currentPayload === null) {
-          return currentPayload;
-        }
-
-        return {
-          ...currentPayload,
-          meta: {
-            ...currentPayload.meta,
-            entryMode,
-            touchedSteps: addTouchedStep(
-              currentPayload.meta.touchedSteps,
-              currentStepId,
-            ),
-            lastInteractionAt: new Date().toISOString(),
-          },
-        };
-      });
-    },
-    [currentStepId],
-  );
-
+  const markProgramaClosed = useCallback((): void => {
+    setDraftStatus("COMPLETO");
+    setKnownDrafts((currentDrafts) => {
   const forgetKnownDraft = useCallback((referenceId: string): void => {
     setKnownDrafts(forgetProgramaDraft(referenceId));
     notify.info("Referencia local retirada", {
@@ -791,7 +756,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     updateContinueReferenceInput,
     forgetKnownDraft,
     clearKnownDrafts,
-    setEntryMode,
     resetFlow,
   };
 }

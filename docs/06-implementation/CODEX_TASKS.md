@@ -551,7 +551,7 @@ Implementar la importación estructurada del proyecto desde una matriz/Excel, al
 - validar workbook `.xlsx`,
 - generar preview sin persistencia relacional,
 - confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto,
-- permitir edicion manual SOLO para lo estrictamente faltante.
+- permitir correccion post-importacion SOLO para lo estrictamente faltante.
 
 ### Debe entregar
 - servicio de importacion del proyecto,
@@ -562,7 +562,7 @@ Implementar la importación estructurada del proyecto desde una matriz/Excel, al
 ### Aceptacion
 - el sistema importa desde Excel/matriz cuando se disponga,
 - deja pendiente lo que no puede importar,
-- no asume validación automatica,
+- no asume validacion automatica,
 - no intenta extraccion desde PDF.
 
 ---
@@ -742,12 +742,12 @@ Validar el comportamiento de los módulos conectados.
 Validar el flujo completo del usuario.
 
 ### Debe hacer
-- escenario programa manual,
-- escenario programa con extracción parcial,
+- escenario programa importado desde Excel,
+- escenario programa con correccion post-importacion,
 - escenario proyecto bloqueado,
 - escenario proyecto habilitado,
 - escenario proyecto completo,
-- escenario impacto por edición posterior.
+- escenario impacto por edicion posterior.
 
 ### Debe entregar
 - suite mínima end-to-end.

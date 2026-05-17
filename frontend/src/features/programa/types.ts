@@ -10,11 +10,6 @@ export type ProgramaWizardStepId =
 
 export type AutosaveState = "idle" | "saving" | "saved" | "error";
 
-export type PdfLegibilityStatus =
-  | "LEGIBLE"
-  | "PARCIALMENTE_LEGIBLE"
-  | "NO_LEGIBLE";
-
 export type FieldTraceStatus =
   | "EXTRAIDO"
   | "MANUAL"
@@ -184,18 +179,6 @@ export interface ProgramaStoredDocument {
   etag: string | null;
 }
 
-export interface ProgramaPdfDiagnostic {
-  estado_legibilidad: PdfLegibilityStatus;
-  motivo: string | null;
-  resumen: string;
-  has_text_layer: boolean;
-  analyzed_pages: number;
-  pages_with_text: number;
-  text_character_count: number;
-  can_attempt_extraction: boolean;
-  requires_manual_entry: boolean;
-}
-
 export interface ProgramaPdfUploadResult {
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
@@ -207,6 +190,15 @@ export interface ProgramaPdfUploadResponse {
   referencia_id: string;
   documento: ProgramaStoredDocument;
   diagnostico: ProgramaPdfDiagnostic;
+}
+
+export interface ProgramaPdfDiagnostic {
+  resumen: string;
+  has_text_layer: boolean;
+  analyzed_pages: number;
+  pages_with_text: number;
+  text_character_count: number;
+  almacenamiento_exitoso: boolean;
 }
 
 

@@ -392,25 +392,13 @@ function normalizeDiagnostic(value: unknown): ProgramaPdfDiagnostic | null {
     return null;
   }
 
-  const status = diagnostic.estado_legibilidad;
-  if (
-    status !== "LEGIBLE" &&
-    status !== "PARCIALMENTE_LEGIBLE" &&
-    status !== "NO_LEGIBLE"
-  ) {
-    return null;
-  }
-
   return {
-    estado_legibilidad: status,
-    motivo: typeof diagnostic.motivo === "string" ? diagnostic.motivo : null,
     resumen: asString(diagnostic.resumen),
     has_text_layer: asBoolean(diagnostic.has_text_layer),
     analyzed_pages: asNumber(diagnostic.analyzed_pages),
     pages_with_text: asNumber(diagnostic.pages_with_text),
     text_character_count: asNumber(diagnostic.text_character_count),
-    can_attempt_extraction: asBoolean(diagnostic.can_attempt_extraction),
-    requires_manual_entry: asBoolean(diagnostic.requires_manual_entry),
+    almacenamiento_exitoso: asBoolean(diagnostic.almacenamiento_exitoso),
   };
 }
 

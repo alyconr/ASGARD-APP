@@ -16,34 +16,12 @@ import {
 } from "@/features/programa/document-upload-api";
 import { notify } from "@/components/feedback/notifications";
 import type {
-  PdfLegibilityStatus,
   ProgramaPdfUploadResponse,
   ProgramaPdfUploadResult,
 } from "@/features/programa/types";
 import { cn } from "@/lib/utils";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
-
-const STATUS_COPY: Record<
-  PdfLegibilityStatus,
-  {
-    label: string;
-    tone: string;
-  }
-> = {
-  LEGIBLE: {
-    label: "LEGIBLE",
-    tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
-  },
-  PARCIALMENTE_LEGIBLE: {
-    label: "PARCIALMENTE LEGIBLE",
-    tone: "border-amber-200 bg-amber-50 text-amber-950",
-  },
-  NO_LEGIBLE: {
-    label: "NO LEGIBLE",
-    tone: "border-rose-200 bg-rose-50 text-rose-950",
-  },
-};
 
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) {
@@ -92,22 +70,26 @@ function validatePdfFile(file: File | null): string | null {
 function DiagnosticResult({
   value,
 }: Readonly<{ value: ProgramaPdfUploadResult }>): React.JSX.Element {
-  const copy = STATUS_COPY[value.diagnostico.estado_legibilidad];
+  const hasText = value.diagnostico.pages_with_text > 0;
 
   return (
-    <section className={cn("rounded-lg border p-4", copy.tone)}>
+    <section className={cn("rounded-lg border p-4", hasText ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-950")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5" />
-          <p className="text-sm font-semibold">{copy.label}</p>
+          <p className="text-sm font-semibold">
+            {hasText ? "PDF cargado como evidencia documental" : "PDF cargado como evidencia documental (sin texto detectado)"}
+          </p>
         </div>
         <span className="text-xs font-semibold">
           {value.diagnostico.pages_with_text}/{value.diagnostico.analyzed_pages}{" "}
-          paginas con texto
+          paginas analizadas
         </span>
       </div>
 
-      <p className="mt-3 text-sm leading-6">{value.diagnostico.resumen}</p>
+      {value.diagnostico.resumen ? (
+        <p className="mt-3 text-sm leading-6">{value.diagnostico.resumen}</p>
+      ) : null}
 
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <div>
@@ -168,15 +150,15 @@ export function ProgramaDocumentUpload({
       const result = await uploadProgramaPdf(referenciaId, file);
       onUploaded(result);
       setState("success");
-      setMessage("PDF cargado y diagnosticado.");
-      notify.success("PDF cargado y diagnosticado", {
-        description: result.diagnostico.resumen,
+      setMessage("PDF cargado como evidencia documental.");
+      notify.success("PDF cargado como evidencia documental", {
+        description: result.diagnostico.resumen || "Archivo almacenado en MinIO.",
       });
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       setState("error");
       setMessage(errorMessage);
-      notify.error("No fue posible diagnosticar el PDF", {
+      notify.error("No fue posible cargar el PDF", {
         description: errorMessage,
       });
     }
@@ -195,7 +177,7 @@ export function ProgramaDocumentUpload({
                 PDF del programa
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                Se conserva como soporte documental en MinIO; no se usa para
+                Se conserva como evidencia documental en MinIO; no se usa para
                 extraer informacion curricular.
               </p>
             </div>
@@ -247,7 +229,7 @@ export function ProgramaDocumentUpload({
             ) : (
               <FileCheck2 className="h-4 w-4" />
             )}
-            Cargar y diagnosticar
+            Cargar como evidencia
           </button>
         </div>
       </div>
