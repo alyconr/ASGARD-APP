@@ -52,12 +52,6 @@ const ENTRY_MODE_COPY: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  MANUAL: {
-    label: "Manual",
-    description:
-      "Captura directa para iniciar el programa desde datos propios.",
-    icon: NotebookText,
-  },
   PDF: {
     label: "PDF",
     description: "Documento soporte: se almacena en MinIO y no extrae datos.",
@@ -282,9 +276,9 @@ function StepWorkspace({
         </span>
       </header>
 
-      {currentStep.id === "origen-documental" ? (
+          {currentStep.id === "origen-documental" ? (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {(["MANUAL", "PDF", "EXCEL"] as const).map((mode) => (
+          {(["PDF", "EXCEL"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -492,11 +486,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               </h2>
             </div>
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-3">
-              <EntryModeButton
-                mode="MANUAL"
-                onSelect={() => void controller.startNewFlow("MANUAL")}
-              />
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <EntryModeButton
                 mode="PDF"
                 onSelect={() => void controller.startNewFlow("PDF")}

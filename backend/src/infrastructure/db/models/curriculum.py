@@ -94,7 +94,7 @@ class ProgramaFormacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     fuente_cargue: Mapped[TipoFuenteCargue] = mapped_column(
         fuente_cargue_enum,
         nullable=False,
-        default=TipoFuenteCargue.MANUAL,
+        default=TipoFuenteCargue.EXCEL_CANONICO,
     )
     observaciones_revision: Mapped[str | None] = mapped_column(Text, nullable=True)
 

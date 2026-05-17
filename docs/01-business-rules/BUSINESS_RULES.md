@@ -36,6 +36,21 @@ Desde TASK-08.5, la estrategia documental del programa cambia:
 
 ---
 
+## Decision funcional TASK-UNICO-CARRIL
+
+Desde esta refactorizacion integral, el sistema opera con un unico carril funcional:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
+
+Esta decision reemplaza las reglas RN-13, RN-14, RN-15 y RN-35 anteriores que admitian captura manual o PDF como fuente activa.
+
+---
+
 # 2. Contexto de negocio
 
 El equipo pedagógico del SENA requiere una aplicación web que permita estructurar la información necesaria para la futura construcción de guías de aprendizaje.
@@ -43,10 +58,10 @@ El equipo pedagógico del SENA requiere una aplicación web que permita estructu
 En esta primera fase, la aplicación no generará aún la guía final.  
 La prioridad es construir una base confiable para capturar, revisar, editar y validar la información correspondiente a:
 
-- el **programa de formación**,
-- y el **proyecto formativo**.
+- el **programa de formación** (cargado desde Excel canónico con PDF como evidencia),
+- y el **proyecto formativo** (cargado desde Excel/matriz con PDF como evidencia).
 
-La solución debe permitir tanto el cargue asistido desde documentos PDF como el diligenciamiento manual, manteniendo trazabilidad, integridad de datos y control de estados.
+La solución debe permitir la carga asistida desde la matriz Excel con conservacion de PDF como evidencia, manteniendo trazabilidad, integridad de datos y control de estados.
 
 ---
 
@@ -56,12 +71,11 @@ La solución debe permitir tanto el cargue asistido desde documentos PDF como el
 
 La Fase 1 sí incluye:
 
-- cargue del programa de formación,
-- cargue del proyecto formativo,
+- cargue del programa de formación desde Excel canónico,
+- cargue del proyecto formativo desde fuente estructurada,
 - flujo de usuario tipo wizard,
 - carga documental PDF como evidencia,
 - importacion estructurada desde Excel canonico,
-- cargue manual como mecanismo de respaldo,
 - guardado automático en borrador,
 - edición y eliminación de registros,
 - revisión consolidada de la información,
@@ -95,23 +109,21 @@ La Fase 1 no incluye:
 Es la persona encargada de:
 
 - cargar documentos,
-- diligenciar información manualmente,
-- revisar datos extraídos,
+- revisar datos importados desde Excel,
 - corregir inconsistencias,
 - cerrar el programa,
 - habilitar el proyecto,
 - y cerrar la Fase 1 desde el punto de vista funcional.
 
 ## 4.2 Actor secundario
-**Sistema de extracción documental**
+**Sistema de almacenamiento documental**
 
 Es el componente que:
 
 - recibe archivos PDF,
-- diagnostica si son legibles,
-- intenta extraer campos,
-- clasifica errores de extracción,
-- y deja lista la información para revisión humana.
+- valida basicamente su formato,
+- los almacena en MinIO como evidencia documental,
+- y deja metadata de validacion en el borrador.
 
 ---
 
@@ -211,14 +223,18 @@ El usuario debe poder retomar un borrador desde el mismo punto donde quedó.
 # 9. Reglas de fuente documental e importacion estructurada
 
 > TASK-08.5 reemplaza la extraccion curricular desde PDF para el programa.
-> El PDF queda como evidencia en MinIO; el Excel canonico `.xlsx` es la fuente
-> estructurada para poblar el modelo curricular.
+> TASK-UNICO-CARRIL reemplaza el carril manual: Excel canonico es la unica
+> fuente estructurada para programa y proyecto.
 
-## RN-13. Modos de ingreso permitidos
-La información podrá ingresar al sistema por dos vías:
+## RN-13. Fuente estructurada unica
 
-- importacion estructurada desde Excel canonico,
-- diligenciamiento manual.
+La informacion estructurada del programa y del proyecto debe partir **unicamente** de la matriz Excel.
+
+- El Excel canonico `.xlsx` es la unica fuente estructurada activa.
+- El PDF se carga y almacena en MinIO como evidencia documental SOLO.
+- El PDF no se usa para extraccion ni prellenado de programa ni proyecto.
+- No existe carril manual como fuente de captura principal.
+- No se debe iniciar ningun flujo "MANUAL" como modo operativo.
 
 ## RN-13A. Organizacion curricular por competencia
 La importacion estructurada desde Excel canonico debe tratar la competencia como
@@ -231,30 +247,21 @@ tener `rap_id`. Si se puede resolver un resultado especifico, el sistema puede
 guardar `resultado_id`; si no, debe importar el elemento con `resultado_id = NULL`
 y conservarlo asociado a la competencia.
 
-## RN-14. Fallback manual obligatorio
-Si el PDF no es legible, está escaneado o no permite extracción confiable, el sistema debe habilitar el ingreso manual inmediato.
+## RN-14. Fallback manual para lo estrictamente faltante
+Si la importacion Excel no permite resolver ciertos campos de forma confiable, el sistema debe habilitar el ingreso manual inmediato **solo para completar lo faltante**, nunca como fuente alternativa de construccion curricular.
 
-## RN-15. Extracción parcial permitida
-Si solo algunos campos pueden extraerse, el sistema debe:
+## RN-15. Confirmacion humana obligatoria
+Ningun dato importado automaticamente se considera definitivo sin revision y confirmacion explícita del usuario.
 
-- conservar lo extraído,
-- marcar lo faltante,
-- informar el motivo del fallo,
-- permitir completar manualmente los pendientes.
+## RN-16. Clasificacion minima de fallos de importacion Excel
+El sistema debe informar como minimo estas causas:
 
-## RN-16. Confirmación humana obligatoria
-Ningún dato extraído automáticamente se considera definitivo sin revisión y confirmación explícita del usuario.
-
-## RN-17. Clasificación mínima de fallos de extracción
-El sistema debe informar como mínimo estas causas:
-
-- PDF escaneado,
-- documento ilegible,
-- baja resolución,
-- estructura no reconocida,
-- campo no encontrado,
-- contenido ambiguo,
-- archivo protegido.
+- archivo Excel no canonico,
+- hojas faltantes,
+- encabezados invalidos,
+- claves cruzadas rotas,
+- duplicados,
+- datos ambiguos.
 
 ---
 
@@ -362,6 +369,9 @@ no convierte por si sola una fila en pendiente si la competencia esta clara.
 
 ## RN-35. Dependencia del programa
 No debe crearse funcionalmente un proyecto formativo sin un programa previamente completo.
+
+## RN-35A. Fuente estructurada del proyecto
+El proyecto formativo debe partir de una fuente estructurada tipo matriz/Excel, no de extraccion PDF ni captura manual como via principal.
 
 ## RN-36. Datos mínimos del proyecto
 El proyecto formativo debe registrar como mínimo:
@@ -566,11 +576,11 @@ Estas condiciones deben cumplirse siempre:
 
 La Fase 1 se considera exitosa cuando:
 
-- el programa puede cargarse manualmente o desde Excel canonico,
+- el programa puede cargarse desde Excel canonico,
 - el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o mediante fuente estructurada definida antes de su tarea,
+- el proyecto puede cargarse mediante fuente estructurada (Excel/matriz),
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida,
@@ -597,7 +607,8 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 
 - la UX principal será tipo wizard,
 - siempre habrá guardado automático en borrador,
-- el sistema soportara PDF como evidencia y Excel canonico como fuente estructurada,
+- el sistema soportara PDF como evidencia y Excel canonico como fuente estructurada unica,
+- el carril manual deja de existir como modo operativo,
 - el proyecto estará bloqueado hasta completar el programa,
 - la validación humana será obligatoria antes del cierre,
 - el alcance se limitará a la Fase 1,

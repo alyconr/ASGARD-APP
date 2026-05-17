@@ -20,7 +20,7 @@ export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
     label: "Fuente del proyecto",
     shortLabel: "02",
     description:
-      "Espacio preparado para PDF y fuente estructurada del proyecto.",
+      "Espacio preparado para evidencia PDF y fuente estructurada del proyecto.",
     taskRef: "TASK-18 / TASK-19",
   },
   {

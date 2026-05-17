@@ -35,16 +35,14 @@ Antes de implementar cualquier módulo, el agente o desarrollador debe leer y re
 
 Ninguna implementación debe contradecir estos documentos.
 
-## Decision funcional TASK-08.5
+## Decision funcional TASK-UNICO-CARRIL
 
-Antes de continuar con TASK-09, se introduce una tarea puente:
+Desde esta refactorizacion integral:
 
-- desactivar la extraccion curricular desde PDF en el flujo activo;
-- conservar PDF como evidencia documental en MinIO;
-- agregar importacion estructurada desde Excel canonico `.xlsx`;
-- exigir preview sin persistencia relacional antes de confirmacion;
-- confirmar importacion para materializar programa, competencias, resultados, conocimientos y criterios;
-- organizar la estructura importada por competencia, dejando `resultado_id` como relacion opcional y secundaria para conocimientos y criterios.
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como modo operativo;
+- TASK-05, TASK-06, TASK-07, TASK-18, TASK-19 y las fases tecnicas asociadas quedan reinterpretadas.
 
 ---
 
@@ -77,8 +75,8 @@ Construir la Fase 1 de una aplicación web que permita:
 - Wizard del programa
 - Wizard del proyecto
 - Guardado automático en borrador
-- Diagnóstico de legibilidad del PDF
-- Extracción híbrida de PDF
+- Carga PDF como evidencia documental
+- Importacion estructurada desde Excel canonico
 - Revisión consolidada editable
 - Validación de completitud
 - Bloqueo/desbloqueo del proyecto
@@ -176,12 +174,7 @@ Este orden respeta las dependencias del dominio:
 ## 7.4 ORM recomendado
 - SQLAlchemy
 
-## 7.5 Extracción documental
-- lectura PDF con capa de texto
-- OCR opcional si luego se decide habilitarlo
-- fallback manual obligatorio
-
-## 7.6 Almacenamiento de archivos
+## 7.5 Almacenamiento de archivos
 - local en desarrollo
 - S3-compatible en producción si se requiere
 
@@ -332,41 +325,40 @@ Implementar el flujo principal del programa de formación.
 
 ---
 
-## Fase Técnica 5. Extracción híbrida del programa
+## Fase Técnica 5. Carga documental del programa como evidencia
 
 ### Objetivo
-Permitir el cargue por PDF del programa con fallback manual.
+Permitir la carga del PDF del programa como evidencia documental.
 
 ### Tareas
 - Crear endpoint de carga de PDF
 - Validar tipo de archivo
-- Analizar legibilidad del PDF
-- Intentar extracción de campos del programa
-- Marcar campos extraídos, pendientes o ambiguos
-- Mostrar motivo de fallo de extracción
-- Permitir completar manualmente los faltantes
-
-### Campos a extraer
-- código del programa
-- nombre del programa
-- competencias
-- resultados de aprendizaje
-- conocimientos de saber
-- conocimientos de proceso
-- criterios de evaluación
+- Almacenar en MinIO como evidencia
+- Registrar metadata en borrador
 
 ### Entregables
 - carga PDF funcional
-- diagnóstico de legibilidad
-- respuesta estructurada de extracción
-- fallback manual habilitado
+- almacenamiento en MinIO
+- metadata de validacion en borrador
 
 ---
 
-## Fase Técnica 6. Gestión curricular
+## Fase Técnica 6. Importacion estructurada desde Excel canonico organizada por competencia
 
 ### Objetivo
-Permitir CRUD completo de la estructura curricular del programa.
+Permitir la importacion estructurada desde Excel canonico del programa.
+
+### Tareas
+- Crear endpoint de preview de Excel canonico
+- Validar workbook `.xlsx` con hojas Programa, Competencias, Resultados, Conocimientos y Criterios
+- Generar preview sin persistencia relacional
+- Confirmar importacion para materializar datos
+- Organizar la estructura importada por competencia
+
+### Entregables
+- preview funcional de Excel
+- confirmacion de importacion
+- estructura curricular importada por competencia
 
 La competencia es el contenedor principal de la estructura. Los resultados,
 conocimientos y criterios se muestran y gestionan bajo la competencia. La
@@ -447,28 +439,21 @@ Implementar el flujo del proyecto formativo.
 
 ---
 
-## Fase Técnica 10. Extracción híbrida del proyecto
+## Fase Técnica 10. Carga documental del proyecto como evidencia
 
 ### Objetivo
-Permitir cargue por PDF del proyecto con fallback manual.
+Permitir la carga del PDF del proyecto como evidencia documental.
 
 ### Tareas
 - Crear endpoint de carga del PDF del proyecto
 - Validar tipo de archivo
-- Analizar legibilidad
-- Intentar extracción de:
-  - nombre del proyecto
-  - código del proyecto
-  - versión del proyecto
-  - fases del proyecto
-  - actividades del proyecto
-- Marcar campos faltantes
-- Permitir ingreso manual de campos no extraídos
+- Almacenar en MinIO como evidencia
+- Registrar metadata en borrador
 
 ### Entregables
-- flujo híbrido del proyecto funcional
-- prellenado parcial o total
-- fallback manual activo
+- flujo de carga PDF del proyecto funcional
+- almacenamiento en MinIO
+- metadata de validacion en borrador
 
 ---
 
@@ -575,8 +560,8 @@ Asegurar consistencia funcional del flujo punta a punta.
 - Base del wizard del programa
 
 ## Iteración 3
-- Extracción híbrida del programa
-- Fallback manual
+- Carga PDF como evidencia del programa
+- Importacion Excel canonico
 
 ## Iteración 4
 - CRUD curricular completo
@@ -587,7 +572,8 @@ Asegurar consistencia funcional del flujo punta a punta.
 
 ## Iteración 6
 - Wizard del proyecto
-- Extracción híbrida del proyecto
+- Carga PDF como evidencia del proyecto
+- Importacion Excel del proyecto
 
 ## Iteración 7
 - CRUD de fases y actividades
@@ -678,7 +664,6 @@ Una tarea se considera terminada cuando:
 - [ ] wizard programa
 - [ ] PDF evidencia programa
 - [ ] importacion Excel canonico programa
-- [ ] fallback manual
 - [ ] CRUD competencias
 - [ ] CRUD resultados
 - [ ] CRUD saber
@@ -691,8 +676,7 @@ Una tarea se considera terminada cuando:
 - [ ] bloqueo del proyecto
 - [ ] modelo proyecto
 - [ ] wizard proyecto
-- [ ] fuente estructurada proyecto por definir antes de implementacion
-- [ ] fallback manual
+- [ ] fuente estructurada proyecto (Excel/matriz)
 - [ ] CRUD fases
 - [ ] CRUD actividades
 - [ ] revisión consolidada

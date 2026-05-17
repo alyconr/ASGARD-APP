@@ -1,6 +1,6 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
-export type ProgramaEntryMode = "MANUAL" | "PDF" | "EXCEL" | null;
+export type ProgramaEntryMode = "PDF" | "EXCEL" | null;
 
 export type ProgramaWizardStepId =
   | "datos-programa"

@@ -13,9 +13,15 @@ Este documento divide la implementación de la Fase 1 en tareas pequeñas, orden
 Cada tarea debe resolverse de forma incremental y verificable.  
 Codex no debe saltarse tareas ni mezclar varias iteraciones grandes en una sola entrega.
 
-## Decision funcional TASK-08.5
+## Decision funcional TASK-UNICO-CARRIL
 
-TASK-08.5 se ejecuta entre TASK-08 y TASK-09. Alinea el flujo para que PDF sea solo evidencia documental en MinIO y Excel canonico `.xlsx` sea la fuente estructurada de importacion curricular.
+TASK-08.5 se ejecutó y alineó el programa a Excel canonico.
+Esta refactorizacion completa TASK-UNICO-CARRIL:
+
+- elimina el carril manual como modo operativo para programa y proyecto;
+- reinterpreta TASK-18, TASK-19 y siguientes en coherencia con el unico carril;
+- el PDF queda como evidencia documental para programa y proyecto;
+- el Excel/matriz es la unica fuente estructurada activa.
 
 La importacion curricular se organiza principalmente por competencia. Los
 resultados, conocimientos y criterios quedan bajo la competencia; `resultado_id`
@@ -201,65 +207,48 @@ Capturar los datos mínimos del programa.
 
 ---
 
-## TASK-06. Implementar carga y diagnóstico de PDF del programa
+## TASK-06. Implementar carga y diagnóstico de PDF del programa como evidencia
 
 ### Objetivo
-Permitir subir un PDF del programa y evaluar si es legible.
+Permitir subir un PDF del programa como evidencia documental en MinIO.
 
 ### Debe hacer
 - implementar carga de archivo PDF,
 - validar formato,
-- analizar si el PDF tiene texto extraíble,
-- clasificar como:
-  - legible,
-  - parcialmente legible,
-  - no legible.
+- almacenar en MinIO como evidencia,
+- registrar metadata en el borrador.
 
 ### Debe entregar
 - endpoint/controlador de carga,
-- servicio de diagnóstico,
-- respuesta estructurada con estado de legibilidad.
+- almacenamiento en MinIO,
+- metadata de validación en borrador.
 
 ### No debe hacer
-- extracción avanzada completa en esta tarea.
+- realizar extracción curricular desde el PDF,
+- intentar leer contenido del PDF para poblar campos,
+- clasificar legibilidad como fuente de datos.
 
 ### Aceptación
 - el sistema acepta PDF válido,
 - el sistema rechaza formatos no válidos,
-- el sistema devuelve diagnóstico legible/parcial/no legible.
+- el PDF se almacena como evidencia en MinIO.
 
 ---
 
-## TASK-07. Implementar extracción híbrida del programa [DEPRECATED por TASK-08.5]
+## TASK-07. Carga PDF del programa como evidencia [DEPRECATED - reemplazado por TASK-06]
 
 ### Objetivo
-Extraer automáticamente los campos del programa cuando sea posible.
+Esta tarea queda reemplazada por TASK-06. El PDF ya no es fuente de extracción curricular.
 
 ### Debe hacer
-- extraer:
-  - código del programa,
-  - nombre del programa,
-  - competencias,
-  - resultados,
-  - conocimientos de saber,
-  - conocimientos de proceso,
-  - criterios,
-- marcar estado de cada campo,
-- registrar motivo de fallo cuando no se pueda extraer,
-- dejar listos los campos para revisión manual.
-
-### Debe entregar
-- servicio de extracción,
-- estructura de respuesta por campo,
-- integración con el wizard.
+- marcar esta tarea como DEPRECATED,
+- actualizar referencias cruzadas.
 
 ### No debe hacer
-- asumir que lo extraído ya quedó validado.
+- implementar ningun flujo de extracción desde PDF.
 
 ### Aceptación
-- los campos extraídos se prellenan,
-- los campos faltantes quedan marcados,
-- el usuario puede continuar con ingreso manual.
+- la tarea queda marcada como obsoleta.
 
 ---
 
@@ -525,51 +514,56 @@ Capturar los datos mínimos del proyecto.
 
 ---
 
-## TASK-18. Implementar carga y diagnóstico de PDF del proyecto
+## TASK-18. Implementar carga y diagnóstico de PDF del proyecto como evidencia
 
 ### Objetivo
-Permitir subir el PDF del proyecto y evaluar legibilidad.
+Permitir subir el PDF del proyecto como evidencia documental en MinIO.
 
 ### Debe hacer
 - carga de PDF,
 - validación de archivo,
-- diagnóstico de legibilidad,
-- respuesta estructurada.
+- almacenamiento en MinIO como evidencia,
+- registro de metadata en borrador.
 
 ### Debe entregar
 - endpoint de carga,
-- servicio de diagnóstico.
+- almacenamiento en MinIO,
+- metadata de validación en borrador.
+
+### No debe hacer
+- realizar extracción curricular desde el PDF del proyecto,
+- intentar leer contenido del PDF para poblar campos,
+- clasificar legibilidad como fuente de datos.
 
 ### Aceptación
-- el sistema clasifica correctamente el archivo,
-- el usuario ve si podrá extraer o completar manualmente.
+- el sistema clasifica correctamente el archivo como evidencia,
+- el usuario ve el PDF almacenado como soporte documental.
 
 ---
 
-## TASK-19. Definir fuente estructurada del proyecto [pendiente de alineacion]
+## TASK-19. Definir e implementar fuente estructurada del proyecto [reinterpretada]
 
 ### Objetivo
-Extraer automáticamente los datos del proyecto cuando sea posible.
+Implementar la importación estructurada del proyecto desde una matriz/Excel, alineada con el unico carril funcional.
 
 ### Debe hacer
-- extraer:
-  - nombre del proyecto,
-  - código del proyecto,
-  - versión,
-  - fases,
-  - actividades,
-- marcar estado por campo,
-- indicar motivo de fallo cuando aplique,
-- habilitar edición manual de faltantes.
+- definir el contrato canonico del workbook del proyecto (hojas: Proyecto, Fases, Actividades),
+- validar workbook `.xlsx`,
+- generar preview sin persistencia relacional,
+- confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto,
+- permitir edicion manual SOLO para lo estrictamente faltante.
 
 ### Debe entregar
-- servicio de extracción del proyecto,
-- integración con wizard del proyecto.
+- servicio de importacion del proyecto,
+- preview funcional,
+- confirmacion de importacion,
+- integracion con wizard del proyecto.
 
-### Aceptación
-- el sistema prellena lo que identifica,
-- deja pendiente lo que no puede extraer,
-- no asume validación automática.
+### Aceptacion
+- el sistema importa desde Excel/matriz cuando se disponga,
+- deja pendiente lo que no puede importar,
+- no asume validación automatica,
+- no intenta extraccion desde PDF.
 
 ---
 

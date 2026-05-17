@@ -113,10 +113,6 @@ function buildDraftLabel(payload: ProgramaWizardPayload): string {
     return "Borrador de programa desde Excel canonico";
   }
 
-  if (payload.meta.entryMode === "MANUAL") {
-    return "Borrador de programa manual";
-  }
-
   return "Borrador de programa";
 }
 

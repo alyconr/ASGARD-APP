@@ -6,17 +6,28 @@
 
 ---
 
+## Decision funcional TASK-UNICO-CARRIL
+
+Desde esta refactorizacion integral, el sistema opera con un unico carril:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO;
+- no se permite el carril manual como modo operativo;
+- las tareas TASK-18, TASK-19 y siguientes quedan reinterpretadas.
+
+---
+
 # 1. Resumen
 
 Este documento define la especificación funcional y técnica de la Fase 1 del sistema para construcción de guías de aprendizaje SENA.
 
 La Fase 1 debe permitir:
 
-- cargar información del programa de formación,
-- cargar información del proyecto formativo,
+- cargar información del programa de formación desde Excel canónico,
+- cargar información del proyecto formativo desde fuente estructurada,
 - conservar PDF como evidencia documental cuando exista,
 - importar datos desde Excel canonico cuando se use fuente estructurada,
-- permitir diligenciamiento manual cuando no sea posible,
+- permitir diligenciamiento manual SOLO para completar lo estrictamente faltante,
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta completar el programa,
@@ -48,9 +59,9 @@ Implementar un módulo web que permita registrar, extraer, revisar, editar y val
 
 # 3. Objetivos específicos
 
-- Permitir el cargue manual o asistido del programa de formación.
-- Permitir la importacion estructurada desde Excel canonico del programa.
-- Permitir el diligenciamiento manual de los campos faltantes o no extraídos.
+- Permitir el cargue asistido desde Excel canonico del programa.
+- Permitir el cargue asistido desde fuente estructurada del proyecto.
+- Permitir el cargue asistido desde fuente estructurada del proyecto.
 - Permitir la gestión completa de competencias y su estructura curricular.
 - Validar la completitud del programa antes de habilitar el proyecto.
 - Permitir el cargue manual o asistido del proyecto formativo.
@@ -111,31 +122,29 @@ Responsable de:
 
 - iniciar el proceso,
 - cargar documentos,
-- completar datos manualmente,
+- completar datos manualmente SOLO para lo estrictamente faltante,
 - revisar la información,
 - cerrar el programa,
 - habilitar el proyecto,
 - revisar y cerrar el proyecto.
 
 ## 5.2 Actor secundario
-**Sistema de extracción documental**
+**Sistema de almacenamiento documental**
 
 Responsable de:
 
 - recibir archivos PDF,
 - validar que sean procesables,
-- diagnosticar legibilidad,
-- intentar extraer información,
-- clasificar fallos,
-- y dejar campos listos para revisión humana.
+- almacenar como evidencia documental en MinIO,
+- y dejar metadata de validacion en el borrador.
 
 ---
 
 # 6. Supuestos del sistema
 
-- El usuario cuenta con documentos fuente o con información suficiente para diligenciar manualmente el sistema.
-- Los PDFs pueden tener texto extraíble o ser escaneados; el sistema debe soportar ambas situaciones mediante fallback manual.
-- La revisión humana es obligatoria antes de cerrar cualquier bloque.
+- El usuario cuenta con documentos fuente o con la matriz Excel canonica diligenciada.
+- Los PDFs se almacenan como evidencia documental; no se asume extraccion curricular desde ellos.
+- La revision humana es obligatoria antes de cerrar cualquier bloque.
 - El programa de formación es el bloque padre de la estructura de Fase 1.
 - El proyecto formativo solo se habilita cuando el programa ya está completo.
 
@@ -147,32 +156,24 @@ Responsable de:
 El usuario puede:
 
 - iniciar un nuevo proceso,
-- cargar PDF del programa,
-- diligenciar manualmente,
+- cargar PDF del programa como evidencia,
+- cargar Excel canónico del programa como fuente estructurada,
 - continuar un borrador existente.
 
-## Paso 2. Diagnóstico del programa
-Si se carga PDF, el sistema debe determinar si el archivo es:
+## Paso 2. Carga documental
+El usuario sube el PDF del programa como evidencia documental.
 
-- legible,
-- parcialmente legible,
-- o no legible.
+## Paso 3. Importacion estructurada del programa
+El sistema importa desde Excel canónico:
 
-## Paso 3. Captura inicial del programa
-El sistema debe mostrar:
-
-- campos extraídos automáticamente,
-- campos vacíos para diligenciar manualmente,
-- campos pendientes por revisión.
-
-## Paso 4. Gestión curricular del programa
-El usuario debe poder crear, editar o eliminar:
-
+- datos del programa,
 - competencias,
 - resultados,
 - conocimientos de saber,
 - conocimientos de proceso,
 - criterios.
+
+El usuario puede completar manualmente SOLO lo estrictamente faltante o no resuelto por el Excel.
 
 ## Paso 5. Revisión del programa
 El sistema debe mostrar el consolidado del programa antes del cierre.
@@ -183,11 +184,17 @@ El sistema debe validar completitud y, si procede, marcar el programa como COMPL
 ## Paso 7. Habilitación del proyecto
 Solo cuando el programa esté completo, el sistema debe habilitar el proyecto formativo.
 
-## Paso 8. Diagnóstico del proyecto
-Si se carga PDF del proyecto, el sistema debe analizar su legibilidad.
+## Paso 8. Carga documental del proyecto
+El usuario sube el PDF del proyecto como evidencia documental.
 
-## Paso 9. Captura inicial del proyecto
-El sistema debe mostrar campos extraídos y permitir completar manualmente los faltantes.
+## Paso 9. Importacion estructurada del proyecto
+El sistema importa desde fuente estructurada (Excel/matriz):
+
+- datos del proyecto,
+- fases,
+- actividades.
+
+El usuario puede completar manualmente SOLO lo estrictamente faltante.
 
 ## Paso 10. Gestión estructural del proyecto
 El usuario debe poder crear, editar o eliminar:
@@ -220,19 +227,15 @@ Los campos mínimos del programa son:
 El sistema debe guardar el programa aunque esté incompleto.
 
 ### RF-04. Cargar PDF del programa
-El sistema debe permitir subir un archivo PDF del programa.
+El sistema debe permitir subir un archivo PDF del programa como evidencia documental.
 
-### RF-05. Diagnosticar legibilidad del programa
-El sistema debe clasificar el PDF del programa como:
+### RF-05. Validar formato del PDF del programa
+El sistema debe verificar que el archivo subido sea un PDF valido.
 
-- legible,
-- parcialmente legible,
-- no legible.
+### RF-06. Importar datos del programa desde Excel canonico
+El sistema debe importar desde Excel canonico:
 
-### RF-06. Extraer datos del programa
-Cuando el documento sea legible, el sistema debe intentar extraer:
-
-- código del programa,
+- codigo del programa,
 - nombre del programa,
 - competencias,
 - resultados,
@@ -240,8 +243,8 @@ Cuando el documento sea legible, el sistema debe intentar extraer:
 - conocimientos de proceso,
 - criterios.
 
-### RF-07. Permitir fallback manual del programa
-Si la extracción es parcial o falla, el sistema debe permitir completar manualmente la información faltante.
+### RF-07. Completar manualmente lo estrictamente faltante
+Si la importacion Excel no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
 
 ### RF-08. Gestionar competencias
 El sistema debe permitir crear, editar y eliminar competencias.
@@ -291,17 +294,13 @@ Los campos mínimos del proyecto son:
 El sistema debe guardar el proyecto aunque esté incompleto.
 
 ### RF-21. Cargar PDF del proyecto
-El sistema debe permitir subir un archivo PDF del proyecto.
+El sistema debe permitir subir un archivo PDF del proyecto como evidencia documental.
 
-### RF-22. Diagnosticar legibilidad del proyecto
-El sistema debe clasificar el PDF del proyecto como:
+### RF-22. Validar formato del PDF del proyecto
+El sistema debe verificar que el archivo subido sea un PDF valido.
 
-- legible,
-- parcialmente legible,
-- no legible.
-
-### RF-23. Extraer datos del proyecto
-Cuando el documento sea legible, el sistema debe intentar extraer:
+### RF-23. Importar datos del proyecto desde fuente estructurada
+El sistema debe importar desde Excel/matriz:
 
 - código del proyecto,
 - nombre del proyecto,
@@ -309,8 +308,8 @@ Cuando el documento sea legible, el sistema debe intentar extraer:
 - fases,
 - actividades.
 
-### RF-24. Permitir fallback manual del proyecto
-Si la extracción es parcial o falla, el sistema debe permitir completar manualmente la información faltante.
+### RF-24. Completar manualmente lo estrictamente faltante del proyecto
+Si la importacion no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
 
 ### RF-25. Gestionar fases
 El sistema debe permitir crear, editar y eliminar fases del proyecto.
@@ -472,51 +471,38 @@ final. La ausencia de `rap_id` no genera pendiente si la competencia esta clara.
 
 # 13. Reglas de fuente documental e importacion Excel
 
-> TASK-08.5 deja el PDF como evidencia documental. La extraccion curricular
-> del programa se realiza desde Excel canonico `.xlsx` mediante preview y
-> confirmacion explicita.
+> TASK-08.5 deja el PDF como evidencia documental. TASK-UNICO-CARRIL elimina
+> el carril manual: Excel canonico es la unica fuente estructurada para programa
+> y proyecto.
 
-El Excel canonico puede traer conocimientos y criterios sin `rap_id` o con un
-`rap_id` que no se pueda resolver. El sistema debe importarlos por competencia
-si `competencia_id` es confiable, dejando `resultado_id = NULL` cuando no exista
-asociacion especifica a resultado. Solo lo que no pueda asociarse a competencia
-queda como pendiente de conciliacion manual posterior.
+## 13.1 Objetivo de carga del programa
+El sistema debe permitir cargar el PDF del programa como evidencia documental
+en MinIO. No se realiza extraccion curricular desde el PDF.
 
-## 13.1 Objetivo de extracción del programa
-El sistema debe intentar extraer del PDF del programa:
+El sistema debe permitir importar datos del programa desde Excel canonico `.xlsx`
+mediante preview y confirmacion explícita.
 
-- código,
-- nombre,
-- competencias,
-- resultados,
-- saber,
-- proceso,
-- criterios.
+## 13.2 Objetivo de carga del proyecto
+El sistema debe permitir cargar el PDF del proyecto como evidencia documental
+en MinIO. No se realiza extraccion curricular desde el PDF.
 
-## 13.2 Objetivo de extracción del proyecto
-El sistema debe intentar extraer del PDF del proyecto:
-
-- código,
-- nombre,
-- versión,
-- fases,
-- actividades.
+El sistema debe permitir importar datos del proyecto desde fuente estructurada
+tipo Excel/matriz cuando se defina.
 
 ## 13.3 Manejo de fallos
-Cuando un campo no pueda ser extraído, el sistema debe:
+Cuando la importacion Excel no pueda resolver un campo de forma confiable, el sistema debe:
 
 1. informar el motivo,
 2. marcar el campo como pendiente,
-3. habilitar edición manual.
+3. habilitar edicion manual SOLO para completar lo faltante.
 
 ## 13.4 Motivos mínimos de fallo
-- PDF escaneado
-- documento ilegible
-- baja resolución
-- estructura no reconocida
-- campo no encontrado
+- archivo Excel no canonico
+- hojas faltantes
+- encabezados invalidos
+- claves cruzadas rotas
+- duplicados
 - contenido ambiguo
-- archivo protegido
 
 ---
 
@@ -689,10 +675,10 @@ No deben implementarse funcionalidades de fases futuras dentro de este alcance.
 # 18. Criterios de aceptación globales
 
 ## CA-01
-El programa puede iniciarse manualmente o desde Excel canonico; el PDF queda como soporte documental.
+El programa puede iniciarse desde Excel canonico; el PDF queda como soporte documental.
 
 ## CA-02
-Si el PDF del programa no es legible, el sistema permite completar manualmente.
+Si la importacion Excel no resuelve ciertos campos, el sistema permite completar manualmente lo faltante.
 
 ## CA-03
 El sistema guarda automáticamente el avance en borrador.
@@ -707,7 +693,10 @@ El proyecto permanece bloqueado mientras el programa no esté completo.
 El proyecto puede iniciarse cuando el programa esté completo.
 
 ## CA-07
-Si el PDF del proyecto no es legible, el sistema permite completar manualmente.
+El proyecto puede iniciarse cuando el programa esté completo.
+
+## CA-08
+Si la importacion Excel del proyecto no es confiable, el sistema permite completar manualmente lo faltante.
 
 ## CA-08
 El proyecto no puede cerrarse si faltan fases o actividades válidas.

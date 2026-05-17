@@ -4,14 +4,15 @@
 ## Estado: Matriz de trazabilidad inicial
 ## Última actualización: [YYYY-MM-DD]
 
-## Decision funcional TASK-08.5
+## Decision funcional TASK-UNICO-CARRIL
 
-La trazabilidad de extraccion PDF del programa queda reemplazada por:
+La trazabilidad queda reinterpretada asi:
 
-- Upload Module PDF Evidencia: carga, validacion basica, diagnostico y MinIO.
-- Excel Import Module: validacion canonica `.xlsx`, preview, confirmacion e importacion relacional.
+- Upload Module PDF Evidencia: carga, validacion basica y MinIO para programa y proyecto.
+- Excel Import Module: validacion canonica `.xlsx`, preview, confirmacion e importacion relacional para programa y proyecto.
 - Curriculum Module: consume la base importada por competencia sin adelantar el CRUD manual de TASK-09.
 - Pending Reconciliation: solo atiende excepciones sin competencia confiable.
+- No existe trazabilidad para carril manual como fuente activa.
 
 ---
 
@@ -51,9 +52,9 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-04 | El flujo principal debe ser tipo wizard | RF-01, RF-13, RF-21 | HU-01, HU-13, HU-22 | Wizard UI | Validar navegación paso a paso |
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
-| RN-13 / RN-13A | El programa soporta PDF evidencia, Excel canonico y manual; la importacion se organiza por competencia | RF-04, RF-05, RF-06, RF-07, RF-09, RF-10, RF-11, RF-12 | HU-03, HU-04, HU-05, HU-06, HU-08, HU-09, HU-10, HU-11 | Excel Import Service | Validar preview e importacion Excel por competencia |
-| RN-14 | Si el PDF no es legible, debe habilitarse cargue manual | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual |
-| RN-15 | La validacion Excel debe conservar errores y habilitar fallback manual | RF-06, RF-07 | HU-05, HU-06 | Excel Import Service | Validar workbook invalido y fallback manual |
+| RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
+| RN-14 | Si la importacion Excel no resuelve campos, debe habilitarse cargue manual SOLO para lo faltante | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual para lo faltante |
+| RN-15 | La validacion Excel debe conservar errores y habilitar fallback manual SOLO para lo estrictamente faltante | RF-06, RF-07 | HU-05, HU-06 | Excel Import Service | Validar workbook invalido y fallback manual para lo faltante |
 | RN-16 | La extracción automática no equivale a validación humana | RF-13, RF-27 | HU-13, HU-22 | Review Screen | Validar confirmación explícita |
 | RN-18 | El programa debe tener código y nombre | RF-02 | HU-01, HU-14 | Programa Form | Validar obligatorios mínimos |
 | RN-22 | Cada competencia debe tener código y nombre | RF-08 | HU-07 | Competencia Module | Validar estructura mínima de competencia |
@@ -64,6 +65,7 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-32 | Todo criterio pertenece a una competencia | RF-12 | HU-11 | Criteria Module | Validar integridad relacional de criterios |
 | RN-34A | Solo conocimientos y criterios sin competencia confiable quedan pendientes de asignacion | RF-06, RF-07, RF-10, RF-12 | HU-05, HU-06, HU-10, HU-11 | Excel Import Service / Pending Reconciliation | Preview con importacion por competencia y pendientes reales |
 | RN-35 | El proyecto depende del programa completo | RF-16, RF-17, RF-18 | HU-15, HU-16 | State Gate / Access Control | Validar bloqueo del proyecto |
+| RN-35A | El proyecto debe partir de fuente estructurada (Excel/matriz) | RF-21, RF-22, RF-23, RF-24 | HU-17, HU-18, HU-19 | Fuente estructurada Proyecto | Validar importacion Excel del proyecto |
 | RN-36 | El proyecto debe tener código, nombre, versión, fases y actividades | RF-19, RF-25, RF-26, RF-28, RF-29 | HU-20, HU-21, HU-22 | Proyecto Module | Validar estructura mínima del proyecto |
 | RN-38 | Toda actividad debe pertenecer a una fase | RF-26 | HU-21 | Actividad Module | Validar relación fase-actividad |
 | RN-40 | El proyecto solo se cierra con estructura mínima válida | RF-28, RF-29 | HU-22 | Completion Validator Proyecto | Validar cierre del proyecto |
@@ -98,7 +100,7 @@ Componentes:
 
 ---
 
-## 4.2 Épica: Cargue híbrido del programa
+## 4.2 Épica: Carga y importacion del programa
 Incluye:
 - HU-03
 - HU-04
@@ -106,7 +108,8 @@ Incluye:
 - HU-06
 
 Relaciona principalmente:
-- RN-13
+- RN-13 / RN-UNICO-CARRIL
+- RN-13A
 - RN-14
 - RN-15
 - RN-16
@@ -114,7 +117,7 @@ Relaciona principalmente:
 Componentes:
 - Upload Module
 - Excel Import Service
-- Extraction Feedback UI
+- Curriculum Module
 
 ---
 
@@ -165,7 +168,7 @@ Componentes:
 
 ---
 
-## 4.5 Épica: Cargue híbrido del proyecto
+## 4.5 Épica: Carga y importacion del proyecto
 Incluye:
 - HU-17
 - HU-18
@@ -176,11 +179,12 @@ Relaciona principalmente:
 - RN-14
 - RN-15
 - RN-16
+- RN-35A
 - RN-36
 
 Componentes:
 - Upload Module Proyecto
-- Fuente estructurada Proyecto por definir
+- Fuente estructurada Proyecto (Excel/matriz)
 - Proyecto Module
 
 ---
@@ -254,7 +258,7 @@ Relaciona:
 ## Excel Import Service
 Relaciona:
 - RN-13
-- RN-14
+- RN-13A
 - RN-15
 - RN-16
 - RF-05

@@ -1,6 +1,13 @@
 # AGENTS.md
 # SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
 
+# Importante
+Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
+
+NO vuelvas a leer archivos para los cuales codegraph_explore ya devolvió código fuente. Los fragmentos fuente son completos y autoritativos.
+
+Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes adicionales' si necesitas más detalle, o si codegraph no arrojó resultados.
+
 ## Proyecto
 Aplicación web para construcción de guías de aprendizaje SENA
 
@@ -9,6 +16,11 @@ Fase 1
 
 ## Propósito operativo
 Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
+
+## Fuente estructurada unica
+A partir de TASK-08.5, la matriz Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto.
+El PDF queda exclusivamente como evidencia documental en MinIO.
+El carril manual ya no existe como fuente funcional de captura.
 
 ## Decision funcional TASK-08.5
 A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF queda reemplazada para el programa de formacion por esta estrategia:
@@ -20,6 +32,16 @@ A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF qued
 - conocimientos y criterios se asocian inicialmente a la competencia; `resultado_id` es opcional y secundario para uso posterior;
 - solo quedan pendientes de conciliacion los conocimientos o criterios que no puedan asociarse a una competencia de forma confiable;
 - la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
+
+## Decision funcional TASK-UNICO-CARRIL
+A partir de esta refactorizacion integral:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura para programa o proyecto;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base para TASK-19;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
 
 ---
 
@@ -53,6 +75,7 @@ Antes de implementar cualquier tarea, leer en este orden:
 5. `/docs/05-architecture/DATA_MODEL.md`
 6. `/docs/06-implementation/IMPLEMENTATION_PLAN.md`
 7. `/docs/06-implementation/CODEX_TASKS.md`
+8.  `/docs/codegraph.md`
 
 No asumir requisitos fuera de esos documentos.
 
@@ -128,7 +151,6 @@ La Fase 1 SÍ incluye:
 - flujo tipo wizard,
 - carga documental PDF como evidencia,
 - importación estructurada desde Excel canónico,
-- fallback manual,
 - guardado automático en borrador,
 - revisión consolidada editable,
 - validación de completitud,
@@ -376,11 +398,11 @@ La cobertura estricta se evalúa por hito o sprint, no como requisito rígido pa
 # 17. Definición operativa de éxito de Fase 1
 
 La Fase 1 se considera exitosa cuando:
-- el programa puede cargarse manualmente o desde Excel canonico,
+- el programa puede cargarse desde Excel canonico,
 - el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o mediante fuente estructurada definida antes de su tarea,
+- el proyecto puede cargarse mediante fuente estructurada (Excel/matriz),
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida y trazable.

@@ -65,13 +65,11 @@ function ProgramaOriginBadge({
 type EntrySource = Exclude<ProgramaEntryMode, null>;
 
 const ENTRY_SOURCE_COPY: Record<EntrySource, string> = {
-  MANUAL: "Captura manual",
   PDF: "PDF (evidencia)",
   EXCEL: "Excel canonico",
 };
 
 const ENTRY_SOURCE_ICON: Record<EntrySource, React.ComponentType<{ className?: string }>> = {
-  MANUAL: NotebookText,
   PDF: FileText,
   EXCEL: FileSpreadsheet,
 };
@@ -109,7 +107,7 @@ export function ProgramaConsolidadoRevision({
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
 }>): React.JSX.Element {
-  const source = (entryMode ?? null) as EntrySource | null;
+  const source = (entryMode ?? "EXCEL") as EntrySource;
   const [validation, setValidation] =
     useState<ProgramaCompletitudResponse | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);

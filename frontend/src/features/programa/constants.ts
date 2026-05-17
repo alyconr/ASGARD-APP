@@ -560,9 +560,7 @@ export function normalizeProgramaPayload(
     meta: {
       referenciaId,
       entryMode:
-        meta?.entryMode === "MANUAL" ||
-        meta?.entryMode === "PDF" ||
-        meta?.entryMode === "EXCEL"
+        meta?.entryMode === "PDF" || meta?.entryMode === "EXCEL"
           ? meta.entryMode
           : base.meta.entryMode,
       touchedSteps: normalizeStepList(

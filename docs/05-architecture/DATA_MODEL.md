@@ -87,10 +87,10 @@ Programa y proyecto deben poder guardarse parcialmente en estado borrador.
 ## PM-03. Soporte para evidencia documental e importacion estructurada
 Cada dato debe poder registrarse como:
 
-- extraído automáticamente,
-- ingresado manualmente,
+- importado desde Excel canonico,
+- ingresado manualmente (solo para lo estrictamente faltante),
 - corregido por el usuario,
-- pendiente de validación.
+- pendiente de validacion.
 
 ## PM-04. Trazabilidad mínima
 Las entidades principales deben registrar creación, actualización y estado actual.
@@ -113,13 +113,12 @@ Valores permitidos:
 ## 4.2 TipoFuenteCargue
 Valores permitidos:
 
-- PDF_EXTRACCION
 - PDF_EVIDENCIA
 - EXCEL_CANONICO
 - MANUAL
 - MIXTO
 
-`PDF_EXTRACCION` queda como valor historico/deprecated. Para TASK-08.5, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion curricular desde workbook.
+`PDF_EXTRACCION` queda como valor historico/deprecated. Para TASK-08.5 y TASK-UNICO-CARRIL, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion curricular desde workbook. El valor `MANUAL` se conserva solo para trazabilidad de datos completados manualmente que no provienen de importacion.
 
 ## 4.3 TipoConocimiento
 Valores permitidos:
@@ -725,11 +724,13 @@ El modelo no debe asumir por sí solo:
 
 Quedan cerradas para Fase 1 estas decisiones:
 
-- el programa es la raíz del dominio,
+- el programa es la raiz del dominio,
 - la competencia es el contenedor curricular directo,
 - saber y proceso se almacenan separados,
 - el proyecto depende del programa,
 - las actividades dependen de una fase,
 - los borradores son persistentes,
-- existe auditoría básica,
-- la completitud se calcula por reglas explícitas del dominio.
+- existe auditoria basica,
+- la completitud se calcula por reglas explicitas del dominio,
+- el Excel canonico es la unica fuente estructurada activa,
+- el PDF queda exclusivamente como evidencia documental.

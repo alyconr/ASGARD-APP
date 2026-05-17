@@ -3,13 +3,15 @@
 ## Fase: 1
 ## Última actualización: [YYYY-MM-DD]
 
-## Decision funcional TASK-08.5
+## Decision funcional TASK-UNICO-CARRIL
 
-Las historias de cargue hibrido del programa se reinterpretan asi desde TASK-08.5:
+Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 
-- HU-03 y HU-04 conservan PDF solo como soporte documental en MinIO.
-- HU-05 deja de ejecutarse desde PDF para el programa.
-- La nueva tarea puente TASK-08.5 agrega preview e importacion desde Excel canonico antes de TASK-09.
+- HU-01: ya no ofrece MANUAL como opcion de entrada.
+- HU-03 y HU-04: conservan PDF solo como soporte documental en MinIO.
+- HU-05: deja de ejecutarse desde PDF para el programa; se reemplaza por importacion Excel.
+- HU-06: se limita a completar lo estrictamente faltante, no como fuente alternativa.
+- HU-17, HU-18, HU-19: se reinterpretan para proyecto orientado a Excel/matriz.
 
 ---
 
@@ -22,8 +24,9 @@ Las historias de cargue hibrido del programa se reinterpretan asi desde TASK-08.
 
 ### Criterios de aceptación
 - Debe existir un botón u opción para iniciar el proceso.
-- Debe permitirse elegir entre PDF, manual o continuar borrador.
+- Debe permitirse cargar Excel canónico o continuar borrador.
 - El sistema debe abrir el wizard en el paso correspondiente.
+- NO debe existir opción de modo manual como fuente de captura.
 
 ---
 
@@ -44,49 +47,51 @@ Las historias de cargue hibrido del programa se reinterpretan asi desde TASK-08.
 ## HU-03. Cargar PDF del programa
 **Como** usuario gestor pedagógico  
 **Quiero** cargar el PDF del programa  
-**Para** que el sistema intente extraer la información automáticamente.
+**Para** conservarlo como evidencia documental en MinIO.
 
 ### Criterios de aceptación
 - Debe aceptarse un archivo PDF.
 - El archivo debe validarse antes de procesarlo.
-- Debe iniciarse el análisis del documento.
+- Debe almacenarse como evidencia documental.
+- NO se realiza extraccion curricular desde el PDF.
 
 ---
 
-## HU-04. Detectar legibilidad del PDF del programa
+## HU-04. Validar PDF del programa como evidencia
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema evalúe el PDF  
-**Para** saber si la extracción será automática o manual.
+**Quiero** que el sistema valide el PDF  
+**Para** verificar que el archivo se guardó correctamente como evidencia.
 
 ### Criterios de aceptación
-- El sistema debe clasificar el PDF como legible, parcial o no legible.
+- El sistema debe verificar que el PDF es un archivo valido.
 - Debe informarse el resultado al usuario.
-- Debe ofrecerse fallback manual si aplica.
+- NO se clasifica por legibilidad ni extraccion.
 
 ---
 
-## HU-05. Extraer automáticamente datos del programa
+## HU-05. Importar datos del programa desde Excel canonico
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema extraiga los datos del programa  
-**Para** ahorrar tiempo de digitación.
+**Quiero** que el sistema importe los datos del programa desde Excel  
+**Para** ahorrar tiempo de digitacion y tener una base curricular estructurada.
 
 ### Criterios de aceptación
-- Deben intentarse extraer los campos definidos en SPECS.
-- Los datos deben quedar prellenados.
+- Deben importarse los campos definidos en SPECS desde Excel canonico.
+- Los datos deben quedar disponibles para revision.
 - Todo debe guardarse en borrador.
-- Debe requerirse revisión humana.
+- Debe requerirse confirmacion humana.
 
 ---
 
 ## HU-06. Completar manualmente campos faltantes del programa
 **Como** usuario gestor pedagógico  
-**Quiero** completar manualmente los campos no extraídos  
+**Quiero** completar manualmente los campos no importados por Excel  
 **Para** continuar el proceso sin bloqueos.
 
 ### Criterios de aceptación
-- Los campos faltantes deben marcarse como pendientes.
-- Debe mostrarse el motivo del fallo.
-- Debe existir una acción visible para diligenciarlos.
+- Solo se habilita para campos que la importacion Excel no resolvió.
+- Debe mostrarse el motivo de que un campo quede pendiente.
+- Debe existir una accion visible para diligenciarlo.
+- El ingreso manual NO es fuente alternativa de construccion curricular.
 
 ---
 
@@ -211,34 +216,31 @@ Las historias de cargue hibrido del programa se reinterpretan asi desde TASK-08.
 ## HU-17. Cargar PDF del proyecto
 **Como** usuario gestor pedagógico  
 **Quiero** cargar el PDF del proyecto  
-**Para** intentar extraer sus datos automáticamente.
+**Para** conservarlo como evidencia documental en MinIO.
 
 ### Criterios de aceptación
-- Debe aceptarse un PDF válido.
-- Debe analizarse su legibilidad.
+- Debe aceptarse un PDF valido.
+- Debe almacenarse como evidencia documental.
 
----
-
-## HU-18. Extraer datos del proyecto
+## HU-18. Importar datos del proyecto desde fuente estructurada
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema extraiga nombre, código, versión, fases y actividades  
+**Quiero** que el sistema importe los datos del proyecto desde Excel/matriz  
 **Para** reducir el trabajo manual.
 
 ### Criterios de aceptación
-- Los datos extraídos deben prellenarse.
+- Los datos importados deben revisarse.
 - Deben guardarse en borrador.
-- Debe permitirse corrección manual.
-
----
+- Debe permitirse correccion manual de lo faltante.
 
 ## HU-19. Completar manualmente el proyecto
 **Como** usuario gestor pedagógico  
 **Quiero** completar manualmente el proyecto  
-**Para** terminar la captura si la extracción no fue suficiente.
+**Para** terminar la captura si la importacion no fue suficiente.
 
 ### Criterios de aceptación
-- Debe permitirse ingresar los campos faltantes.
+- Debe permitirse ingresar los campos faltantes que la matriz no resolvió.
 - Debe validarse la relación fase-actividad.
+- El ingreso manual NO es fuente alternativa de construccion curricular.
 
 ---
 

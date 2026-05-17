@@ -50,7 +50,7 @@ describe("programa constants", () => {
     it("preserves valid properties and step notes", () => {
       const input = {
         meta: {
-          entryMode: "MANUAL",
+          entryMode: "EXCEL",
           touchedSteps: ["datos-programa", "origen-documental"],
           startedAt: "2024-01-01T00:00:00Z",
           lastInteractionAt: "2024-01-01T01:00:00Z",
@@ -69,7 +69,7 @@ describe("programa constants", () => {
       };
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
-      expect(normalized.meta.entryMode).toBe("MANUAL");
+      expect(normalized.meta.entryMode).toBe("EXCEL");
       expect(normalized.meta.touchedSteps).toEqual([
         "datos-programa",
         "origen-documental",

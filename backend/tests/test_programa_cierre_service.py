@@ -136,7 +136,7 @@ def build_draft(
         payload_json={
             "meta": {
                 "referenciaId": str(referencia_id),
-                "entryMode": "MANUAL",
+                "entryMode": "EXCEL",
                 "touchedSteps": ["datos-programa", "revision-programa"],
             },
             "programa": {
