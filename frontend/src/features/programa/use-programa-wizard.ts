@@ -27,6 +27,22 @@ import type {
   ProgramaWizardPayload,
   ProgramaWizardStepId,
 } from "@/features/programa/types";
+import {
+  DEFAULT_PROGRAMA_STEP_ID,
+  PROGRAMA_WIZARD_STEPS,
+  isProgramaWizardStepId,
+  createEmptyProgramaPayload,
+  normalizeProgramaPayload,
+  addTouchedStep,
+  buildDraftLabel,
+} from "@/features/programa/constants";
+import {
+  clearActiveProgramaDraftReference,
+  listKnownProgramaDrafts,
+  rememberProgramaDraft,
+  forgetProgramaDraft,
+  clearKnownProgramaDrafts,
+} from "@/features/drafts/storage";
 interface ProgramaWizardAutosave {
   state: AutosaveState;
   message: string;
@@ -623,9 +639,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
-  const markProgramaClosed = useCallback((): void => {
-    setDraftStatus("COMPLETO");
-    setKnownDrafts((currentDrafts) => {
   const forgetKnownDraft = useCallback((referenceId: string): void => {
     setKnownDrafts(forgetProgramaDraft(referenceId));
     notify.info("Referencia local retirada", {

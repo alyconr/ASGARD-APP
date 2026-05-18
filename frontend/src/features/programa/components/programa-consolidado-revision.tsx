@@ -82,29 +82,32 @@ function sortByOrder<T extends { orden: number | null }>(items: T[]): T[] {
   });
 }
 
-export function ProgramaConsolidadoRevision({
-  codigoPrograma,
-  nombrePrograma,
-  versionPrograma,
-  referenciaId = "",
-  estadoBorrador = "BORRADOR",
-  competencias,
-  pdfResult,
-  excelResult,
-  onNavigateToStep,
-  onProgramaCerrado = () => {},
-}: Readonly<{
-  codigoPrograma: string;
-  nombrePrograma: string;
-  versionPrograma: string;
-  referenciaId?: string;
-  estadoBorrador?: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
-  competencias: ProgramaCompetencia[];
-  pdfResult: ProgramaPdfUploadResult | null;
-  excelResult: ProgramaExcelImportState | null;
-  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
-  onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
-}>: React.JSX.Element {
+export function ProgramaConsolidadoRevision(
+  props: Readonly<{
+    codigoPrograma: string;
+    nombrePrograma: string;
+    versionPrograma: string;
+    referenciaId?: string;
+    estadoBorrador?: "BORRADOR" | "EN_REVISION" | "COMPLETO" | "BLOQUEADO";
+    competencias: ProgramaCompetencia[];
+    pdfResult: ProgramaPdfUploadResult | null;
+    excelResult: ProgramaExcelImportState | null;
+    onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+    onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
+  }>,
+): React.JSX.Element {
+  const {
+    codigoPrograma,
+    nombrePrograma,
+    versionPrograma,
+    referenciaId = "",
+    estadoBorrador = "BORRADOR",
+    competencias,
+    pdfResult,
+    excelResult,
+    onNavigateToStep,
+    onProgramaCerrado = () => {},
+  } = props;
   const [validation, setValidation] =
     useState<ProgramaCompletitudResponse | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);

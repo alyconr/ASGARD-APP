@@ -29,6 +29,7 @@ import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
 import type {
+  ProgramaCierreResponse,
   ProgramaCompetencia,
   ProgramaCompetenciaListResponse,
   ProgramaExcelImportResponse,
@@ -132,24 +133,7 @@ function ErrorBanner({
   );
 }
 
-function StepWorkspace({
-  currentStep,
-  currentStepNote,
-  programaExcelResult,
-  programaPdfResult,
-  referenceId,
-  estadoBorrador,
-  programaValue,
-  onProgramaExcelPreviewed,
-  onProgramaExcelImported,
-  onProgramaCompetenciasSynced,
-  onProgramaPdfUploaded,
-  onPersistDraftBeforeExcelPreview,
-  onNoteChange,
-  onNavigateToStep,
-  onProgramaCerrado,
-  competencias,
-}: Readonly<{
+type StepWorkspaceProps = {
   currentStep: ProgramaWizardStepDefinition;
   currentStepNote: string;
   programaExcelResult: ProgramaExcelImportState | null;
@@ -170,11 +154,28 @@ function StepWorkspace({
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
-  onProgramaCerrado: Parameters<
-    typeof ProgramaConsolidadoRevision
-  >[0]["onProgramaCerrado"];
+  onProgramaCerrado: (result: ProgramaCierreResponse) => void;
   competencias: ProgramaCompetencia[];
-}>: React.JSX.Element {
+};
+
+function StepWorkspace({
+  currentStep,
+  currentStepNote,
+  programaExcelResult,
+  programaPdfResult,
+  referenceId,
+  estadoBorrador,
+  programaValue,
+  onProgramaExcelPreviewed,
+  onProgramaExcelImported,
+  onProgramaCompetenciasSynced,
+  onProgramaPdfUploaded,
+  onPersistDraftBeforeExcelPreview,
+  onNoteChange,
+  onNavigateToStep,
+  onProgramaCerrado,
+  competencias,
+}: StepWorkspaceProps): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
 
