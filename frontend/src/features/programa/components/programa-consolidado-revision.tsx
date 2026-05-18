@@ -352,9 +352,11 @@ export function ProgramaConsolidadoRevision(
                   </span>
                 </p>
                 <p>
-                  Estado:{" "}
+                  Estado del almacenamiento:{" "}
                   <span className="font-semibold text-[var(--foreground)]">
-                    {pdfResult!.diagnostico.estado_legibilidad}
+                    {pdfResult!.diagnostico.almacenamiento_exitoso
+                      ? "Exitoso"
+                      : "Fallido"}
                   </span>
                 </p>
               </div>
