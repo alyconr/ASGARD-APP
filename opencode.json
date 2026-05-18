@@ -26,6 +26,29 @@
       "headers": {
         "X-Goog-Api-Key": "${STITCH_API_KEY}"
       }
+    },
+    "codegraph": {
+      "type": "local",
+      "command": ["codegraph", "serve", "--mcp"]
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
+    }
+  },
+  "provider": {
+    "nan": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "NaN",
+      "options": {
+        "baseURL": "https://api.nan.builders/v1",
+        "apiKey": "sk-LCqecOPv8czCQ2vTf5HkQQ"
+      },
+      "models": {
+        "qwen3.6": {
+          "name": "Qwen 3.6"
+        }
+      }
     }
   }
 }
