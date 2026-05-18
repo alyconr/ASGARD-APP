@@ -31,6 +31,7 @@ import {
 } from "@/features/proyecto/constants";
 import type {
   ProyectoDraftSnapshot,
+  ProyectoExcelPreviewState,
   ProyectoPdfUploadResult,
   ProyectoWizardPayload,
   ProyectoWizardStepId,
@@ -140,6 +141,8 @@ export interface ProyectoWizardController {
   updateContinueReferenceInput: (value: string) => void;
   updateStepNote: (stepId: ProyectoWizardStepId, note: string) => void;
   updateProyectoPdfResult: (result: ProyectoPdfUploadResult) => void;
+  updateProyectoExcelPreview: (result: ProyectoExcelPreviewState) => void;
+  updateProyectoExcelImport: (result: ProyectoExcelPreviewState) => void;
 }
 
 export function useProyectoWizard({
@@ -492,6 +495,71 @@ export function useProyectoWizard({
     [],
   );
 
+  const updateProyectoExcelPreview = useCallback(
+    (result: ProyectoExcelPreviewState): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "fuente-proyecto",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          documental: {
+            ...currentPayload.documental,
+            fuente_estructurada: result,
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const updateProyectoExcelImport = useCallback(
+    (result: ProyectoExcelPreviewState): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "fuente-proyecto",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          documental: {
+            ...currentPayload.documental,
+            fuente_estructurada: result,
+          },
+          estructura: {
+            ...currentPayload.estructura,
+            fases: result.confirmacion.fase_ids?.map((id) => ({
+              fase_id: id,
+              estado: "IMPORTADO",
+            })),
+            actividades: result.confirmacion.actividad_ids?.map((id) => ({
+              actividad_id: id,
+              estado: "IMPORTADO",
+            })),
+          },
+        };
+      });
+    },
+    [],
+  );
+
   const forgetKnownDraft = useCallback((referenceId: string): void => {
     setKnownDrafts(forgetProyectoDraft(referenceId));
     notify.info("Referencia local retirada", {
@@ -551,5 +619,7 @@ export function useProyectoWizard({
     updateContinueReferenceInput,
     updateStepNote,
     updateProyectoPdfResult,
+    updateProyectoExcelPreview,
+    updateProyectoExcelImport,
   };
 }

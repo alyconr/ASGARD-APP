@@ -17,9 +17,11 @@ import {
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { ProyectoBaseInfo } from "@/features/proyecto/components/proyecto-base-info";
 import { ProyectoDocumentUpload } from "@/features/proyecto/components/proyecto-document-upload";
+import { ProyectoExcelImport } from "@/features/proyecto/components/proyecto-excel-import";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
 import type {
   ProyectoDisponibilidadResponse,
+  ProyectoExcelPreviewState,
   ProyectoPdfUploadResult,
   ProyectoWizardPayload,
   ProyectoWizardStepDefinition,
@@ -141,6 +143,8 @@ function StepWorkspace({
   proyectoValue,
   payload,
   onPdfUploaded,
+  onExcelPreview,
+  onExcelImported,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   currentStepNote: string;
@@ -148,6 +152,8 @@ function StepWorkspace({
   proyectoValue: ProyectoWizardPayload["proyecto"];
   payload: ProyectoWizardPayload | null;
   onPdfUploaded: (result: ProyectoPdfUploadResult) => void;
+  onExcelPreview: (result: ProyectoExcelPreviewState) => void;
+  onExcelImported: (result: ProyectoExcelPreviewState) => void;
 }>): React.JSX.Element {
   const Icon = STEP_ICONS[currentStep.id];
 
@@ -177,11 +183,19 @@ function StepWorkspace({
           {currentStep.id === "datos-proyecto" ? (
             <ProyectoBaseInfo value={proyectoValue} />
           ) : currentStep.id === "fuente-proyecto" && payload !== null ? (
-            <ProyectoDocumentUpload
-              currentResult={payload.documental.proyecto_pdf}
-              onUploaded={onPdfUploaded}
-              referenciaId={payload.meta.referenciaId}
-            />
+            <div className="grid gap-4">
+              <ProyectoDocumentUpload
+                currentResult={payload.documental.proyecto_pdf}
+                onUploaded={onPdfUploaded}
+                referenciaId={payload.meta.referenciaId}
+              />
+              <ProyectoExcelImport
+                currentResult={payload.documental.fuente_estructurada}
+                onPreview={onExcelPreview}
+                onImported={onExcelImported}
+                referenciaId={payload.meta.referenciaId}
+              />
+            </div>
           ) : (
             <>
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
@@ -426,6 +440,12 @@ export function ProyectoWizardShell({
               payload={controller.payload}
               onPdfUploaded={(result) =>
                 controller.updateProyectoPdfResult(result)
+              }
+              onExcelPreview={(result) =>
+                controller.updateProyectoExcelPreview(result)
+              }
+              onExcelImported={(result) =>
+                controller.updateProyectoExcelImport(result)
               }
             />
 

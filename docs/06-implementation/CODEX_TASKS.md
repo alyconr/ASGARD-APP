@@ -547,7 +547,7 @@ Permitir subir el PDF del proyecto como evidencia documental en MinIO.
 
 ---
 
-## TASK-19. Definir e implementar fuente estructurada del proyecto [reinterpretada]
+## TASK-19. Definir e implementar fuente estructurada del proyecto [reinterpretada] ✅ COMPLETA
 
 ### Objetivo
 Implementar la importación estructurada del proyecto desde una matriz/Excel, alineada con el unico carril funcional.
@@ -570,6 +570,14 @@ Implementar la importación estructurada del proyecto desde una matriz/Excel, al
 - deja pendiente lo que no puede importar,
 - no asume validacion automatica,
 - no intenta extraccion desde PDF.
+
+### Implementado
+- backend: `proyecto_excel.py` (servicio, DTOs, controller, endpoints preview/confirm, repository adapter)
+- frontend: `proyecto-excel-import.tsx` (uploader + preview + confirmacion), `excel-import-api.ts` (client)
+- integracion: wizard-shell renderiza ambos uploaders en paso `fuente-proyecto`
+- normalizacion: `normalizeProyectoDocumental` restaura preview y confirmacion desde borrador
+- tipos: `ProyectoExcelPreviewState`, `ExcelPreviewSummary`, `ExcelFasePreview`, `ExcelValidationIssue`
+- pruebas: `test_proyecto_excel_service.py` (13 tests), `proyecto-excel-import.test.tsx` (10 tests)
 
 ---
 

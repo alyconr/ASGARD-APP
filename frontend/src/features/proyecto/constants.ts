@@ -1,4 +1,7 @@
 import type {
+  ExcelPendingSummary,
+  ExcelPreviewSummary,
+  ProyectoExcelPreviewState,
   ProyectoPdfUploadResult,
   ProyectoStoredDocument,
   ProyectoWizardPayload,
@@ -216,24 +219,167 @@ function normalizeProyectoDocumental(
   }
 
   const proyectoPdf = asRecord(documental.proyecto_pdf);
-  if (proyectoPdf === null) {
-    return { proyecto_pdf: null, fuente_estructurada: null };
+  let proyectoPdfResult: ProyectoPdfUploadResult | null = null;
+  if (proyectoPdf !== null) {
+    const storedDocument = normalizeStoredDocument(proyectoPdf.documento);
+    if (storedDocument !== null) {
+      proyectoPdfResult = {
+        documento: storedDocument,
+        uso: "EVIDENCIA_DOCUMENTAL",
+        updated_at:
+          typeof proyectoPdf.updated_at === "string"
+            ? proyectoPdf.updated_at
+            : undefined,
+      };
+    }
   }
 
-  const storedDocument = normalizeStoredDocument(proyectoPdf.documento);
-  if (storedDocument === null) {
-    return { proyecto_pdf: null, fuente_estructurada: null };
+  const fuenteEstructurada = asRecord(documental.fuente_estructurada);
+  let fuenteEstructuradaResult: ProyectoExcelPreviewState | null = null;
+  if (fuenteEstructurada !== null) {
+    const docPayload = asRecord(fuenteEstructurada.documento);
+    const storedDoc =
+      docPayload !== null
+        ? {
+            original_filename: asString(docPayload.original_filename),
+            storage_key: asString(docPayload.storage_key),
+            size_bytes: asNumber(docPayload.size_bytes),
+            content_type: asString(
+              docPayload.content_type,
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            checksum_sha256: asString(docPayload.checksum_sha256),
+            etag:
+              typeof docPayload.etag === "string" ? docPayload.etag : null,
+          }
+        : null;
+
+    const previewPayload = asRecord(fuenteEstructurada.preview);
+    const previewData =
+      previewPayload !== null
+        ? {
+            valid: asBoolean(previewPayload.valid),
+            estado_validacion:
+              (previewPayload.estado_validacion as "VALIDO" | "INVALIDO") ??
+              "INVALIDO",
+            resumen: normalizePreviewSummary(previewPayload.resumen),
+            proyecto:
+              asRecord(previewPayload.proyecto) !== null
+                ? {
+                    codigo_proyecto: asString(
+                      previewPayload.proyecto.codigo_proyecto,
+                    ),
+                    nombre_proyecto: asString(
+                      previewPayload.proyecto.nombre_proyecto,
+                    ),
+                    version_proyecto: asString(
+                      previewPayload.proyecto.version_proyecto,
+                    ),
+                  }
+                : null,
+            fases: (Array.isArray(previewPayload.fases)
+              ? previewPayload.fases
+              : []
+            ).flatMap((item) => {
+              const f = asRecord(item);
+              if (f === null) return [];
+              return [
+                {
+                  fase_id: asString(f.fase_id),
+                  nombre_fase: asString(f.nombre_fase),
+                  orden:
+                    typeof f.orden === "number" && Number.isFinite(f.orden)
+                      ? f.orden
+                      : null,
+                  actividades: asNumber(f.actividades),
+                },
+              ];
+            }),
+            pendientes_resumen: normalizePendingSummary(
+              previewPayload.pendientes_resumen,
+            ),
+            errores: (Array.isArray(previewPayload.errores)
+              ? previewPayload.errores
+              : []
+            ).flatMap((item) => {
+              const e = asRecord(item);
+              if (e === null) return [];
+              return [
+                {
+                  hoja: asString(e.hoja),
+                  fila:
+                    typeof e.fila === "number" && Number.isFinite(e.fila)
+                      ? e.fila
+                      : null,
+                  campo:
+                    typeof e.campo === "string" ? e.campo : null,
+                  mensaje: asString(e.mensaje),
+                },
+              ];
+            }),
+          }
+        : null;
+
+    const confirmPayload = asRecord(fuenteEstructurada.confirmacion);
+    const confirmData: ProyectoExcelPreviewState["confirmacion"] = {
+      estado:
+        (confirmPayload?.estado as "IMPORTADO" | "PENDIENTE") ?? "PENDIENTE",
+      confirmed_at:
+        typeof confirmPayload?.confirmed_at === "string"
+          ? confirmPayload.confirmed_at
+          : undefined,
+      proyecto_id:
+        typeof confirmPayload?.proyecto_id === "string"
+          ? confirmPayload.proyecto_id
+          : undefined,
+      fase_ids: Array.isArray(confirmPayload?.fase_ids)
+        ? confirmPayload.fase_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      actividad_ids: Array.isArray(confirmPayload?.actividad_ids)
+        ? confirmPayload.actividad_ids.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : undefined,
+      pendientes_resumen: normalizePendingSummary(
+        confirmPayload?.pendientes_resumen,
+      ),
+    };
+
+    fuenteEstructuradaResult = {
+      documento: storedDoc,
+      preview: previewData,
+      confirmacion: confirmData,
+      updated_at:
+        typeof fuenteEstructurada.updated_at === "string"
+          ? fuenteEstructurada.updated_at
+          : undefined,
+    };
   }
 
   return {
-    proyecto_pdf: {
-      documento: storedDocument,
-      uso: "EVIDENCIA_DOCUMENTAL",
-      updated_at:
-        typeof proyectoPdf.updated_at === "string"
-          ? proyectoPdf.updated_at
-          : undefined,
-    },
-    fuente_estructurada: null,
+    proyecto_pdf: proyectoPdfResult,
+    fuente_estructurada: fuenteEstructuradaResult,
+  };
+}
+
+function normalizePreviewSummary(
+  value: unknown,
+): ExcelPreviewSummary {
+  const s = asRecord(value);
+  return {
+    proyecto: asNumber(s?.proyecto),
+    fases: asNumber(s?.fases),
+    actividades: asNumber(s?.actividades),
+  };
+}
+
+function normalizePendingSummary(
+  value: unknown,
+): ExcelPendingSummary {
+  const s = asRecord(value);
+  return {
+    total: asNumber(s?.total),
   };
 }

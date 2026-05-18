@@ -30,6 +30,58 @@ export interface ProyectoPdfUploadResult {
   updated_at?: string;
 }
 
+export interface ExcelPendingSummary {
+  total: number;
+}
+
+export interface ExcelValidationIssue {
+  hoja: string;
+  fila: number | null;
+  campo: string | null;
+  mensaje: string;
+}
+
+export interface ExcelPreviewSummary {
+  proyecto: number;
+  fases: number;
+  actividades: number;
+}
+
+export interface ExcelProjectPreview {
+  codigo_proyecto: string;
+  nombre_proyecto: string;
+  version_proyecto: string;
+}
+
+export interface ExcelFasePreview {
+  fase_id: string;
+  nombre_fase: string;
+  orden: number | null;
+  actividades: number;
+}
+
+export interface ProyectoExcelPreviewState {
+  documento: ProyectoStoredDocument | null;
+  preview: {
+    valid: boolean;
+    estado_validacion: "VALIDO" | "INVALIDO";
+    resumen: ExcelPreviewSummary;
+    proyecto: ExcelProjectPreview | null;
+    fases: ExcelFasePreview[];
+    pendientes_resumen: ExcelPendingSummary;
+    errores: ExcelValidationIssue[];
+  } | null;
+  confirmacion: {
+    estado: "PENDIENTE" | "IMPORTADO";
+    confirmed_at?: string;
+    proyecto_id?: string;
+    fase_ids?: string[];
+    actividad_ids?: string[];
+    pendientes_resumen?: ExcelPendingSummary;
+  };
+  updated_at?: string;
+}
+
 export interface ProyectoWizardPayload {
   meta: {
     referenciaId: string;
@@ -50,7 +102,7 @@ export interface ProyectoWizardPayload {
   };
   documental: {
     proyecto_pdf: ProyectoPdfUploadResult | null;
-    fuente_estructurada: null;
+    fuente_estructurada: ProyectoExcelPreviewState | null;
   };
   estructura: {
     fases: [];
