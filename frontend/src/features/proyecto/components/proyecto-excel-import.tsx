@@ -412,11 +412,11 @@ export function ProyectoExcelImport({
         </div>
       ) : null}
 
-      {currentResult?.preview !== null ? (
+      {currentResult && currentResult.preview !== null ? (
         <PreviewSection preview={currentResult.preview} />
       ) : null}
 
-      {isImported && currentResult.confirmacion.proyecto_id ? (
+      {currentResult && currentResult.confirmacion.proyecto_id && isImported ? (
         <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-700" />

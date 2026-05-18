@@ -548,11 +548,11 @@ export function useProyectoWizard({
             fases: result.confirmacion.fase_ids?.map((id) => ({
               fase_id: id,
               estado: "IMPORTADO",
-            })),
+            })) ?? [],
             actividades: result.confirmacion.actividad_ids?.map((id) => ({
               actividad_id: id,
               estado: "IMPORTADO",
-            })),
+            })) ?? [],
           },
         };
       });

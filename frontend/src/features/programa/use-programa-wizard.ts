@@ -33,15 +33,16 @@ import {
   isProgramaWizardStepId,
   createEmptyProgramaPayload,
   normalizeProgramaPayload,
-  addTouchedStep,
-  buildDraftLabel,
 } from "@/features/programa/constants";
 import {
   clearActiveProgramaDraftReference,
+  getActiveProgramaDraftReference,
+  setActiveProgramaDraftReference,
   listKnownProgramaDrafts,
   rememberProgramaDraft,
   forgetProgramaDraft,
   clearKnownProgramaDrafts,
+  type KnownDraftSummary,
 } from "@/features/drafts/storage";
 interface ProgramaWizardAutosave {
   state: AutosaveState;

@@ -69,6 +69,14 @@ function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && !Number.isNaN(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function asCleanString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.trim() : fallback;
 }
@@ -267,13 +275,13 @@ function normalizeProyectoDocumental(
               asRecord(previewPayload.proyecto) !== null
                 ? {
                     codigo_proyecto: asString(
-                      previewPayload.proyecto.codigo_proyecto,
+                      (previewPayload.proyecto as Record<string, unknown>).codigo_proyecto,
                     ),
                     nombre_proyecto: asString(
-                      previewPayload.proyecto.nombre_proyecto,
+                      (previewPayload.proyecto as Record<string, unknown>).nombre_proyecto,
                     ),
                     version_proyecto: asString(
-                      previewPayload.proyecto.version_proyecto,
+                      (previewPayload.proyecto as Record<string, unknown>).version_proyecto,
                     ),
                   }
                 : null,

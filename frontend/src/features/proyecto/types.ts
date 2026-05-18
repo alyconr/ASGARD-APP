@@ -105,8 +105,8 @@ export interface ProyectoWizardPayload {
     fuente_estructurada: ProyectoExcelPreviewState | null;
   };
   estructura: {
-    fases: [];
-    actividades: [];
+    fases: Array<{ fase_id: string; estado: string }>;
+    actividades: Array<{ actividad_id: string; estado: string }>;
   };
 }
 
