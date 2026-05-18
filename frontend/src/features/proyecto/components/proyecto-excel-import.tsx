@@ -276,7 +276,7 @@ export function ProyectoExcelImport({
         `Importacion completada: ${result.resumen.fases} fases y ${result.resumen.actividades} actividades materializadas.`,
       );
       notify.success("Importacion completada", {
-        description: importedState.confirmacion.confirmado_at
+        description: importedState.confirmacion.confirmed_at
           ? `Proyecto creado con ${result.fase_ids.length} fases y ${result.actividad_ids.length} actividades.`
           : "Datos del proyecto actualizados.",
       });
