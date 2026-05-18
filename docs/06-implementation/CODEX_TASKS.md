@@ -514,7 +514,7 @@ Capturar los datos mínimos del proyecto.
 
 ---
 
-## TASK-18. Implementar carga y diagnóstico de PDF del proyecto como evidencia
+## TASK-18. Implementar carga y diagnóstico de PDF del proyecto como evidencia ✅ COMPLETA
 
 ### Objetivo
 Permitir subir el PDF del proyecto como evidencia documental en MinIO.
@@ -538,6 +538,12 @@ Permitir subir el PDF del proyecto como evidencia documental en MinIO.
 ### Aceptación
 - el sistema clasifica correctamente el archivo como evidencia,
 - el usuario ve el PDF almacenado como soporte documental.
+
+### Implementado
+- backend: `proyecto_documentos.py` (servicio, DTOs, controller, endpoint `POST /proyectos/{ref}/documentos/proyecto-pdf`)
+- frontend: `proyecto-document-upload.tsx` (uploader), `document-upload-api.ts` (client), integración en `proyecto-wizard-shell.tsx`
+- tipos: `ProyectoPdfUploadResult`, `ProyectoStoredDocument`, `normalizeProyectoDocumental`
+- pruebas: `test_proyecto_documentos_service.py`, `proyecto-document-upload.test.tsx`
 
 ---
 

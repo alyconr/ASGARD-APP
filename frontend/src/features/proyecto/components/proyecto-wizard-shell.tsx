@@ -16,9 +16,11 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { ProyectoBaseInfo } from "@/features/proyecto/components/proyecto-base-info";
+import { ProyectoDocumentUpload } from "@/features/proyecto/components/proyecto-document-upload";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
 import type {
   ProyectoDisponibilidadResponse,
+  ProyectoPdfUploadResult,
   ProyectoWizardPayload,
   ProyectoWizardStepDefinition,
   ProyectoWizardStepId,
@@ -137,11 +139,15 @@ function StepWorkspace({
   currentStepNote,
   onNoteChange,
   proyectoValue,
+  payload,
+  onPdfUploaded,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   currentStepNote: string;
   onNoteChange: (value: string) => void;
   proyectoValue: ProyectoWizardPayload["proyecto"];
+  payload: ProyectoWizardPayload | null;
+  onPdfUploaded: (result: ProyectoPdfUploadResult) => void;
 }>): React.JSX.Element {
   const Icon = STEP_ICONS[currentStep.id];
 
@@ -170,6 +176,12 @@ function StepWorkspace({
         <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "datos-proyecto" ? (
             <ProyectoBaseInfo value={proyectoValue} />
+          ) : currentStep.id === "fuente-proyecto" && payload !== null ? (
+            <ProyectoDocumentUpload
+              currentResult={payload.documental.proyecto_pdf}
+              onUploaded={onPdfUploaded}
+              referenciaId={payload.meta.referenciaId}
+            />
           ) : (
             <>
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
@@ -411,6 +423,10 @@ export function ProyectoWizardShell({
                 controller.updateStepNote(controller.currentStepId, value)
               }
               proyectoValue={controller.payload.proyecto}
+              payload={controller.payload}
+              onPdfUploaded={(result) =>
+                controller.updateProyectoPdfResult(result)
+              }
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">

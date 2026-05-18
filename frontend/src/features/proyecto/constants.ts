@@ -1,4 +1,6 @@
 import type {
+  ProyectoPdfUploadResult,
+  ProyectoStoredDocument,
   ProyectoWizardPayload,
   ProyectoWizardStepDefinition,
   ProyectoWizardStepId,
@@ -176,5 +178,62 @@ export function normalizeProyectoPayload(
       nombre_proyecto: asCleanString(proyecto?.nombre_proyecto),
       version_proyecto: asCleanString(proyecto?.version_proyecto),
     },
+    documental: normalizeProyectoDocumental(value.documental),
+  };
+}
+
+function normalizeStoredDocument(
+  value: unknown,
+): ProyectoStoredDocument | null {
+  const document = asRecord(value);
+  if (document === null) {
+    return null;
+  }
+
+  const originalFilename = asString(document.original_filename);
+  const storageKey = asString(document.storage_key);
+  const checksum = asString(document.checksum_sha256);
+  if (!originalFilename || !storageKey || !checksum) {
+    return null;
+  }
+
+  return {
+    original_filename: originalFilename,
+    storage_key: storageKey,
+    size_bytes: asNumber(document.size_bytes),
+    content_type: asString(document.content_type, "application/pdf"),
+    checksum_sha256: checksum,
+    etag: typeof document.etag === "string" ? document.etag : null,
+  };
+}
+
+function normalizeProyectoDocumental(
+  value: unknown,
+): ProyectoWizardPayload["documental"] {
+  const documental = asRecord(value);
+  if (documental === null) {
+    return { proyecto_pdf: null, fuente_estructurada: null };
+  }
+
+  const proyectoPdf = asRecord(documental.proyecto_pdf);
+  if (proyectoPdf === null) {
+    return { proyecto_pdf: null, fuente_estructurada: null };
+  }
+
+  const storedDocument = normalizeStoredDocument(proyectoPdf.documento);
+  if (storedDocument === null) {
+    return { proyecto_pdf: null, fuente_estructurada: null };
+  }
+
+  return {
+    proyecto_pdf: {
+      documento: storedDocument,
+      uso: "EVIDENCIA_DOCUMENTAL",
+      updated_at:
+        typeof proyectoPdf.updated_at === "string"
+          ? proyectoPdf.updated_at
+          : undefined,
+    },
+    fuente_estructurada: null,
   };
 }

@@ -23,10 +23,6 @@ import {
   setActiveProyectoDraftReference,
 } from "@/features/drafts/storage";
 import {
-  sanitizeProyectoFieldValue,
-  type ProyectoBaseField,
-} from "@/features/proyecto/validation";
-import {
   createEmptyProyectoPayload,
   DEFAULT_PROYECTO_STEP_ID,
   isProyectoWizardStepId,
@@ -35,6 +31,7 @@ import {
 } from "@/features/proyecto/constants";
 import type {
   ProyectoDraftSnapshot,
+  ProyectoPdfUploadResult,
   ProyectoWizardPayload,
   ProyectoWizardStepId,
 } from "@/features/proyecto/types";
@@ -141,8 +138,8 @@ export interface ProyectoWizardController {
   resetFlow: () => void;
   startNewFlow: () => Promise<void>;
   updateContinueReferenceInput: (value: string) => void;
-  updateProyectoBaseField: (field: ProyectoBaseField, value: string) => void;
   updateStepNote: (stepId: ProyectoWizardStepId, note: string) => void;
+  updateProyectoPdfResult: (result: ProyectoPdfUploadResult) => void;
 }
 
 export function useProyectoWizard({
@@ -438,34 +435,6 @@ export function useProyectoWizard({
     }
   }, [currentStepId, goToStep]);
 
-  const updateProyectoBaseField = useCallback(
-    (field: ProyectoBaseField, value: string): void => {
-      const sanitizedValue = sanitizeProyectoFieldValue(value);
-      setPayload((currentPayload) => {
-        if (currentPayload === null) {
-          return currentPayload;
-        }
-
-        return {
-          ...currentPayload,
-          meta: {
-            ...currentPayload.meta,
-            touchedSteps: addTouchedStep(
-              currentPayload.meta.touchedSteps,
-              "datos-proyecto",
-            ),
-            lastInteractionAt: new Date().toISOString(),
-          },
-          proyecto: {
-            ...currentPayload.proyecto,
-            [field]: sanitizedValue,
-          },
-        };
-      });
-    },
-    [],
-  );
-
   const updateStepNote = useCallback(
     (stepId: ProyectoWizardStepId, note: string): void => {
       setPayload((currentPayload) => {
@@ -489,6 +458,33 @@ export function useProyectoWizard({
               ...currentPayload.wizard.notesByStep,
               [stepId]: note,
             },
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const updateProyectoPdfResult = useCallback(
+    (result: ProyectoPdfUploadResult): void => {
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "fuente-proyecto",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          documental: {
+            ...currentPayload.documental,
+            proyecto_pdf: result,
           },
         };
       });
@@ -553,7 +549,7 @@ export function useProyectoWizard({
     resetFlow,
     startNewFlow,
     updateContinueReferenceInput,
-    updateProyectoBaseField,
     updateStepNote,
+    updateProyectoPdfResult,
   };
 }

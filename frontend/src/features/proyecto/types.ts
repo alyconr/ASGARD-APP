@@ -15,6 +15,21 @@ export interface ProyectoWizardStepDefinition {
   taskRef: string;
 }
 
+export interface ProyectoStoredDocument {
+  original_filename: string;
+  storage_key: string;
+  size_bytes: number;
+  content_type: string;
+  checksum_sha256: string;
+  etag: string | null;
+}
+
+export interface ProyectoPdfUploadResult {
+  documento: ProyectoStoredDocument;
+  uso: "EVIDENCIA_DOCUMENTAL";
+  updated_at?: string;
+}
+
 export interface ProyectoWizardPayload {
   meta: {
     referenciaId: string;
@@ -34,7 +49,7 @@ export interface ProyectoWizardPayload {
     version_proyecto: string;
   };
   documental: {
-    proyecto_pdf: null;
+    proyecto_pdf: ProyectoPdfUploadResult | null;
     fuente_estructurada: null;
   };
   estructura: {

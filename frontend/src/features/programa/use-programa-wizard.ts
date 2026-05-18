@@ -16,23 +16,6 @@ import {
 } from "@/features/drafts/types";
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
-import {
-  clearActiveProgramaDraftReference,
-  clearKnownProgramaDrafts,
-  forgetProgramaDraft,
-  getActiveProgramaDraftReference,
-  listKnownProgramaDrafts,
-  rememberProgramaDraft,
-  setActiveProgramaDraftReference,
-  type KnownDraftSummary,
-} from "@/features/drafts/storage";
-import {
-  createEmptyProgramaPayload,
-  DEFAULT_PROGRAMA_STEP_ID,
-  isProgramaWizardStepId,
-  normalizeProgramaPayload,
-  PROGRAMA_WIZARD_STEPS,
-} from "@/features/programa/constants";
 import type {
   AutosaveState,
   ProgramaCompetenciaListResponse,
@@ -44,11 +27,6 @@ import type {
   ProgramaWizardPayload,
   ProgramaWizardStepId,
 } from "@/features/programa/types";
-import {
-  sanitizeProgramaFieldValue,
-  type ProgramaBaseField,
-} from "@/features/programa/validation";
-
 interface ProgramaWizardAutosave {
   state: AutosaveState;
   message: string;
@@ -165,7 +143,6 @@ export interface ProgramaWizardController {
   goToNextStep: () => void;
   goToPreviousStep: () => void;
   goToStep: (stepId: ProgramaWizardStepId) => void;
-  updateProgramaBaseField: (field: ProgramaBaseField, value: string) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
   persistActiveDraftNow: () => Promise<boolean>;
@@ -495,33 +472,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
-  const updateProgramaBaseField = useCallback(
-    (field: ProgramaBaseField, value: string): void => {
-      setPayload((currentPayload) => {
-        if (currentPayload === null) {
-          return currentPayload;
-        }
-
-        return {
-          ...currentPayload,
-          meta: {
-            ...currentPayload.meta,
-            touchedSteps: addTouchedStep(
-              currentPayload.meta.touchedSteps,
-              "datos-programa",
-            ),
-            lastInteractionAt: new Date().toISOString(),
-          },
-          programa: {
-            ...currentPayload.programa,
-            [field]: sanitizeProgramaFieldValue(value),
-          },
-        };
-      });
-    },
-    [],
-  );
-
   const persistActiveDraftNow = useCallback(async (): Promise<boolean> => {
     if (snapshot === null) {
       return false;
@@ -745,7 +695,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     goToNextStep,
     goToPreviousStep,
     goToStep,
-    updateProgramaBaseField,
     updateStepNote,
     persistActiveDraftNow,
     updateProgramaPdfResult,
