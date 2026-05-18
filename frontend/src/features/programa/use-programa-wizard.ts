@@ -151,7 +151,7 @@ export interface ProgramaWizardController {
   lastSavedAt: string | null;
   payload: ProgramaWizardPayload | null;
   draftStatus: DraftStatus;
-  startNewFlow: () => Promise<void>;
+  startNewFlow: (entryMode: ProgramaEntryMode) => Promise<void>;
   recoverDraftByReference: (
     referenceId: string,
     silent?: boolean,
@@ -377,7 +377,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     };
   }, [isBootstrapping, isRecovering, persistSnapshot, snapshot]);
 
-  const startNewFlow = useCallback(async (): Promise<void> => {
+  const startNewFlow = useCallback(async (_entryMode: ProgramaEntryMode): Promise<void> => {
       const nextReferenceId = crypto.randomUUID();
       const nextPayload = createEmptyProgramaPayload(nextReferenceId);
       const targetStepId = DEFAULT_PROGRAMA_STEP_ID;
