@@ -218,73 +218,9 @@ function ProgramaConocimientosPanel({
   useEffect(() => {
     setSaberes(conocimientos.filter((item) => item.tipo === "SABER"));
     setProcesos(conocimientos.filter((item) => item.tipo === "PROCESO"));
+    setState("idle");
+    setProcesoState("idle");
   }, [conocimientos]);
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    const loadSaberes = async (): Promise<void> => {
-      setState("loading");
-      setErrorMessage(null);
-
-      try {
-        const result = await listProgramaConocimientosSaber(
-          referenciaId,
-          competencia.id,
-        );
-        if (isCurrent) {
-          setSaberes(result.conocimientos);
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (isCurrent) {
-          setState("idle");
-        }
-      }
-    };
-
-    void loadSaberes();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [competencia.id, referenciaId]);
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    const loadProcesos = async (): Promise<void> => {
-      setProcesoState("loading");
-      setProcesoErrorMessage(null);
-
-      try {
-        const result = await listProgramaConocimientosProceso(
-          referenciaId,
-          competencia.id,
-        );
-        if (isCurrent) {
-          setProcesos(result.conocimientos);
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setProcesoErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (isCurrent) {
-          setProcesoState("idle");
-        }
-      }
-    };
-
-    void loadProcesos();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [competencia.id, referenciaId]);
 
   const resetForm = (): void => {
     setForm(EMPTY_CONOCIMIENTO_FORM);
@@ -630,14 +566,14 @@ function ProgramaConocimientosPanel({
                 <div
                   key={item.id}
                   className={cn(
-                    "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                    "grid gap-3 rounded-lg border bg-white px-3 py-2",
                     editingId === item.id
                       ? "border-[var(--accent)]"
                       : "border-[color:var(--card-border)]",
                   )}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+                    <p className="text-sm leading-6 break-words whitespace-pre-wrap text-[var(--foreground)]">
                       {item.descripcion}
                     </p>
                     {item.resultado_id !== null ? (
@@ -646,7 +582,7 @@ function ProgramaConocimientosPanel({
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex items-start gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleEdit(item)}
@@ -764,14 +700,14 @@ function ProgramaConocimientosPanel({
                 <div
                   key={item.id}
                   className={cn(
-                    "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                    "grid gap-3 rounded-lg border bg-white px-3 py-2",
                     procesoEditingId === item.id
                       ? "border-[var(--accent)]"
                       : "border-[color:var(--card-border)]",
                   )}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+                    <p className="text-sm leading-6 break-words whitespace-pre-wrap text-[var(--foreground)]">
                       {item.descripcion}
                     </p>
                     {item.resultado_id !== null ? (
@@ -780,7 +716,7 @@ function ProgramaConocimientosPanel({
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex items-start gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleProcesoEdit(item)}
@@ -834,40 +770,6 @@ function ProgramaCriteriosPanel({
   useEffect(() => {
     setItems(criterios);
   }, [criterios]);
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    const loadCriterios = async (): Promise<void> => {
-      setState("loading");
-      setErrorMessage(null);
-
-      try {
-        const result = await listProgramaCriterios(
-          referenciaId,
-          competencia.id,
-        );
-        if (isCurrent) {
-          setItems(result.criterios);
-          onCriteriosSynced(result);
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (isCurrent) {
-          setState("idle");
-        }
-      }
-    };
-
-    void loadCriterios();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [competencia.id, onCriteriosSynced, referenciaId]);
 
   const resetForm = (): void => {
     setForm(EMPTY_CONOCIMIENTO_FORM);
@@ -1085,14 +987,14 @@ function ProgramaCriteriosPanel({
               <div
                 key={item.id}
                 className={cn(
-                  "grid gap-3 rounded-lg border bg-white px-3 py-2 sm:grid-cols-[1fr_auto]",
+                  "grid gap-3 rounded-lg border bg-white px-3 py-2",
                   editingId === item.id
                     ? "border-[var(--accent)]"
                     : "border-[color:var(--card-border)]",
                 )}
               >
                 <div className="min-w-0">
-                  <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+                  <p className="text-sm leading-6 break-words whitespace-pre-wrap text-[var(--foreground)]">
                     {item.descripcion}
                   </p>
                   {item.resultado_id !== null ? (
@@ -1101,7 +1003,7 @@ function ProgramaCriteriosPanel({
                     </p>
                   ) : null}
                 </div>
-                <div className="flex items-start gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleEdit(item)}
@@ -1158,36 +1060,6 @@ function ProgramaResultadosManager({
   useEffect(() => {
     setResultados(competencia.resultados ?? []);
   }, [competencia.resultados]);
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    const loadResultados = async (): Promise<void> => {
-      setState("loading");
-      setErrorMessage(null);
-
-      try {
-        const result = await listProgramaResultados(referenciaId, competencia.id);
-        if (isCurrent) {
-          setResultados(result.resultados);
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (isCurrent) {
-          setState("idle");
-        }
-      }
-    };
-
-    void loadResultados();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [competencia.id, referenciaId]);
 
   const resetForm = (): void => {
     setForm(EMPTY_RESULTADO_FORM);

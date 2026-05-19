@@ -282,3 +282,18 @@ class ProgramaExcelImportRepository:
         self._session.add(item)
         await self._session.flush()
         return item
+
+    async def clear_curriculum(self, *, programa_id: uuid.UUID) -> None:
+        """Remove all curriculum rows for a program before re-import."""
+        await self._session.execute(
+            delete(ElementoCurricularPendiente).where(
+                ElementoCurricularPendiente.programa_id == programa_id,
+            )
+        )
+        await self._session.flush()
+        await self._session.execute(
+            delete(Competencia).where(
+                Competencia.programa_id == programa_id,
+            )
+        )
+        await self._session.flush()

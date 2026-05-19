@@ -251,7 +251,7 @@ function StepWorkspace({
           )}
         </div>
 
-        <label className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+        <label className="sticky top-5 self-start rounded-lg border border-[color:var(--card-border)] bg-white p-4">
           <span className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
             Notas del paso
           </span>
@@ -517,7 +517,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
       ) : null}
 
       {controller.isWizardActive && controller.payload !== null ? (
-        <section className="grid gap-5 lg:grid-cols-[22rem_1fr]">
+        <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_1fr]">
           <aside className="grid gap-4">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-4 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
               <WizardProgress
@@ -541,38 +541,40 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
           </aside>
 
-          <div className="grid gap-4">
-            <StepWorkspace
-              currentStep={currentStep}
-              currentStepNote={
-                controller.payload.wizard.notesByStep[
-                  controller.currentStepId
-                ] ?? ""
-              }
-              programaExcelResult={controller.payload.documental.programa_excel}
-              programaPdfResult={controller.payload.documental.programa_pdf}
-              competencias={controller.payload.curricular.competencias}
-              referenceId={
-                controller.activeReferenceId ??
-                controller.payload.meta.referenciaId
-              }
-              estadoBorrador={controller.draftStatus}
-              programaValue={controller.payload.programa}
-              onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
-              onProgramaExcelImported={controller.updateProgramaExcelImport}
-              onProgramaCompetenciasSynced={
-                controller.updateProgramaCompetencias
-              }
-              onProgramaPdfUploaded={controller.updateProgramaPdfResult}
-              onPersistDraftBeforeExcelPreview={
-                controller.persistActiveDraftNow
-              }
-              onNoteChange={(value) =>
-                controller.updateStepNote(controller.currentStepId, value)
-              }
-              onNavigateToStep={controller.goToStep}
-              onProgramaCerrado={controller.markProgramaClosed}
-            />
+          <div className="flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto rounded-lg">
+              <StepWorkspace
+                currentStep={currentStep}
+                currentStepNote={
+                  controller.payload.wizard.notesByStep[
+                    controller.currentStepId
+                  ] ?? ""
+                }
+                programaExcelResult={controller.payload.documental.programa_excel}
+                programaPdfResult={controller.payload.documental.programa_pdf}
+                competencias={controller.payload.curricular.competencias}
+                referenceId={
+                  controller.activeReferenceId ??
+                  controller.payload.meta.referenciaId
+                }
+                estadoBorrador={controller.draftStatus}
+                programaValue={controller.payload.programa}
+                onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
+                onProgramaExcelImported={controller.updateProgramaExcelImport}
+                onProgramaCompetenciasSynced={
+                  controller.updateProgramaCompetencias
+                }
+                onProgramaPdfUploaded={controller.updateProgramaPdfResult}
+                onPersistDraftBeforeExcelPreview={
+                  controller.persistActiveDraftNow
+                }
+                onNoteChange={(value) =>
+                  controller.updateStepNote(controller.currentStepId, value)
+                }
+                onNavigateToStep={controller.goToStep}
+                onProgramaCerrado={controller.markProgramaClosed}
+              />
+            </div>
 
             <ProyectoDisponibilidadPanel
               referenciaId={

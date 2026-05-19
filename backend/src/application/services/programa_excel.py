@@ -344,6 +344,9 @@ class ProgramaExcelRepositoryProtocol(Protocol):
     ) -> ElementoCurricularPendiente:
         """Create a pending assignment row."""
 
+    async def clear_curriculum(self, *, programa_id: uuid.UUID) -> None:
+        """Remove all curriculum rows for a program before re-import."""
+
 
 class AsyncSessionProtocol(Protocol):
     """Subset of async session behavior required by this service."""
@@ -502,6 +505,7 @@ class ProgramaExcelImportService:
             raise ProgramaExcelValidationError("La hoja Programa esta vacia")
 
         programa = await self._resolve_program(draft, workbook.programa)
+        await self._curriculum_repository.clear_curriculum(programa_id=programa.id)
         competencia_by_excel_id: dict[str, Competencia] = {}
         resultado_by_excel_key: dict[tuple[str, str], uuid.UUID] = {}
         competencia_ids: list[uuid.UUID] = []

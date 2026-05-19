@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.proyecto_excel import (
     InvalidProjectExcelUploadError,
     ProjectExcelDraftMissingError,
-    ProjectExcelImportService,
+    ProyectoExcelImportService,
     ProjectExcelMissingPreviewError,
     ProjectExcelStorageMissingError,
     ProjectExcelValidationError,

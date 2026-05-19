@@ -401,6 +401,33 @@ class FakeProgramaExcelRepository:
         self.pendientes[item.id] = item
         return item
 
+    async def clear_curriculum(self, *, programa_id: uuid.UUID) -> None:
+        """Clear all curriculum rows for a program."""
+        competencia_ids_to_remove = {
+            c.id for c in self.competencias.values()
+            if c.programa_id == programa_id
+        }
+        self.competencias = {
+            k: v for k, v in self.competencias.items()
+            if v.programa_id != programa_id
+        }
+        self.resultados = {
+            k: v for k, v in self.resultados.items()
+            if v.competencia_id not in competencia_ids_to_remove
+        }
+        self.conocimientos = {
+            k: v for k, v in self.conocimientos.items()
+            if v.competencia_id not in competencia_ids_to_remove
+        }
+        self.criterios = {
+            k: v for k, v in self.criterios.items()
+            if v.competencia_id not in competencia_ids_to_remove
+        }
+        self.pendientes = {
+            k: v for k, v in self.pendientes.items()
+            if v.programa_id != programa_id
+        }
+
 
 def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
     """Create a program draft ORM object."""
@@ -965,3 +992,48 @@ async def test_confirm_import_persists_resultado_id_correctly() -> None:
 
     # Criterion should have the resultado_id since it was linked to RAP-1
     assert criterio.resultado_id == resultado.id
+
+
+@pytest.mark.anyio
+async def test_confirm_clears_existing_curriculum_before_import() -> None:
+    """Confirming a re-import should clear previous curriculum rows."""
+    workbook_bytes = build_workbook_bytes()
+    service, session, drafts, repo, _ = build_service()
+    referencia_id = drafts.draft.referencia_id
+
+    now = datetime.now(UTC)
+    programa = ProgramaFormacion(
+        id=referencia_id,
+        codigo_programa="228118",
+        nombre_programa="Analisis y desarrollo de software",
+        version_programa="1",
+        fecha_creacion=now,
+        fecha_actualizacion=now,
+    )
+    repo.programas[referencia_id] = programa
+
+    existing_competencia = Competencia(
+        id=uuid.uuid4(),
+        programa_id=referencia_id,
+        codigo_competencia="228118001",
+        nombre_competencia="Gestion de proyectos de software",
+        estado=EstadoBloque.BORRADOR,
+        origen_campo=EstadoCampo.VALIDADO,
+    )
+    repo.competencias[existing_competencia.id] = existing_competencia
+
+    preview = await service.preview_program_excel(
+        referencia_id=referencia_id,
+        filename="test.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content=workbook_bytes,
+    )
+
+    assert preview.resumen.competencias == 1
+
+    import_result = await service.confirm_program_excel_import(
+        referencia_id=referencia_id,
+    )
+
+    assert import_result.resumen.competencias == 1
+    assert len(repo.competencias) == 1
