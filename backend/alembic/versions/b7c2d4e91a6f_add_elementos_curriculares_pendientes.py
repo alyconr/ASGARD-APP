@@ -43,10 +43,6 @@ estado_conciliacion_enum = sa.Enum(
 
 def upgrade() -> None:
     """Upgrade schema."""
-    bind = op.get_bind()
-    tipo_elemento_enum.create(bind, checkfirst=True)
-    motivo_pendiente_enum.create(bind, checkfirst=True)
-    estado_conciliacion_enum.create(bind, checkfirst=True)
     op.create_table(
         "elementos_curriculares_pendientes",
         sa.Column("referencia_id", sa.UUID(), nullable=False),
