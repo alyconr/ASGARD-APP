@@ -51,7 +51,7 @@ describe("programa constants", () => {
       const input = {
         meta: {
           entryMode: "EXCEL",
-          touchedSteps: ["datos-programa", "origen-documental"],
+          touchedSteps: ["removed-step", "origen-documental"],
           startedAt: "2024-01-01T00:00:00Z",
           lastInteractionAt: "2024-01-01T01:00:00Z",
         },
@@ -62,7 +62,7 @@ describe("programa constants", () => {
         },
         wizard: {
           notesByStep: {
-            "datos-programa": "some note",
+            "origen-documental": "some note",
             "invalid-step": "should be ignored",
           },
         },
@@ -70,15 +70,12 @@ describe("programa constants", () => {
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
       expect(normalized.meta.entryMode).toBe("EXCEL");
-      expect(normalized.meta.touchedSteps).toEqual([
-        "datos-programa",
-        "origen-documental",
-      ]);
+      expect(normalized.meta.touchedSteps).toEqual(["origen-documental"]);
       expect(normalized.programa.codigo_programa).toBe("123");
       expect(normalized.programa.nombre_programa).toBe("Test");
       expect(normalized.programa.version_programa).toBe("v1");
       expect(normalized.wizard.notesByStep).toEqual({
-        "datos-programa": "some note",
+        "origen-documental": "some note",
       });
     });
 
@@ -86,19 +83,16 @@ describe("programa constants", () => {
       const input = {
         meta: {
           touchedSteps: [
-            "datos-programa",
+            "removed-step",
             "invalid-step",
-            "datos-programa",
+            "removed-step",
             "origen-documental",
           ],
         },
       };
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
-      expect(normalized.meta.touchedSteps).toEqual([
-        "datos-programa",
-        "origen-documental",
-      ]);
+      expect(normalized.meta.touchedSteps).toEqual(["origen-documental"]);
     });
 
     it("preserves a valid program PDF diagnosis in the draft payload", () => {

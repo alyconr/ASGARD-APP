@@ -22,6 +22,11 @@ Esta refactorizacion completa TASK-UNICO-CARRIL:
 - reinterpreta TASK-18, TASK-19 y siguientes en coherencia con el unico carril;
 - el PDF queda como evidencia documental para programa y proyecto;
 - el Excel/matriz es la unica fuente estructurada activa.
+- `datos-programa` y `datos-proyecto` quedan eliminados como pasos funcionales;
+- el programa inicia en `origen-documental`, muestra resumen compacto tras importacion y revisa competencias en modal paginada;
+- `estructura-curricular` trabaja por competencia seleccionada y usa selectores progresivos para conocimientos/criterios;
+- el proyecto inicia en `fuente-proyecto`;
+- MinIO usa `proyectos-formativos/{referencia_id}/documentos/...` para PDF de proyecto y `proyectos-formativos/{referencia_id}/excel/...` para matriz Excel.
 
 La importacion curricular se organiza principalmente por competencia. Los
 resultados, conocimientos y criterios quedan bajo la competencia; `resultado_id`
@@ -179,7 +184,9 @@ Crear la navegación inicial del programa de formación.
 
 ---
 
-## TASK-05. Implementar formulario base del programa
+## TASK-05. Implementar formulario base del programa [DEPRECATED - eliminado por REFACTOR-FLUJO-PROGRAMA-PROYECTO]
+
+Nota vigente: esta tarea queda reemplazada por importacion Excel canonica. El paso `datos-programa` no existe y no debe reactivarse como captura manual.
 
 ### Objetivo
 Capturar los datos mínimos del programa.
@@ -306,6 +313,25 @@ Desactivar la extraccion curricular desde PDF y habilitar un carril de Excel can
 - conocimientos y criterios quedan organizados por competencia y no dependen de RAP,
 - el borrador conserva el mismo `referencia_id`,
 - TASK-09 puede continuar sobre la base importada.
+
+---
+
+## TASK-08.6. Refactor visual y funcional del flujo programa [COMPLETA]
+
+### Objetivo
+Eliminar `datos-programa`, compactar el origen documental y focalizar la gestion curricular.
+
+### Debe hacer
+- iniciar el wizard en `origen-documental`,
+- mostrar resumen compacto tras importacion confirmada,
+- abrir competencias importadas en modal paginada,
+- usar selector/filtro de competencia en `estructura-curricular`,
+- seleccionar conocimientos y criterios progresivamente antes de renderizarlos.
+
+### Aceptacion
+- no existe `datos-programa`,
+- no hay render masivo de competencias en origen documental,
+- el paso curricular trabaja por competencia seleccionada.
 
 ---
 
@@ -491,7 +517,9 @@ Crear el flujo principal del proyecto formativo.
 
 ---
 
-## TASK-17. Implementar formulario base del proyecto
+## TASK-17. Implementar formulario base del proyecto [DEPRECATED - eliminado por REFACTOR-FLUJO-PROGRAMA-PROYECTO]
+
+Nota vigente: esta tarea queda reemplazada por `fuente-proyecto`, con PDF evidencia y Excel/matriz estructurada. El paso `datos-proyecto` no existe y no debe reactivarse como captura manual.
 
 ### Objetivo
 Capturar los datos mínimos del proyecto.
@@ -522,7 +550,7 @@ Permitir subir el PDF del proyecto como evidencia documental en MinIO.
 ### Debe hacer
 - carga de PDF,
 - validación de archivo,
-- almacenamiento en MinIO como evidencia,
+- almacenamiento en MinIO como evidencia bajo `proyectos-formativos/{referencia_id}/documentos/...`,
 - registro de metadata en borrador.
 
 ### Debe entregar
@@ -555,6 +583,7 @@ Implementar la importación estructurada del proyecto desde una matriz/Excel, al
 ### Debe hacer
 - definir el contrato canonico del workbook del proyecto (hojas: Proyecto, Fases, Actividades),
 - validar workbook `.xlsx`,
+- almacenar Excel bajo `proyectos-formativos/{referencia_id}/excel/...`,
 - generar preview sin persistencia relacional,
 - confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto,
 - permitir correccion post-importacion SOLO para lo estrictamente faltante.

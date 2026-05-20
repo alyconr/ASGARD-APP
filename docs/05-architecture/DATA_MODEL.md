@@ -46,6 +46,12 @@ Los conocimientos y criterios del Excel que no puedan enlazarse con seguridad a
 una competencia no se insertan aun en `Conocimiento` ni `CriterioEvaluacion`;
 se conservan en `ElementoCurricularPendiente` para conciliacion manual posterior.
 
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+El modelo de borrador no debe conservar `datos-programa` ni `datos-proyecto` como pasos vivos. Los pasos canonicos son `origen-documental`, `estructura-curricular`, `revision-programa` para programa y `fuente-proyecto`, `estructura-proyecto`, `revision-proyecto` para proyecto.
+
+La metadata del proyecto debe diferenciar PDF evidencia y Excel estructurado. Los objetos documentales del proyecto usan `proyectos-formativos/{referencia_id}/documentos/...`; los Excel usan `proyectos-formativos/{referencia_id}/excel/...`.
+
 ---
 
 # 2. Alcance del modelo
@@ -88,7 +94,6 @@ Programa y proyecto deben poder guardarse parcialmente en estado borrador.
 Cada dato debe poder registrarse como:
 
 - importado desde Excel canonico,
-- ingresado manualmente (solo para lo estrictamente faltante),
 - corregido por el usuario,
 - pendiente de validacion.
 
@@ -115,10 +120,8 @@ Valores permitidos:
 
 - PDF_EVIDENCIA
 - EXCEL_CANONICO
-- MANUAL
-- MIXTO
 
-`PDF_EXTRACCION` queda como valor historico/deprecated. Para TASK-08.5 y TASK-UNICO-CARRIL, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion curricular desde workbook. El valor `MANUAL` se conserva solo para trazabilidad de datos completados manualmente que no provienen de importacion.
+`PDF_EXTRACCION`, `MANUAL` y `MIXTO` quedan como valores historicos/deprecated. Para TASK-08.5, TASK-UNICO-CARRIL y REFACTOR-FLUJO-PROGRAMA-PROYECTO, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion desde workbook.
 
 ## 4.3 TipoConocimiento
 Valores permitidos:
@@ -130,7 +133,7 @@ Valores permitidos:
 Valores permitidos:
 
 - EXTRAIDO
-- MANUAL
+- MANUAL_DEPRECATED
 - CORREGIDO
 - PENDIENTE
 - VALIDADO

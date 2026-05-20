@@ -137,7 +137,7 @@ def build_draft(
             "meta": {
                 "referenciaId": str(referencia_id),
                 "entryMode": "EXCEL",
-                "touchedSteps": ["datos-programa", "revision-programa"],
+                "touchedSteps": ["origen-documental", "revision-programa"],
             },
             "programa": {
                 "codigo_programa": codigo_programa,

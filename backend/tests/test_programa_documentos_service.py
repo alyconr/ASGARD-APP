@@ -137,12 +137,12 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
     draft = BorradorSesion(
         tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
         referencia_id=referencia_id,
-        paso_actual="datos-programa",
+        paso_actual="origen-documental",
         payload_json={
             "meta": {
                 "referenciaId": str(referencia_id),
                 "entryMode": "EXCEL",
-                "touchedSteps": ["datos-programa"],
+                "touchedSteps": ["origen-documental"],
             },
         },
         estado_borrador=EstadoBloque.BORRADOR,
@@ -179,7 +179,7 @@ async def test_upload_program_pdf_updates_existing_draft_payload() -> None:
     assert result.diagnostico.can_attempt_extraction is False
     assert draft_repository.draft is not None
     assert draft_repository.draft.paso_actual == "origen-documental"
-    assert draft_repository.draft.payload_json["meta"]["entryMode"] == "PDF"
+    assert draft_repository.draft.payload_json["meta"]["entryMode"] == "EXCEL"
     assert "programa_pdf" in draft_repository.draft.payload_json["documental"]
     assert session.commits == 1
     assert audit_repository.events[0]["accion"] == "DOCUMENTO_PROGRAMA_DIAGNOSTICADO"

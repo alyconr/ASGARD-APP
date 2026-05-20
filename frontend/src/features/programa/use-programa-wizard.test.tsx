@@ -60,6 +60,7 @@ function buildPdfUploadResponse(): ProgramaPdfUploadResponse {
       text_character_count: 120,
       can_attempt_extraction: false,
       requires_manual_entry: false,
+      almacenamiento_exitoso: true,
     },
   };
 }
@@ -175,7 +176,7 @@ describe("useProgramaWizard TASK-08.5 Excel integration", () => {
     });
 
     await act(async () => {
-      await result.current.startNewFlow("PDF");
+      await result.current.startNewFlow("EXCEL");
     });
 
     act(() => {
@@ -204,11 +205,7 @@ describe("useProgramaWizard TASK-08.5 Excel integration", () => {
       "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
     );
 
-    act(() => {
-      result.current.updateProgramaBaseField("codigo_programa", "MANUAL-01");
-    });
-
     expect(result.current.activeReferenceId).toBe(referenceId);
-    expect(result.current.payload?.programa.codigo_programa).toBe("MANUAL-01");
+    expect(result.current.payload?.meta.entryMode).toBe("EXCEL");
   });
 });

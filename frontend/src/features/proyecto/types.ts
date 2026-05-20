@@ -1,7 +1,6 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
 export type ProyectoWizardStepId =
-  | "datos-proyecto"
   | "fuente-proyecto"
   | "estructura-proyecto"
   | "revision-proyecto";

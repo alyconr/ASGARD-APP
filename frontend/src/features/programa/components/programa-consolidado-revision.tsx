@@ -26,7 +26,6 @@ import type {
   ProgramaCompetencia,
   ProgramaCompletitudFaltante,
   ProgramaCompletitudResponse,
-  ProgramaEntryMode,
   ProgramaExcelImportState,
   ProgramaPdfUploadResult,
   ProgramaWizardStepId,
@@ -61,18 +60,6 @@ function ProgramaOriginBadge({
     </span>
   );
 }
-
-type EntrySource = Exclude<ProgramaEntryMode, null>;
-
-const ENTRY_SOURCE_COPY: Record<EntrySource, string> = {
-  PDF: "PDF (evidencia)",
-  EXCEL: "Excel canonico",
-};
-
-const ENTRY_SOURCE_ICON: Record<EntrySource, React.ComponentType<{ className?: string }>> = {
-  PDF: FileText,
-  EXCEL: FileSpreadsheet,
-};
 
 function sortByOrder<T extends { orden: number | null }>(items: T[]): T[] {
   return [...items].sort((left, right) => {
@@ -249,11 +236,11 @@ export function ProgramaConsolidadoRevision(
           </div>
           <button
             type="button"
-            onClick={() => onNavigateToStep("datos-programa")}
+            onClick={() => onNavigateToStep("origen-documental")}
             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
             <Edit3 className="h-4 w-4" />
-            Editar datos
+            Revisar origen
           </button>
         </div>
 
@@ -567,11 +554,11 @@ function MissingList({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => onNavigateToStep("datos-programa")}
+            onClick={() => onNavigateToStep("origen-documental")}
             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
             <Edit3 className="h-4 w-4" />
-            Corregir datos
+            Revisar origen
           </button>
           <button
             type="button"

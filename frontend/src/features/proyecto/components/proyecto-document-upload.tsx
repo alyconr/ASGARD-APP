@@ -160,7 +160,7 @@ export function ProyectoDocumentUpload({
   };
 
   return (
-    <section className="grid gap-4">
+    <section aria-label="Cargue PDF del proyecto" className="grid gap-4">
       <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -174,7 +174,7 @@ export function ProyectoDocumentUpload({
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
                 Se conserva como evidencia documental en MinIO; no se usa para
                 extraer informacion curricular. La fuente estructurada del
-                proyecto se cargara desde Excel en TASK-19.
+                proyecto se carga desde la matriz Excel.
               </p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export function ProyectoDocumentUpload({
           <p className="font-semibold">Evidencia documental, no fuente de datos</p>
           <p className="mt-1">
             Este PDF se almacena como soporte. La fuente estructurada del
-            proyecto se cargara desde una matriz Excel (TASK-19).
+            proyecto se carga desde una matriz Excel.
           </p>
         </div>
       </div>

@@ -44,6 +44,14 @@ Desde esta refactorizacion integral:
 - el carril manual deja de existir como modo operativo;
 - TASK-05, TASK-06, TASK-07, TASK-18, TASK-19 y las fases tecnicas asociadas quedan reinterpretadas.
 
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+- El paso `datos-programa` se elimina por completo; el programa inicia en `origen-documental`.
+- El origen documental del programa mantiene PDF evidencia y Excel canonico, pero tras importacion confirmada muestra resumen compacto y modal paginada de competencias.
+- `estructura-curricular` usa selector/filtro de competencia y seleccion progresiva de conocimientos/criterios.
+- El proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como carril manual.
+- El almacenamiento del proyecto usa `proyectos-formativos/{referencia_id}/documentos/...` para PDF y `proyectos-formativos/{referencia_id}/excel/...` para Excel/matriz.
+
 ---
 
 # 3. Objetivo general de implementación
@@ -313,6 +321,7 @@ Implementar el flujo principal del programa de formación.
 ### Tareas
 - Crear vista inicial del wizard
 - Crear pasos del programa
+- Eliminar `datos-programa` de pasos, tipos, sidebar y navegacion
 - Implementar navegación entre pasos
 - Integrar autosave
 - Mostrar barra o indicador de progreso
@@ -354,16 +363,24 @@ Permitir la importacion estructurada desde Excel canonico del programa.
 - Generar preview sin persistencia relacional
 - Confirmar importacion para materializar datos
 - Organizar la estructura importada por competencia
+- Mostrar resumen compacto tras importacion confirmada
+- Abrir revision curricular importada en modal paginada por competencia
 
 ### Entregables
 - preview funcional de Excel
 - confirmacion de importacion
 - estructura curricular importada por competencia
+- resumen compacto y modal de competencias
 
 La competencia es el contenedor principal de la estructura. Los resultados,
 conocimientos y criterios se muestran y gestionan bajo la competencia. La
 relacion de conocimientos y criterios con resultados de aprendizaje es opcional
 y secundaria.
+
+La UI curricular debe iniciar con selector/filtro de competencia. Resultados se
+muestran para la competencia seleccionada; conocimientos y criterios se exponen
+primero en selectores progresivos y solo se renderizan cuando el usuario los
+elige.
 
 ### Tareas
 - CRUD de competencias
@@ -411,6 +428,7 @@ Respetar la dependencia del proyecto con el programa.
 - Bloquear módulo del proyecto si el programa no está completo
 - Mostrar mensaje explicativo
 - Habilitar proyecto cuando el programa esté completo
+- Habilitar `fuente-proyecto` con PDF evidencia y Excel/matriz estructurada
 - Validar que el backend también impida acceso indebido
 
 ### Entregables
@@ -429,6 +447,7 @@ Implementar el flujo del proyecto formativo.
 - Crear wizard del proyecto
 - Integrar borradores del proyecto
 - Definir pasos del proyecto
+- Eliminar `datos-proyecto` como paso de entrada manual
 - Mostrar progreso y estados
 - Permitir navegación adelante/atrás
 
@@ -447,13 +466,33 @@ Permitir la carga del PDF del proyecto como evidencia documental.
 ### Tareas
 - Crear endpoint de carga del PDF del proyecto
 - Validar tipo de archivo
-- Almacenar en MinIO como evidencia
+- Almacenar en MinIO como evidencia bajo `proyectos-formativos/{referencia_id}/documentos/...`
 - Registrar metadata en borrador
 
 ### Entregables
 - flujo de carga PDF del proyecto funcional
-- almacenamiento en MinIO
+- almacenamiento en MinIO con prefijo canonico de proyecto
 - metadata de validacion en borrador
+
+---
+
+## Fase Tecnica 10B. Importacion estructurada del proyecto
+
+### Objetivo
+Permitir la carga de Excel/matriz del proyecto como unica fuente estructurada.
+
+### Tareas
+- Crear endpoint de preview de Excel/matriz del proyecto
+- Validar hojas Proyecto, Fases y Actividades
+- Generar preview sin persistencia relacional
+- Confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto
+- Almacenar Excel bajo `proyectos-formativos/{referencia_id}/excel/...`
+
+### Entregables
+- preview funcional del proyecto
+- confirmacion de importacion
+- metadata de Excel en borrador
+- persistencia estructurada de proyecto, fases y actividades
 
 ---
 

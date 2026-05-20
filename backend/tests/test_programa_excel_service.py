@@ -439,7 +439,7 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
             "meta": {
                 "referenciaId": str(referencia_id),
                 "entryMode": "EXCEL",
-                "touchedSteps": ["datos-programa"],
+                "touchedSteps": ["origen-documental"],
             },
             "programa": {
                 "codigo_programa": "",

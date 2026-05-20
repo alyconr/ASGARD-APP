@@ -142,7 +142,7 @@ async def test_save_draft_updates_existing_project_draft() -> None:
         SaveDraftCommand(
             tipo_bloque=TipoBloqueBorrador.PROYECTO,
             referencia_id=referencia_id,
-            paso_actual="datos-proyecto",
+            paso_actual="fuente-proyecto",
             payload_json={"codigo_proyecto": "ABC"},
             estado_borrador=EstadoBloque.BLOQUEADO,
         ),

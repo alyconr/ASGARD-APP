@@ -47,7 +47,7 @@ function buildProjectPayload(referenceId = projectReferenceId): ProyectoWizardPa
       referenciaId: referenceId,
       programaReferenciaId: programReferenceId,
       programaId: programId,
-      touchedSteps: ["datos-proyecto", "fuente-proyecto"],
+      touchedSteps: ["fuente-proyecto"],
       startedAt: "2026-05-16T09:00:00.000Z",
       lastInteractionAt: "2026-05-16T09:30:00.000Z",
     },
@@ -100,9 +100,9 @@ describe("useProyectoWizard", () => {
     });
 
     expect(result.current.activeReferenceId).toBe(projectReferenceId);
-    expect(result.current.currentStepId).toBe("datos-proyecto");
+    expect(result.current.currentStepId).toBe("fuente-proyecto");
     expect(mockSaveDraft).toHaveBeenCalledWith("PROYECTO", projectReferenceId, {
-      paso_actual: "datos-proyecto",
+      paso_actual: "fuente-proyecto",
       payload_json: expect.objectContaining({
         meta: expect.objectContaining({
           programaReferenciaId: programReferenceId,
@@ -157,7 +157,7 @@ describe("useProyectoWizard", () => {
     expect(result.current.payload?.proyecto.version_proyecto).toBe("1");
   });
 
-  it("updates and autosaves the base project fields in the PROYECTO draft", async () => {
+  it("updates and autosaves source-step notes in the PROYECTO draft", async () => {
     const { result } = renderHook(() =>
       useProyectoWizard({
         programaId: programId,
@@ -174,20 +174,11 @@ describe("useProyectoWizard", () => {
     });
 
     act(() => {
-      result.current.updateProyectoBaseField("codigo_proyecto", " PR-001 ");
-      result.current.updateProyectoBaseField(
-        "nombre_proyecto",
-        " Proyecto formativo base ",
-      );
-      result.current.updateProyectoBaseField("version_proyecto", " 1 ");
+      result.current.updateStepNote("fuente-proyecto", "PDF evidencia listo");
     });
 
-    expect(result.current.payload?.proyecto).toEqual(
-      expect.objectContaining({
-        codigo_proyecto: "PR-001",
-        nombre_proyecto: "Proyecto formativo base",
-        version_proyecto: "1",
-      }),
+    expect(result.current.payload?.wizard.notesByStep["fuente-proyecto"]).toBe(
+      "PDF evidencia listo",
     );
 
     await act(async () => {
@@ -199,12 +190,12 @@ describe("useProyectoWizard", () => {
         "PROYECTO",
         projectReferenceId,
         expect.objectContaining({
-          paso_actual: "datos-proyecto",
+          paso_actual: "fuente-proyecto",
           payload_json: expect.objectContaining({
-            proyecto: expect.objectContaining({
-              codigo_proyecto: "PR-001",
-              nombre_proyecto: "Proyecto formativo base",
-              version_proyecto: "1",
+            wizard: expect.objectContaining({
+              notesByStep: expect.objectContaining({
+                "fuente-proyecto": "PDF evidencia listo",
+              }),
             }),
           }),
         }),
@@ -229,12 +220,10 @@ describe("useProyectoWizard", () => {
     });
 
     act(() => {
-      result.current.updateProyectoBaseField("codigo_proyecto", "PR-001");
       result.current.goToNextStep();
     });
 
-    expect(result.current.currentStepId).toBe("fuente-proyecto");
-    expect(result.current.payload?.proyecto.codigo_proyecto).toBe("PR-001");
+    expect(result.current.currentStepId).toBe("estructura-proyecto");
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 600));
@@ -245,12 +234,8 @@ describe("useProyectoWizard", () => {
         "PROYECTO",
         projectReferenceId,
         expect.objectContaining({
-          paso_actual: "fuente-proyecto",
-          payload_json: expect.objectContaining({
-            proyecto: expect.objectContaining({
-              codigo_proyecto: "PR-001",
-            }),
-          }),
+          paso_actual: "estructura-proyecto",
+          payload_json: expect.any(Object),
         }),
       );
     });

@@ -13,6 +13,10 @@ La trazabilidad queda reinterpretada asi:
 - Curriculum Module: consume la base importada por competencia sin adelantar el CRUD manual de TASK-09.
 - Pending Reconciliation: solo atiende excepciones sin competencia confiable.
 - No existe trazabilidad para carril manual como fuente activa.
+- `datos-programa` y `datos-proyecto` quedan fuera de trazabilidad activa.
+- La revision post-importacion del programa se traza a resumen compacto y modal paginada de competencias.
+- La gestion curricular se traza a selector/filtro de competencia y seleccion progresiva de conocimientos/criterios.
+- Proyecto usa MinIO `proyectos-formativos/{referencia_id}/documentos/...` para PDF evidencia y `proyectos-formativos/{referencia_id}/excel/...` para matriz Excel.
 
 ---
 
@@ -52,7 +56,9 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-04 | El flujo principal debe ser tipo wizard | RF-01, RF-13, RF-21 | HU-01, HU-13, HU-22 | Wizard UI | Validar navegación paso a paso |
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
-| RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
+| RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual ni pasos `datos-programa`/`datos-proyecto` | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
+| RN-FLUJO-COMPACTO | El origen documental del programa muestra resumen compacto tras importacion y abre modal paginada de competencias | RF-06, RF-13 | HU-05, HU-13 | Programa Wizard / Excel Import UI | Validar resumen compacto, apertura de modal y paginacion |
+| RN-CURRICULO-FOCALIZADO | La estructura curricular carga una competencia seleccionada y conocimientos/criterios se eligen progresivamente | RF-08, RF-09, RF-10, RF-11, RF-12 | HU-07, HU-08, HU-09, HU-10, HU-11 | Curriculum Module | Validar selector de competencia y render progresivo |
 | RN-14 | Si la importacion Excel no resuelve campos, debe habilitarse cargue manual SOLO para lo faltante | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual para lo faltante |
 | RN-15 | La validacion Excel debe conservar errores y habilitar fallback manual SOLO para lo estrictamente faltante | RF-06, RF-07 | HU-05, HU-06 | Excel Import Service | Validar workbook invalido y fallback manual para lo faltante |
 | RN-16 | La extracción automática no equivale a validación humana | RF-13, RF-27 | HU-13, HU-22 | Review Screen | Validar confirmación explícita |
@@ -375,24 +381,22 @@ Relaciona:
 
 # 6. Casos de prueba funcionales sugeridos
 
-## CP-01. Programa manual completo
+## CP-01. Programa desde Excel canonico completo
 Validar que un usuario pueda:
 - iniciar programa,
-- diligenciar datos mínimos,
-- crear competencias,
-- crear resultados,
-- crear saber,
-- crear proceso,
-- crear criterios,
+- cargar PDF como evidencia si existe,
+- cargar y confirmar Excel canonico,
+- revisar resumen compacto y modal de competencias,
+- gestionar una competencia seleccionada,
 - revisar consolidado,
 - cerrar programa.
 
-## CP-02. Programa con extracción parcial
+## CP-02. Programa con importacion Excel parcial
 Validar que el sistema:
 - reciba PDF,
-- detecte datos parciales,
-- conserve lo extraído,
-- permita completar manualmente,
+- conserve PDF como evidencia,
+- detecte pendientes de importacion Excel,
+- permita correccion puntual de faltantes,
 - y cierre el programa correctamente.
 
 ## CP-03. Proyecto bloqueado
@@ -409,8 +413,8 @@ Validar que al cerrar el programa:
 
 ## CP-05. Proyecto completo
 Validar que un usuario pueda:
-- crear proyecto,
-- registrar datos mínimos,
+- cargar PDF del proyecto como evidencia,
+- importar proyecto desde Excel/matriz,
 - crear fases,
 - crear actividades,
 - revisar consolidado,

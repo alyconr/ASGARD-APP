@@ -43,6 +43,20 @@ A partir de esta refactorizacion integral:
 - el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base para TASK-19;
 - las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
 
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+A partir de este refactor integral:
+
+- el paso `datos-programa` desaparece por completo del wizard, tipos, navegacion, sidebar, tests y documentacion;
+- el wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y termina en `revision-programa`;
+- `origen-documental` conserva PDF como evidencia y Excel canonico como unica fuente estructurada;
+- tras confirmar Excel, el origen documental muestra solo un resumen compacto y la revision de competencias importadas se hace en una modal paginada;
+- `estructura-curricular` se trabaja con selector/filtro de competencia antes de renderizar resultados, conocimientos o criterios;
+- conocimientos y criterios se seleccionan progresivamente desde listas eficientes antes de renderizar sus contenedores;
+- el proyecto se habilita solo con programa `COMPLETO` y opera con `fuente-proyecto`, PDF evidencia y Excel/matriz estructurada;
+- no existe paso `datos-proyecto` ni formulario base manual como carril de entrada;
+- el prefijo canonico de MinIO para documentos del proyecto es `proyectos-formativos/{referencia_id}/documentos/...`;
+- el prefijo canonico de MinIO para Excel del proyecto es `proyectos-formativos/{referencia_id}/excel/...`.
+
 ---
 
 # 1. Prioridad de instrucciones
@@ -183,17 +197,18 @@ No crear, habilitar ni cerrar el proyecto formativo mientras el programa de form
 La UX principal debe implementarse como wizard y respetar esta secuencia:
 
 1. iniciar nuevo proceso o continuar borrador,
-2. cargar o diligenciar programa,
+2. abrir `origen-documental` del programa,
 3. cargar PDF solo como evidencia cuando exista,
-4. cargar, validar y previsualizar Excel canónico cuando se use fuente estructurada,
-5. confirmar importación estructurada o completar manualmente lo faltante,
-6. gestionar competencias y estructura curricular,
+4. cargar, validar, previsualizar y confirmar Excel canónico como unica fuente estructurada,
+5. revisar competencias importadas mediante resumen compacto y modal paginada,
+6. gestionar estructura curricular por competencia seleccionada,
 7. revisar y cerrar programa,
-8. habilitar proyecto,
-9. cargar o diligenciar proyecto,
-10. completar manualmente lo faltante,
-11. gestionar fases y actividades,
-12. revisar y cerrar proyecto.
+8. habilitar proyecto solo si el programa esta `COMPLETO`,
+9. abrir `fuente-proyecto`,
+10. cargar PDF del proyecto como evidencia documental,
+11. cargar, validar, previsualizar y confirmar Excel/matriz del proyecto,
+12. gestionar fases y actividades,
+13. revisar y cerrar proyecto.
 
 No crear flujos alternos que rompan esta secuencia.
 
@@ -216,8 +231,7 @@ No crear flujos alternos que rompan esta secuencia.
 
 El sistema debe soportar:
 - carga de PDF como evidencia documental en MinIO,
-- importacion estructurada desde Excel canonico `.xlsx`,
-- diligenciamiento manual.
+- importacion estructurada desde Excel canonico `.xlsx`.
 
 ## Regla crítica
 La carga documental o la importacion automatizada no equivalen a validacion humana sin revision del usuario.
@@ -234,7 +248,7 @@ Si el Excel canonico falta, no cumple contrato o no permite importacion confiabl
 - conservar la metadata del intento y errores de validacion,
 - marcar faltantes,
 - informar motivo,
-- habilitar ingreso manual inmediato.
+- permitir conciliacion o correccion puntual de faltantes sin reactivar un carril manual de entrada.
 
 ---
 

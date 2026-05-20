@@ -174,6 +174,92 @@ function CurriculumEmptyNote({
   );
 }
 
+function compactLabel(value: string, maxLength = 96): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function ProgressiveItemPicker<T extends { id: string; descripcion: string }>({
+  emptyLabel,
+  items,
+  label,
+  onSelectedIdsChange,
+  placeholder,
+  selectedIds,
+}: Readonly<{
+  emptyLabel: string;
+  items: T[];
+  label: string;
+  onSelectedIdsChange: (ids: string[]) => void;
+  placeholder: string;
+  selectedIds: string[];
+}>): React.JSX.Element {
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id));
+  const availableItems = items.filter((item) => !selectedIds.includes(item.id));
+
+  return (
+    <div className="grid gap-2 rounded-lg border border-[color:var(--card-border)] bg-white p-3">
+      <label className="grid gap-2">
+        <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+          {label}
+        </span>
+        <select
+          aria-label={label}
+          disabled={availableItems.length === 0}
+          value=""
+          onChange={(event) => {
+            const nextId = event.target.value;
+            if (nextId.length === 0 || selectedIds.includes(nextId)) {
+              return;
+            }
+            onSelectedIdsChange([...selectedIds, nextId]);
+          }}
+          className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <option value="">{placeholder}</option>
+          {availableItems.map((item) => (
+            <option key={item.id} value={item.id}>
+              {compactLabel(item.descripcion)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selectedItems.length === 0 ? (
+        <p className="text-xs leading-5 text-[var(--muted)]">{emptyLabel}</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {selectedItems.map((item) => (
+            <span
+              key={item.id}
+              className="inline-flex max-w-full items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]"
+            >
+              <span className="min-w-0 truncate">
+                {compactLabel(item.descripcion, 48)}
+              </span>
+              <button
+                type="button"
+                aria-label={`Quitar ${compactLabel(item.descripcion, 24)}`}
+                onClick={() =>
+                  onSelectedIdsChange(
+                    selectedIds.filter((selectedId) => selectedId !== item.id),
+                  )
+                }
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-white hover:text-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProgramaConocimientosPanel({
   competencia,
   conocimientos,
@@ -211,13 +297,33 @@ function ProgramaConocimientosPanel({
   const [procesoErrorMessage, setProcesoErrorMessage] = useState<string | null>(
     null,
   );
+  const [selectedSaberIds, setSelectedSaberIds] = useState<string[]>([]);
+  const [selectedProcesoIds, setSelectedProcesoIds] = useState<string[]>([]);
 
   const saber = useMemo(() => sortByOrder(saberes), [saberes]);
   const proceso = useMemo(() => sortByOrder(procesos), [procesos]);
+  const selectedSaber = useMemo(
+    () => saber.filter((item) => selectedSaberIds.includes(item.id)),
+    [saber, selectedSaberIds],
+  );
+  const selectedProceso = useMemo(
+    () => proceso.filter((item) => selectedProcesoIds.includes(item.id)),
+    [proceso, selectedProcesoIds],
+  );
 
   useEffect(() => {
-    setSaberes(conocimientos.filter((item) => item.tipo === "SABER"));
-    setProcesos(conocimientos.filter((item) => item.tipo === "PROCESO"));
+    const nextSaberes = conocimientos.filter((item) => item.tipo === "SABER");
+    const nextProcesos = conocimientos.filter(
+      (item) => item.tipo === "PROCESO",
+    );
+    setSaberes(nextSaberes);
+    setProcesos(nextProcesos);
+    setSelectedSaberIds((current) =>
+      current.filter((id) => nextSaberes.some((item) => item.id === id)),
+    );
+    setSelectedProcesoIds((current) =>
+      current.filter((id) => nextProcesos.some((item) => item.id === id)),
+    );
     setState("idle");
     setProcesoState("idle");
   }, [conocimientos]);
@@ -234,11 +340,21 @@ function ProgramaConocimientosPanel({
 
   const syncSaberes = (result: ConocimientoSaberListResponse): void => {
     setSaberes(result.conocimientos);
+    setSelectedSaberIds((current) =>
+      current.filter((id) =>
+        result.conocimientos.some((item) => item.id === id),
+      ),
+    );
     onConocimientosSaberSynced(result);
   };
 
   const syncProcesos = (result: ConocimientoProcesoListResponse): void => {
     setProcesos(result.conocimientos);
+    setSelectedProcesoIds((current) =>
+      current.filter((id) =>
+        result.conocimientos.some((item) => item.id === id),
+      ),
+    );
     onConocimientosProcesoSynced(result);
   };
 
@@ -261,6 +377,8 @@ function ProgramaConocimientosPanel({
 
     try {
       const payload = { descripcion: form.descripcion.trim() };
+      const existingIds = new Set(saberes.map((item) => item.id));
+      const activeEditingId = editingId;
       const result =
         editingId === null
           ? await createProgramaConocimientoSaber(
@@ -276,9 +394,20 @@ function ProgramaConocimientosPanel({
             );
 
       syncSaberes(result);
+      const selectedId =
+        activeEditingId ??
+        result.conocimientos.find((item) => !existingIds.has(item.id))?.id ??
+        result.conocimientos.find(
+          (item) => item.descripcion === payload.descripcion,
+        )?.id;
+      if (selectedId !== undefined) {
+        setSelectedSaberIds((current) =>
+          current.includes(selectedId) ? current : [...current, selectedId],
+        );
+      }
       resetForm();
       setMessage(
-        editingId === null
+        activeEditingId === null
           ? "Conocimiento SABER registrado."
           : "Conocimiento SABER actualizado.",
       );
@@ -299,6 +428,9 @@ function ProgramaConocimientosPanel({
   const handleEdit = (conocimiento: ConocimientoCurricular): void => {
     setEditingId(conocimiento.id);
     setForm({ descripcion: conocimiento.descripcion });
+    setSelectedSaberIds((current) =>
+      current.includes(conocimiento.id) ? current : [...current, conocimiento.id],
+    );
     setMessage(null);
     setErrorMessage(null);
   };
@@ -328,6 +460,9 @@ function ProgramaConocimientosPanel({
         competencia.id,
       );
       syncSaberes(result);
+      setSelectedSaberIds((current) =>
+        current.filter((id) => id !== conocimiento.id),
+      );
       if (editingId === conocimiento.id) {
         resetForm();
       }
@@ -365,6 +500,8 @@ function ProgramaConocimientosPanel({
 
     try {
       const payload = { descripcion: procesoForm.descripcion.trim() };
+      const existingIds = new Set(procesos.map((item) => item.id));
+      const activeEditingId = procesoEditingId;
       const result =
         procesoEditingId === null
           ? await createProgramaConocimientoProceso(
@@ -380,9 +517,20 @@ function ProgramaConocimientosPanel({
             );
 
       syncProcesos(result);
+      const selectedId =
+        activeEditingId ??
+        result.conocimientos.find((item) => !existingIds.has(item.id))?.id ??
+        result.conocimientos.find(
+          (item) => item.descripcion === payload.descripcion,
+        )?.id;
+      if (selectedId !== undefined) {
+        setSelectedProcesoIds((current) =>
+          current.includes(selectedId) ? current : [...current, selectedId],
+        );
+      }
       resetProcesoForm();
       setProcesoMessage(
-        procesoEditingId === null
+        activeEditingId === null
           ? "Conocimiento PROCESO registrado."
           : "Conocimiento PROCESO actualizado.",
       );
@@ -403,6 +551,9 @@ function ProgramaConocimientosPanel({
   const handleProcesoEdit = (conocimiento: ConocimientoCurricular): void => {
     setProcesoEditingId(conocimiento.id);
     setProcesoForm({ descripcion: conocimiento.descripcion });
+    setSelectedProcesoIds((current) =>
+      current.includes(conocimiento.id) ? current : [...current, conocimiento.id],
+    );
     setProcesoMessage(null);
     setProcesoErrorMessage(null);
   };
@@ -432,6 +583,9 @@ function ProgramaConocimientosPanel({
         competencia.id,
       );
       syncProcesos(result);
+      setSelectedProcesoIds((current) =>
+        current.filter((id) => id !== conocimiento.id),
+      );
       if (procesoEditingId === conocimiento.id) {
         resetProcesoForm();
       }
@@ -556,13 +710,28 @@ function ProgramaConocimientosPanel({
             </div>
           </form>
 
+          {saber.length > 0 ? (
+            <ProgressiveItemPicker
+              emptyLabel="Selecciona un conocimiento SABER para verlo y trabajarlo."
+              items={saber}
+              label="Seleccionar conocimiento SABER"
+              placeholder="Elegir SABER"
+              selectedIds={selectedSaberIds}
+              onSelectedIdsChange={setSelectedSaberIds}
+            />
+          ) : null}
+
           {saber.length === 0 ? (
             <CurriculumEmptyNote>
               Sin conocimientos SABER registrados para esta competencia.
             </CurriculumEmptyNote>
+          ) : selectedSaber.length === 0 ? (
+            <CurriculumEmptyNote>
+              Los conocimientos SABER estan disponibles en el selector.
+            </CurriculumEmptyNote>
           ) : (
             <div className="grid gap-2">
-              {saber.map((item) => (
+              {selectedSaber.map((item) => (
                 <div
                   key={item.id}
                   className={cn(
@@ -690,13 +859,28 @@ function ProgramaConocimientosPanel({
             </div>
           </form>
 
+          {proceso.length > 0 ? (
+            <ProgressiveItemPicker
+              emptyLabel="Selecciona un conocimiento PROCESO para verlo y trabajarlo."
+              items={proceso}
+              label="Seleccionar conocimiento PROCESO"
+              placeholder="Elegir PROCESO"
+              selectedIds={selectedProcesoIds}
+              onSelectedIdsChange={setSelectedProcesoIds}
+            />
+          ) : null}
+
           {proceso.length === 0 ? (
             <CurriculumEmptyNote>
               Sin conocimientos PROCESO registrados para esta competencia.
             </CurriculumEmptyNote>
+          ) : selectedProceso.length === 0 ? (
+            <CurriculumEmptyNote>
+              Los conocimientos PROCESO estan disponibles en el selector.
+            </CurriculumEmptyNote>
           ) : (
             <div className="grid gap-2">
-              {proceso.map((item) => (
+              {selectedProceso.map((item) => (
                 <div
                   key={item.id}
                   className={cn(
@@ -764,11 +948,19 @@ function ProgramaCriteriosPanel({
   const [state, setState] = useState<OperationState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedCriterioIds, setSelectedCriterioIds] = useState<string[]>([]);
 
   const sorted = useMemo(() => sortByOrder(items), [items]);
+  const selectedItems = useMemo(
+    () => sorted.filter((item) => selectedCriterioIds.includes(item.id)),
+    [selectedCriterioIds, sorted],
+  );
 
   useEffect(() => {
     setItems(criterios);
+    setSelectedCriterioIds((current) =>
+      current.filter((id) => criterios.some((item) => item.id === id)),
+    );
   }, [criterios]);
 
   const resetForm = (): void => {
@@ -778,6 +970,9 @@ function ProgramaCriteriosPanel({
 
   const syncItems = (result: CriterioListResponse): void => {
     setItems(result.criterios);
+    setSelectedCriterioIds((current) =>
+      current.filter((id) => result.criterios.some((item) => item.id === id)),
+    );
     onCriteriosSynced(result);
   };
 
@@ -800,6 +995,8 @@ function ProgramaCriteriosPanel({
 
     try {
       const payload = { descripcion: form.descripcion.trim() };
+      const existingIds = new Set(items.map((item) => item.id));
+      const activeEditingId = editingId;
       const result =
         editingId === null
           ? await createProgramaCriterio(
@@ -815,9 +1012,20 @@ function ProgramaCriteriosPanel({
             );
 
       syncItems(result);
+      const selectedId =
+        activeEditingId ??
+        result.criterios.find((item) => !existingIds.has(item.id))?.id ??
+        result.criterios.find(
+          (item) => item.descripcion === payload.descripcion,
+        )?.id;
+      if (selectedId !== undefined) {
+        setSelectedCriterioIds((current) =>
+          current.includes(selectedId) ? current : [...current, selectedId],
+        );
+      }
       resetForm();
       setMessage(
-        editingId === null
+        activeEditingId === null
           ? "Criterio de evaluacion registrado."
           : "Criterio de evaluacion actualizado.",
       );
@@ -838,6 +1046,9 @@ function ProgramaCriteriosPanel({
   const handleEdit = (criterio: CriterioEvaluacionCurricular): void => {
     setEditingId(criterio.id);
     setForm({ descripcion: criterio.descripcion });
+    setSelectedCriterioIds((current) =>
+      current.includes(criterio.id) ? current : [...current, criterio.id],
+    );
     setMessage(null);
     setErrorMessage(null);
   };
@@ -867,6 +1078,9 @@ function ProgramaCriteriosPanel({
         competencia.id,
       );
       syncItems(result);
+      setSelectedCriterioIds((current) =>
+        current.filter((id) => id !== criterio.id),
+      );
       if (editingId === criterio.id) {
         resetForm();
       }
@@ -977,13 +1191,28 @@ function ProgramaCriteriosPanel({
           </div>
         </form>
 
+        {sorted.length > 0 ? (
+          <ProgressiveItemPicker
+            emptyLabel="Selecciona un criterio para verlo y trabajarlo."
+            items={sorted}
+            label="Seleccionar criterio"
+            placeholder="Elegir criterio"
+            selectedIds={selectedCriterioIds}
+            onSelectedIdsChange={setSelectedCriterioIds}
+          />
+        ) : null}
+
         {sorted.length === 0 ? (
           <CurriculumEmptyNote>
             Sin criterios de evaluacion registrados para esta competencia.
           </CurriculumEmptyNote>
+        ) : selectedItems.length === 0 ? (
+          <CurriculumEmptyNote>
+            Los criterios estan disponibles en el selector.
+          </CurriculumEmptyNote>
         ) : (
           <div className="grid gap-2">
-            {sorted.map((item) => (
+            {selectedItems.map((item) => (
               <div
                 key={item.id}
                 className={cn(
@@ -1370,6 +1599,10 @@ export function ProgramaCompetenciasManager({
   const [state, setState] = useState<OperationState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedCompetenciaId, setSelectedCompetenciaId] = useState<
+    string | null
+  >(competencias[0]?.id ?? null);
+  const [competenciaQuery, setCompetenciaQuery] = useState("");
 
   const sortedCompetencias = useMemo(() => {
     return [...competencias].sort((left, right) => {
@@ -1378,6 +1611,37 @@ export function ProgramaCompetenciasManager({
       return leftOrder - rightOrder;
     });
   }, [competencias]);
+  const filteredCompetencias = useMemo(() => {
+    const query = competenciaQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return sortedCompetencias;
+    }
+    return sortedCompetencias.filter((competencia) => {
+      return (
+        competencia.codigo_competencia.toLowerCase().includes(query) ||
+        competencia.nombre_competencia.toLowerCase().includes(query)
+      );
+    });
+  }, [competenciaQuery, sortedCompetencias]);
+  const selectedCompetencia = useMemo(() => {
+    return (
+      sortedCompetencias.find((item) => item.id === selectedCompetenciaId) ??
+      null
+    );
+  }, [selectedCompetenciaId, sortedCompetencias]);
+
+  useEffect(() => {
+    if (sortedCompetencias.length === 0) {
+      setSelectedCompetenciaId(null);
+      return;
+    }
+    if (
+      selectedCompetenciaId === null ||
+      !sortedCompetencias.some((item) => item.id === selectedCompetenciaId)
+    ) {
+      setSelectedCompetenciaId(sortedCompetencias[0].id);
+    }
+  }, [selectedCompetenciaId, sortedCompetencias]);
 
   const handleResultadosSynced = useCallback(
     (result: ResultadoAprendizajeListResponse): void => {
@@ -1521,15 +1785,26 @@ export function ProgramaCompetenciasManager({
         codigo_competencia: form.codigo_competencia.trim(),
         nombre_competencia: form.nombre_competencia.trim(),
       };
+      const existingIds = new Set(competencias.map((item) => item.id));
+      const activeEditingId = editingId;
       const result =
         editingId === null
           ? await createProgramaCompetencia(referenciaId, payload)
           : await updateProgramaCompetencia(referenciaId, editingId, payload);
 
       onCompetenciasSynced(result);
+      const selectedId =
+        activeEditingId ??
+        result.competencias.find((item) => !existingIds.has(item.id))?.id ??
+        result.competencias.find(
+          (item) => item.codigo_competencia === payload.codigo_competencia,
+        )?.id;
+      if (selectedId !== undefined) {
+        setSelectedCompetenciaId(selectedId);
+      }
       resetForm();
       setMessage(
-        editingId === null
+        activeEditingId === null
           ? "Competencia registrada."
           : "Competencia actualizada.",
       );
@@ -1548,6 +1823,7 @@ export function ProgramaCompetenciasManager({
   };
 
   const handleEdit = (competencia: ProgramaCompetencia): void => {
+    setSelectedCompetenciaId(competencia.id);
     setEditingId(competencia.id);
     setForm({
       codigo_competencia: competencia.codigo_competencia,
@@ -1573,6 +1849,9 @@ export function ProgramaCompetenciasManager({
       await deleteProgramaCompetencia(referenciaId, competencia.id);
       const result = await listProgramaCompetencias(referenciaId);
       onCompetenciasSynced(result);
+      if (selectedCompetenciaId === competencia.id) {
+        setSelectedCompetenciaId(null);
+      }
       if (editingId === competencia.id) {
         resetForm();
       }
@@ -1714,12 +1993,58 @@ export function ProgramaCompetenciasManager({
         <CompetenciaEmptyState />
       ) : (
         <section className="grid gap-3">
-          {sortedCompetencias.map((competencia) => (
+          <section
+            aria-label="Selector de competencia curricular"
+            className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white p-4"
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)]">
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+                  Buscar competencia
+                </span>
+                <input
+                  value={competenciaQuery}
+                  onChange={(event) => setCompetenciaQuery(event.target.value)}
+                  placeholder="Codigo o nombre de competencia"
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid min-w-0 gap-2">
+                <span className="text-xs font-semibold tracking-[0.14em] text-[var(--muted)] uppercase">
+                  Seleccionar competencia
+                </span>
+                <select
+                  aria-label="Seleccionar competencia"
+                  value={selectedCompetenciaId ?? ""}
+                  onChange={(event) =>
+                    setSelectedCompetenciaId(event.target.value || null)
+                  }
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition focus:border-[var(--accent)]"
+                >
+                  {filteredCompetencias.length === 0 ? (
+                    <option value="">Sin coincidencias</option>
+                  ) : null}
+                  {filteredCompetencias.map((competencia) => (
+                    <option key={competencia.id} value={competencia.id}>
+                      {competencia.codigo_competencia} -{" "}
+                      {compactLabel(competencia.nombre_competencia, 72)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          {selectedCompetencia === null ? (
+            <CurriculumEmptyNote>
+              Selecciona una competencia para cargar resultados, conocimientos y
+              criterios.
+            </CurriculumEmptyNote>
+          ) : (
             <article
-              key={competencia.id}
               className={cn(
-                "grid gap-4 rounded-lg border bg-white p-4 transition",
-                editingId === competencia.id
+                "grid min-w-0 gap-4 rounded-lg border bg-white p-4 transition",
+                editingId === selectedCompetencia.id
                   ? "border-[var(--accent)]"
                   : "border-[color:var(--card-border)]",
               )}
@@ -1731,21 +2056,21 @@ export function ProgramaCompetenciasManager({
                       <Layers3 className="h-4 w-4" />
                     </span>
                     <span className="rounded-lg bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-strong)]">
-                      {competencia.codigo_competencia}
+                      {selectedCompetencia.codigo_competencia}
                     </span>
                     <span className="text-xs font-semibold text-[var(--muted)]">
-                      {competencia.origen_campo}
+                      {selectedCompetencia.origen_campo}
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 break-words text-[var(--foreground)]">
-                    {competencia.nombre_competencia}
+                    {selectedCompetencia.nombre_competencia}
                   </p>
                 </div>
 
-                <div className="flex items-start gap-2">
+                <div className="flex flex-wrap items-start gap-2">
                   <button
                     type="button"
-                    onClick={() => handleEdit(competencia)}
+                    onClick={() => handleEdit(selectedCompetencia)}
                     className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                   >
                     <Edit3 className="h-4 w-4" />
@@ -1754,7 +2079,7 @@ export function ProgramaCompetenciasManager({
                   <button
                     type="button"
                     disabled={state === "deleting"}
-                    onClick={() => void handleDelete(competencia)}
+                    onClick={() => void handleDelete(selectedCompetencia)}
                     className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1763,16 +2088,16 @@ export function ProgramaCompetenciasManager({
                 </div>
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-3">
                 <ProgramaResultadosManager
-                  competencia={competencia}
+                  competencia={selectedCompetencia}
                   referenciaId={referenciaId}
                   onResultadosSynced={handleResultadosSynced}
                 />
-                <div className="grid gap-3 xl:grid-cols-2">
+                <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <ProgramaConocimientosPanel
-                    competencia={competencia}
-                    conocimientos={competencia.conocimientos ?? []}
+                    competencia={selectedCompetencia}
+                    conocimientos={selectedCompetencia.conocimientos ?? []}
                     referenciaId={referenciaId}
                     onConocimientosSaberSynced={handleConocimientosSaberSynced}
                     onConocimientosProcesoSynced={
@@ -1780,15 +2105,15 @@ export function ProgramaCompetenciasManager({
                     }
                   />
                   <ProgramaCriteriosPanel
-                    competencia={competencia}
-                    criterios={competencia.criterios ?? []}
+                    competencia={selectedCompetencia}
+                    criterios={selectedCompetencia.criterios ?? []}
                     referenciaId={referenciaId}
                     onCriteriosSynced={handleCriteriosSynced}
                   />
                 </div>
               </div>
             </article>
-          ))}
+          )}
         </section>
       )}
     </div>

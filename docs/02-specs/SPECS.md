@@ -15,6 +15,15 @@ Desde esta refactorizacion integral, el sistema opera con un unico carril:
 - no se permite el carril manual como modo operativo;
 - las tareas TASK-18, TASK-19 y siguientes quedan reinterpretadas.
 
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+- El paso `datos-programa` queda eliminado del wizard, navegacion, tipos, tests y documentacion.
+- El wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y cierra en `revision-programa`.
+- El origen documental conserva PDF evidencia y Excel canonico; tras importacion confirmada muestra un resumen compacto y abre competencias en una modal paginada.
+- La estructura curricular usa selector/filtro de competencia y evita render masivo; conocimientos y criterios se seleccionan progresivamente antes de mostrarse.
+- El wizard del proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como paso manual.
+- Los documentos del proyecto se guardan en `proyectos-formativos/{referencia_id}/documentos/...` y los Excel en `proyectos-formativos/{referencia_id}/excel/...`.
+
 ---
 
 # 1. Resumen
@@ -27,7 +36,7 @@ La Fase 1 debe permitir:
 - cargar información del proyecto formativo desde fuente estructurada,
 - conservar PDF como evidencia documental cuando exista,
 - importar datos desde Excel canonico cuando se use fuente estructurada,
-- permitir diligenciamiento post-importacion SOLO para completar lo estrictamente faltante,
+- permitir correccion post-importacion SOLO para completar lo estrictamente faltante sin reactivar un carril manual,
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta completar el programa,
@@ -155,12 +164,10 @@ Responsable de:
 El usuario puede:
 
 - iniciar un nuevo proceso,
-- cargar PDF del programa como evidencia,
-- cargar Excel canónico del programa como fuente estructurada,
 - continuar un borrador existente.
 
-## Paso 2. Carga documental
-El usuario sube el PDF del programa como evidencia documental.
+## Paso 2. Origen documental del programa
+El usuario sube el PDF del programa como evidencia documental y carga el Excel canonico del programa como fuente estructurada.
 
 ## Paso 3. Importacion estructurada del programa
 El sistema importa desde Excel canónico:
@@ -172,7 +179,10 @@ El sistema importa desde Excel canónico:
 - conocimientos de proceso,
 - criterios.
 
-El usuario puede revisar el consolidado del programa antes del cierre.
+Tras confirmar la importacion, el usuario ve un resumen compacto del workbook y puede abrir una modal paginada para revisar competencias importadas.
+
+## Paso 4. Estructura curricular del programa
+El usuario selecciona una competencia para trabajar en contexto. Resultados se muestran con la competencia seleccionada; conocimientos y criterios se eligen progresivamente desde selectores antes de renderizarse.
 
 ## Paso 5. Revisión del programa
 El sistema debe mostrar el consolidado del programa antes del cierre.
@@ -183,8 +193,8 @@ El sistema debe validar completitud y, si procede, marcar el programa como COMPL
 ## Paso 7. Habilitación del proyecto
 Solo cuando el programa esté completo, el sistema debe habilitar el proyecto formativo.
 
-## Paso 8. Carga documental del proyecto
-El usuario sube el PDF del proyecto como evidencia documental.
+## Paso 8. Fuente del proyecto
+El usuario sube el PDF del proyecto como evidencia documental y carga la matriz Excel del proyecto como fuente estructurada.
 
 ## Paso 9. Importacion estructurada del proyecto
 El sistema importa desde fuente estructurada (Excel/matriz):
@@ -241,7 +251,7 @@ El sistema debe importar desde Excel canonico:
 - criterios.
 
 ### RF-07. Correccion post-importacion de lo faltante
-Si la importacion Excel no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
+Si la importacion Excel no resuelve ciertos campos de forma confiable, el sistema debe permitir correccion puntual SOLO de lo faltante, sin convertirlo en carril manual de entrada.
 
 ### RF-08. Gestionar competencias
 El sistema debe permitir crear, editar y eliminar competencias.
@@ -306,7 +316,7 @@ El sistema debe importar desde Excel/matriz:
 - actividades.
 
 ### RF-24. Correccion post-importacion del proyecto
-Si la importacion no resuelve ciertos campos de forma confiable, el sistema debe permitir completar manualmente SOLO lo faltante.
+Si la importacion no resuelve ciertos campos de forma confiable, el sistema debe permitir correccion puntual SOLO de lo faltante, sin convertirlo en carril manual de entrada.
 
 ### RF-25. Gestionar fases
 El sistema debe permitir crear, editar y eliminar fases del proyecto.
@@ -484,14 +494,16 @@ El sistema debe permitir cargar el PDF del proyecto como evidencia documental
 en MinIO. No se realiza extraccion curricular desde el PDF.
 
 El sistema debe permitir importar datos del proyecto desde fuente estructurada
-tipo Excel/matriz cuando se defina.
+tipo Excel/matriz. Los documentos del proyecto usan el prefijo MinIO
+`proyectos-formativos/{referencia_id}/documentos/...` y los Excel usan
+`proyectos-formativos/{referencia_id}/excel/...`.
 
 ## 13.3 Manejo de fallos
 Cuando la importacion Excel no pueda resolver un campo de forma confiable, el sistema debe:
 
 1. informar el motivo,
 2. marcar el campo como pendiente,
-3. habilitar correccion post-importacion SOLO para completar lo faltante.
+3. habilitar correccion post-importacion SOLO para completar lo faltante sin reactivar captura manual como fuente.
 
 ## 13.4 Motivos mínimos de fallo
 - archivo Excel no canonico

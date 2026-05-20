@@ -14,7 +14,6 @@ from src.application.dto.criterios import (
 )
 from src.application.services.criterios import (
     CriterioCompetenciaNotFoundError,
-    CriterioDuplicateError,
     CriterioNotFoundError,
 )
 from src.domain.shared.enums import EstadoCampo

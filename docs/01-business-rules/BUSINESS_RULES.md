@@ -49,6 +49,14 @@ Desde esta refactorizacion integral, el sistema opera con un unico carril funcio
 
 Esta decision reemplaza las reglas RN-13, RN-14, RN-15 y RN-35 anteriores que admitian captura manual o PDF como fuente activa.
 
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+Desde este refactor, `datos-programa` no existe como paso funcional ni informativo. El programa inicia en `origen-documental`, conserva PDF como evidencia documental y usa Excel canonico como unica fuente estructurada activa. Despues de confirmar la importacion, el sistema muestra un resumen compacto del workbook y la revision de competencias importadas se abre en una modal paginada.
+
+La gestion de `estructura-curricular` debe iniciar con selector/filtro de competencia. Resultados se muestran al seleccionar la competencia; conocimientos y criterios se exponen primero mediante selectores progresivos y solo se renderizan cuando el usuario los elige.
+
+El proyecto formativo se habilita solo cuando el programa esta `COMPLETO`, usa PDF como evidencia y Excel/matriz como fuente estructurada. No existe paso `datos-proyecto` como carril manual de entrada. Los documentos del proyecto se almacenan bajo `proyectos-formativos/{referencia_id}/documentos/...` y los Excel bajo `proyectos-formativos/{referencia_id}/excel/...`.
+
 ---
 
 # 2. Contexto de negocio
@@ -156,13 +164,20 @@ El sistema no debe permitir el cargue, revisión ni cierre del proyecto formativ
 ## RN-03. Orden de trabajo
 La secuencia funcional obligatoria de la Fase 1 es:
 
-1. cargar o diligenciar programa,
-2. revisar programa,
-3. cerrar programa,
-4. habilitar proyecto,
-5. cargar o diligenciar proyecto,
-6. revisar proyecto,
-7. cerrar proyecto.
+1. abrir el origen documental del programa,
+2. cargar PDF del programa como evidencia si existe,
+3. cargar, validar, previsualizar y confirmar Excel canonico del programa,
+4. revisar competencias importadas desde el resumen compacto y la modal paginada,
+5. gestionar estructura curricular por competencia seleccionada,
+6. revisar programa,
+7. cerrar programa,
+8. habilitar proyecto,
+9. abrir fuente del proyecto,
+10. cargar PDF del proyecto como evidencia,
+11. cargar, validar, previsualizar y confirmar Excel/matriz del proyecto,
+12. gestionar fases y actividades,
+13. revisar proyecto,
+14. cerrar proyecto.
 
 No se deben permitir flujos alternos que rompan esta secuencia.
 

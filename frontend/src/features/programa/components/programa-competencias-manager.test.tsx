@@ -472,12 +472,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={onCompetenciasSynced}
       />,
     );
-    await waitFor(() => {
-      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
-        referenciaId,
-        competencia.id,
-      );
-    });
+    expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Ej. RAP-01"), {
       target: { value: " RAP-01 " },
@@ -572,9 +567,9 @@ describe("ProgramaCompetenciasManager", () => {
     const competencia = buildCompetencia();
     const resultado = buildResultado(competencia.id);
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(resultadosApi.listProgramaResultados)
-      .mockResolvedValueOnce(buildResultadoResponse(competencia.id, [resultado]))
-      .mockResolvedValueOnce(buildResultadoResponse(competencia.id, []));
+    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
+      buildResultadoResponse(competencia.id, []),
+    );
     vi.mocked(resultadosApi.deleteProgramaResultado).mockResolvedValue({
       referencia_id: referenciaId,
       competencia_id: competencia.id,
@@ -619,12 +614,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={onCompetenciasSynced}
       />,
     );
-    await waitFor(() => {
-      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
-        referenciaId,
-        competencia.id,
-      );
-    });
+    expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
@@ -660,12 +650,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(resultadosApi.listProgramaResultados).toHaveBeenCalledWith(
-        referenciaId,
-        competencia.id,
-      );
-    });
+    expect(screen.getByText("Resultados de aprendizaje")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el resultado de aprendizaje."),
@@ -709,11 +694,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={onCompetenciasSynced}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosSaberApi.listProgramaConocimientosSaber,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de saber."),
@@ -762,7 +743,10 @@ describe("ProgramaCompetenciasManager", () => {
       />,
     );
 
-    expect(await screen.findByText("Arquitectura de software")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento SABER"), {
+      target: { value: saber.id },
+    });
+    expect(await screen.findAllByText("Arquitectura de software")).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[1]);
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de saber."),
@@ -792,9 +776,9 @@ describe("ProgramaCompetenciasManager", () => {
     const competencia = buildCompetencia();
     const saber = buildConocimientoSaber(competencia.id);
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(conocimientosSaberApi.listProgramaConocimientosSaber)
-      .mockResolvedValueOnce(buildConocimientoSaberResponse(competencia.id, [saber]))
-      .mockResolvedValueOnce(buildConocimientoSaberResponse(competencia.id, []));
+    vi.mocked(conocimientosSaberApi.listProgramaConocimientosSaber).mockResolvedValue(
+      buildConocimientoSaberResponse(competencia.id, []),
+    );
     vi.mocked(
       conocimientosSaberApi.deleteProgramaConocimientoSaber,
     ).mockResolvedValue({
@@ -813,7 +797,10 @@ describe("ProgramaCompetenciasManager", () => {
       />,
     );
 
-    expect(await screen.findByText("Arquitectura de software")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento SABER"), {
+      target: { value: saber.id },
+    });
+    expect(await screen.findAllByText("Arquitectura de software")).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[1]);
 
     await waitFor(() => {
@@ -836,11 +823,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosSaberApi.listProgramaConocimientosSaber,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de saber."),
@@ -880,11 +863,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosSaberApi.listProgramaConocimientosSaber,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de saber."),
@@ -923,11 +902,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={onCompetenciasSynced}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosProcesoApi.listProgramaConocimientosProceso,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de proceso."),
@@ -976,9 +951,12 @@ describe("ProgramaCompetenciasManager", () => {
       />,
     );
 
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento PROCESO"), {
+      target: { value: proceso.id },
+    });
     expect(
-      await screen.findByText("Codificar solucion por competencia"),
-    ).toBeInTheDocument();
+      await screen.findAllByText("Codificar solucion por competencia"),
+    ).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: /editar/i })[1]);
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de proceso."),
@@ -1008,11 +986,9 @@ describe("ProgramaCompetenciasManager", () => {
     const competencia = buildCompetencia();
     const proceso = buildConocimientoProceso(competencia.id);
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(conocimientosProcesoApi.listProgramaConocimientosProceso)
-      .mockResolvedValueOnce(
-        buildConocimientoProcesoResponse(competencia.id, [proceso]),
-      )
-      .mockResolvedValueOnce(buildConocimientoProcesoResponse(competencia.id, []));
+    vi.mocked(conocimientosProcesoApi.listProgramaConocimientosProceso).mockResolvedValue(
+      buildConocimientoProcesoResponse(competencia.id, []),
+    );
     vi.mocked(
       conocimientosProcesoApi.deleteProgramaConocimientoProceso,
     ).mockResolvedValue({
@@ -1031,9 +1007,12 @@ describe("ProgramaCompetenciasManager", () => {
       />,
     );
 
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento PROCESO"), {
+      target: { value: proceso.id },
+    });
     expect(
-      await screen.findByText("Codificar solucion por competencia"),
-    ).toBeInTheDocument();
+      await screen.findAllByText("Codificar solucion por competencia"),
+    ).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: /eliminar/i })[1]);
 
     await waitFor(() => {
@@ -1056,11 +1035,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosProcesoApi.listProgramaConocimientosProceso,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de proceso."),
@@ -1100,11 +1075,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(
-        conocimientosProcesoApi.listProgramaConocimientosProceso,
-      ).toHaveBeenCalledWith(referenciaId, competencia.id);
-    });
+    expect(screen.getByText("Conocimientos")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el conocimiento de proceso."),
@@ -1205,16 +1176,34 @@ describe("ProgramaCompetenciasManager", () => {
     expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
     expect(screen.getByText("Saber")).toBeInTheDocument();
     expect(screen.getByText("Proceso")).toBeInTheDocument();
-    expect(screen.getByText("Arquitectura por competencia")).toBeInTheDocument();
     expect(
-      screen.getByText("Codificar solucion por competencia"),
+      screen.getByText("Los conocimientos SABER estan disponibles en el selector."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Verifica componentes por competencia"),
+      screen.getByText("Los conocimientos PROCESO estan disponibles en el selector."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Los criterios estan disponibles en el selector."),
     ).toBeInTheDocument();
     expect(
       await screen.findByText("Analizar los requisitos del software"),
     ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento SABER"), {
+      target: { value: "dddddddd-dddd-4ddd-9ddd-dddddddddddd" },
+    });
+    fireEvent.change(screen.getByLabelText("Seleccionar conocimiento PROCESO"), {
+      target: { value: "eeeeeeee-eeee-4eee-9eee-eeeeeeeeeeee" },
+    });
+    fireEvent.change(screen.getByLabelText("Seleccionar criterio"), {
+      target: { value: "ffffffff-ffff-4fff-9fff-ffffffffffff" },
+    });
+    expect(screen.getAllByText("Arquitectura por competencia")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Codificar solucion por competencia"),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByText("Verifica componentes por competencia"),
+    ).toHaveLength(2);
   });
 
   it("should keep practical-stage competencias readable when they have no children", async () => {
@@ -1225,10 +1214,6 @@ describe("ProgramaCompetenciasManager", () => {
       conocimientos: [],
       criterios: [],
     });
-    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
-      buildResultadoResponse(competencia.id, []),
-    );
-
     render(
       <ProgramaCompetenciasManager
         competencias={[competencia]}
@@ -1261,22 +1246,6 @@ describe("ProgramaCompetenciasManager", () => {
 
   it("should create a criterio from panel form", async () => {
     const competencia = buildCompetencia();
-    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
-      buildResultadoResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosSaberApi.listProgramaConocimientosSaber,
-    ).mockResolvedValue(
-      buildConocimientoSaberResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosProcesoApi.listProgramaConocimientosProceso,
-    ).mockResolvedValue(
-      buildConocimientoProcesoResponse(competencia.id, []),
-    );
-    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
-      buildCriterioResponse(competencia.id, []),
-    );
     vi.mocked(criteriosApi.createProgramaCriterio).mockImplementation(
       async (_ref, _comp, payload) =>
         buildCriterioResponse(competencia.id, [
@@ -1300,12 +1269,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalledWith(
-        referenciaId,
-        competencia.id,
-      );
-    });
+    expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el criterio de evaluacion."),
@@ -1326,23 +1290,6 @@ describe("ProgramaCompetenciasManager", () => {
 
   it("should reject empty criterio form", async () => {
     const competencia = buildCompetencia();
-    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
-      buildResultadoResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosSaberApi.listProgramaConocimientosSaber,
-    ).mockResolvedValue(
-      buildConocimientoSaberResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosProcesoApi.listProgramaConocimientosProceso,
-    ).mockResolvedValue(
-      buildConocimientoProcesoResponse(competencia.id, []),
-    );
-    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
-      buildCriterioResponse(competencia.id, []),
-    );
-
     render(
       <ProgramaCompetenciasManager
         competencias={[competencia]}
@@ -1350,9 +1297,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalled();
-    });
+    expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el criterio de evaluacion."),
@@ -1371,22 +1316,6 @@ describe("ProgramaCompetenciasManager", () => {
 
   it("should show duplicate error for criterio", async () => {
     const competencia = buildCompetencia();
-    vi.mocked(resultadosApi.listProgramaResultados).mockResolvedValue(
-      buildResultadoResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosSaberApi.listProgramaConocimientosSaber,
-    ).mockResolvedValue(
-      buildConocimientoSaberResponse(competencia.id, []),
-    );
-    vi.mocked(
-      conocimientosProcesoApi.listProgramaConocimientosProceso,
-    ).mockResolvedValue(
-      buildConocimientoProcesoResponse(competencia.id, []),
-    );
-    vi.mocked(criteriosApi.listProgramaCriterios).mockResolvedValue(
-      buildCriterioResponse(competencia.id, []),
-    );
     vi.mocked(criteriosApi.createProgramaCriterio).mockRejectedValue(
       new criteriosApi.ProgramaCriterioError(
         409,
@@ -1401,9 +1330,7 @@ describe("ProgramaCompetenciasManager", () => {
         onCompetenciasSynced={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      expect(criteriosApi.listProgramaCriterios).toHaveBeenCalled();
-    });
+    expect(screen.getByText("Criterios de evaluacion")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("Describe el criterio de evaluacion."),

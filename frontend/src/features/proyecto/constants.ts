@@ -11,37 +11,28 @@ import type {
 
 export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
   {
-    id: "datos-proyecto",
+    id: "fuente-proyecto",
     index: 0,
-    label: "Datos del proyecto",
+    label: "Fuente del proyecto",
     shortLabel: "01",
     description:
-      "Base reservada para el formulario del proyecto de TASK-17.",
-    taskRef: "TASK-17",
-  },
-  {
-    id: "fuente-proyecto",
-    index: 1,
-    label: "Fuente del proyecto",
-    shortLabel: "02",
-    description:
-      "Espacio preparado para evidencia PDF y fuente estructurada del proyecto.",
+      "PDF como evidencia y matriz Excel como fuente estructurada del proyecto.",
     taskRef: "TASK-18 / TASK-19",
   },
   {
     id: "estructura-proyecto",
-    index: 2,
+    index: 1,
     label: "Fases y actividades",
-    shortLabel: "03",
+    shortLabel: "02",
     description:
       "Base navegable para la gestion futura de fases y actividades.",
     taskRef: "TASK-20 / TASK-21",
   },
   {
     id: "revision-proyecto",
-    index: 3,
+    index: 2,
     label: "Revision del proyecto",
-    shortLabel: "04",
+    shortLabel: "03",
     description:
       "Lugar del consolidado editable antes del cierre del proyecto.",
     taskRef: "TASK-22",

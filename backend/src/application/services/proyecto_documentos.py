@@ -7,8 +7,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
-from src.application.dto.proyecto_documentos import ProjectPdfUploadResultDTO
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.application.dto.proyecto_documentos import ProjectPdfUploadResultDTO
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.drafts import BorradorSesion
@@ -166,12 +166,15 @@ def _validate_pdf_upload(
 
 
 def _build_storage_key(referencia_id: uuid.UUID, filename: str) -> str:
-    """Build a stable object prefix without exposing raw user path data."""
+    """Build the canonical project evidence prefix for MinIO objects."""
     safe_filename = re.sub(r"[^a-zA-Z0-9._-]+", "-", filename).strip("-")
     if not safe_filename:
         safe_filename = "proyecto.pdf"
     object_id = uuid.uuid4()
-    return f"proyectos/{referencia_id}/documentos/{object_id}-{safe_filename}"
+    return (
+        f"proyectos-formativos/{referencia_id}/documentos/"
+        f"{object_id}-{safe_filename}"
+    )
 
 
 def _merge_document_result_into_payload(

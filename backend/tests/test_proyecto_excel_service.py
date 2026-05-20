@@ -5,23 +5,21 @@ from __future__ import annotations
 import io
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from openpyxl import Workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.services.proyecto_excel import (
-    DocumentStorageProtocol,
-    DraftRepositoryProtocol,
     InvalidProjectExcelUploadError,
-    ProjectExcelImportService,
+    ProjectExcelDraftMissingError,
     ProjectExcelMissingPreviewError,
-    ProjectExcelStorageMissingError,
-    ProjectRepositoryProtocol,
+    ProyectoExcelImportService,
 )
-from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
+
+pytestmark = pytest.mark.anyio
 
 
 class MockDraftRepository:
@@ -61,7 +59,7 @@ class MockStorageService:
     def __init__(self, document=None, content=b""):
         self.document = document or StoredDocumentDTO(
             original_filename="proyecto.xlsx",
-            storage_key="proyectos/test-id/excel/test.xlsx",
+            storage_key="proyectos-formativos/test-id/excel/test.xlsx",
             size_bytes=1024,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             checksum_sha256="abc123",
@@ -85,7 +83,14 @@ class MockProjectRepository:
         self.created_fases = []
         self.created_actividades = []
 
-    async def create_proyecto(self, *, programa_id, codigo_proyecto, nombre_proyecto, version_proyecto):
+    async def create_proyecto(
+        self,
+        *,
+        programa_id,
+        codigo_proyecto,
+        nombre_proyecto,
+        version_proyecto,
+    ):
         p = MagicMock(id=uuid.uuid4())
         p.codigo_proyecto = codigo_proyecto
         self.created_proyectos.append(p)
@@ -109,11 +114,21 @@ def create_valid_workbook():
 
     proyecto_sheet = wb.active
     proyecto_sheet.title = "Proyecto"
-    proyecto_sheet.append(["codigo_proyecto", "nombre_proyecto", "version_proyecto", "programa_referencia", "observaciones"])
+    proyecto_sheet.append(
+        [
+            "codigo_proyecto",
+            "nombre_proyecto",
+            "version_proyecto",
+            "programa_referencia",
+            "observaciones",
+        ],
+    )
     proyecto_sheet.append(["PR-001", "Proyecto de prueba", "1.0", "prog-ref", ""])
 
     fases_sheet = wb.create_sheet("Fases")
-    fases_sheet.append(["fase_id", "nombre_fase", "orden", "descripcion", "observaciones"])
+    fases_sheet.append(
+        ["fase_id", "nombre_fase", "orden", "descripcion", "observaciones"],
+    )
     fases_sheet.append(["F1", "Fase 1", 1, "Descripcion fase 1", ""])
     fases_sheet.append(["F2", "Fase 2", 2, "Descripcion fase 2", ""])
 
@@ -135,12 +150,12 @@ def draft_factory():
                 "meta": {
                     "referenciaId": str(uuid.uuid4()),
                     "programaId": "00000000-0000-0000-0000-000000000000",
-                    "touchedSteps": ["datos-proyecto"],
+                    "touchedSteps": ["fuente-proyecto"],
                     "lastInteractionAt": datetime.now(UTC).isoformat(),
                 },
                 "documental": {},
             },
-            paso_actual="datos-proyecto",
+            paso_actual="fuente-proyecto",
             estado_borrador=EstadoBloque.BORRADOR,
         )
 
@@ -155,7 +170,7 @@ def service(draft_factory):
     storage_service = MockStorageService()
     project_repository = MockProjectRepository()
 
-    return ProjectExcelImportService(
+    return ProyectoExcelImportService(
         session=session,
         draft_repository=draft_repository,
         audit_repository=audit_repository,
@@ -187,7 +202,15 @@ class TestPreviewProjectExcel:
     async def test_preview_rejects_missing_sheets(self, service):
         wb = Workbook()
         wb.active.title = "Proyecto"
-        wb.active.append(["codigo_proyecto", "nombre_proyecto", "version_proyecto", "programa_referencia", "observaciones"])
+        wb.active.append(
+            [
+                "codigo_proyecto",
+                "nombre_proyecto",
+                "version_proyecto",
+                "programa_referencia",
+                "observaciones",
+            ],
+        )
         wb.active.append(["PR-001", "Test", "1.0", "", ""])
         content = io.BytesIO()
         wb.save(content)
@@ -205,7 +228,10 @@ class TestPreviewProjectExcel:
         assert len(result.errores) > 0
 
     async def test_preview_rejects_non_xlsx(self, service):
-        with pytest.raises(InvalidProjectExcelUploadError, match="Solo se aceptan archivos .xlsx"):
+        with pytest.raises(
+            InvalidProjectExcelUploadError,
+            match="Solo se aceptan archivos .xlsx",
+        ):
             await service.preview_project_excel(
                 referencia_id=uuid.uuid4(),
                 filename="proyecto.pdf",
@@ -229,7 +255,7 @@ class TestPreviewProjectExcel:
         storage_service = MockStorageService()
         project_repository = MockProjectRepository()
 
-        service = ProjectExcelImportService(
+        service = ProyectoExcelImportService(
             session=session,
             draft_repository=draft_repository,
             audit_repository=audit_repository,
@@ -242,7 +268,6 @@ class TestPreviewProjectExcel:
         wb.save(content)
         content.seek(0)
 
-        from src.application.services.proyecto_excel import ProjectExcelDraftMissingError
         with pytest.raises(ProjectExcelDraftMissingError):
             await service.preview_project_excel(
                 referencia_id=uuid.uuid4(),
@@ -366,7 +391,7 @@ class TestConfirmProjectExcelImport:
             MagicMock(
                 id=uuid.uuid4(),
                 payload_json={"meta": {}, "documental": {}},
-                paso_actual="datos-proyecto",
+                paso_actual="fuente-proyecto",
                 estado_borrador=EstadoBloque.BORRADOR,
             )
         )
@@ -374,7 +399,7 @@ class TestConfirmProjectExcelImport:
         storage_service = MockStorageService()
         project_repository = MockProjectRepository()
 
-        service = ProjectExcelImportService(
+        service = ProyectoExcelImportService(
             session=session,
             draft_repository=draft_repository,
             audit_repository=audit_repository,
@@ -413,14 +438,14 @@ class TestConfirmProjectExcelImport:
             MagicMock(
                 id=uuid.uuid4(),
                 payload_json={"meta": {}, "documental": {}},
-                paso_actual="datos-proyecto",
+                paso_actual="fuente-proyecto",
                 estado_borrador=EstadoBloque.BORRADOR,
             )
         )
         audit = MockAuditRepository()
         project_repository = MockProjectRepository()
 
-        service = ProjectExcelImportService(
+        service = ProyectoExcelImportService(
             session=session,
             draft_repository=draft_repository,
             audit_repository=audit,
@@ -444,4 +469,4 @@ class TestConfirmProjectExcelImport:
             referencia_id=uuid.uuid4(),
         )
 
-        assert storage.document.storage_key.startswith("proyectos/")
+        assert storage.document.storage_key.startswith("proyectos-formativos/")

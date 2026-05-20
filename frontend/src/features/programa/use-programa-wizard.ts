@@ -378,12 +378,13 @@ export function useProgramaWizard(): ProgramaWizardController {
     };
   }, [isBootstrapping, isRecovering, persistSnapshot, snapshot]);
 
-  const startNewFlow = useCallback(async (_entryMode: ProgramaEntryMode): Promise<void> => {
+  const startNewFlow = useCallback(async (entryMode: ProgramaEntryMode): Promise<void> => {
       const nextReferenceId = crypto.randomUUID();
       const nextPayload = createEmptyProgramaPayload(nextReferenceId);
       const targetStepId = DEFAULT_PROGRAMA_STEP_ID;
       const now = new Date().toISOString();
 
+      nextPayload.meta.entryMode = entryMode ?? "EXCEL";
       nextPayload.meta.touchedSteps = addTouchedStep(
         nextPayload.meta.touchedSteps,
         targetStepId,

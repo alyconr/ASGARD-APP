@@ -11,8 +11,8 @@ from typing import Protocol
 
 from openpyxl import load_workbook
 
+from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.proyecto_excel import (
-    ExcelActividadPreviewDTO,
     ExcelFasePreviewDTO,
     ExcelPendingSummaryDTO,
     ExcelPreviewSummaryDTO,
@@ -21,11 +21,14 @@ from src.application.dto.proyecto_excel import (
     ProyectoExcelImportDTO,
     ProyectoExcelPreviewDTO,
 )
-from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque, EstadoCampo
+from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.proyecto import ActividadProyecto, FaseProyecto, ProyectoFormativo
+from src.infrastructure.db.models.proyecto import (
+    ActividadProyecto,
+    FaseProyecto,
+    ProyectoFormativo,
+)
 
 CANONICAL_SHEETS: dict[str, list[str]] = {
     "Proyecto": [
@@ -335,8 +338,13 @@ class ProyectoExcelImportService:
         if workbook.proyecto is None:
             raise ProjectExcelValidationError("La hoja Proyecto esta vacia")
 
+        meta = _as_record(draft.payload_json.get("meta")) or {}
+        programa_id_text = (
+            _read_string(meta, "programaId")
+            or "00000000-0000-0000-0000-000000000000"
+        )
         proyecto = await self._project_repository.create_proyecto(
-            programa_id=uuid.UUID(draft.payload_json.get("meta", {}).get("programaId", "00000000-0000-0000-0000-000000000000")),
+            programa_id=uuid.UUID(programa_id_text),
             codigo_proyecto=workbook.proyecto.codigo_proyecto,
             nombre_proyecto=workbook.proyecto.nombre_proyecto,
             version_proyecto=workbook.proyecto.version_proyecto,
@@ -362,7 +370,8 @@ class ProyectoExcelImportService:
             if fase_id is None:
                 raise ProjectExcelValidationError(
                     f"Actividad en fila {actividad_row.raw.get('_row_index')} "
-                    f"referencia fase_id '{actividad_row.fase_id}' no encontrada en Fases",
+                    f"referencia fase_id '{actividad_row.fase_id}' no encontrada "
+                    "en Fases",
                 )
             actividad = await self._project_repository.create_actividad(
                 fase_id=fase_id,
@@ -573,6 +582,15 @@ def _validate_excel_upload(*, filename: str, content: bytes) -> None:
         raise InvalidProjectExcelUploadError("El Excel seleccionado esta vacio")
 
 
+def _build_excel_storage_key(referencia_id: uuid.UUID, filename: str) -> str:
+    """Build the canonical project workbook prefix for MinIO objects."""
+    safe_filename = re.sub(r"[^a-zA-Z0-9._-]+", "-", filename).strip("-")
+    if not safe_filename:
+        safe_filename = "proyecto.xlsx"
+    object_id = uuid.uuid4()
+    return f"proyectos-formativos/{referencia_id}/excel/{object_id}-{safe_filename}"
+
+
 def _build_preview_dto(
     *,
     referencia_id: uuid.UUID,
@@ -751,7 +769,9 @@ def _get_valid_excel_preview_payload(
     excel = _as_record(documental.get("fuente_estructurada")) or {}
     preview = _as_record(excel.get("preview"))
     if preview is None:
-        raise ProjectExcelMissingPreviewError("No se encontro preview de importacion en el borrador")
+        raise ProjectExcelMissingPreviewError(
+            "No se encontro preview de importacion en el borrador",
+        )
     return {
         "documento": _as_record(excel.get("documento")) or {},
         "preview": preview,
@@ -769,15 +789,24 @@ def _read_string(record: dict[str, object], key: str) -> str:
     return val if isinstance(val, str) else ""
 
 
-def _document_to_payload(document: object | None) -> dict[str, object] | None:
+def _document_to_payload(
+    document: StoredDocumentDTO | dict[str, object] | None,
+) -> dict[str, object] | None:
     if document is None:
         return None
     if isinstance(document, dict):
         return document
-    return {}
+    return {
+        "original_filename": document.original_filename,
+        "storage_key": document.storage_key,
+        "size_bytes": document.size_bytes,
+        "content_type": document.content_type,
+        "checksum_sha256": document.checksum_sha256,
+        "etag": document.etag,
+    }
 
 
-def _append_touched_step(steps: list[object] | None, step_id: str) -> list[str]:
+def _append_touched_step(steps: object, step_id: str) -> list[str]:
     if not isinstance(steps, list):
         return [step_id]
     result = [s for s in steps if isinstance(s, str)]
@@ -829,9 +858,23 @@ def _optional_int(
     value = row.get(campo)
     if value is None:
         return None
-    try:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
         return int(value)
-    except (ValueError, TypeError):
+    if not isinstance(value, str):
+        errores.append(
+            ExcelValidationIssueDTO(
+                hoja=hoja,
+                fila=_row_index(row),
+                campo=campo,
+                mensaje=f"Valor invalido para campo numerico '{campo}'",
+            ),
+        )
+        return None
+    try:
+        return int(value.strip())
+    except ValueError:
         errores.append(
             ExcelValidationIssueDTO(
                 hoja=hoja,

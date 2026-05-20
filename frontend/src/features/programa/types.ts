@@ -1,9 +1,8 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
-export type ProgramaEntryMode = "PDF" | "EXCEL" | null;
+export type ProgramaEntryMode = "EXCEL" | null;
 
 export type ProgramaWizardStepId =
-  | "datos-programa"
   | "origen-documental"
   | "estructura-curricular"
   | "revision-programa";
@@ -193,11 +192,15 @@ export interface ProgramaPdfUploadResponse {
 }
 
 export interface ProgramaPdfDiagnostic {
+  estado_legibilidad?: string;
+  motivo?: string | null;
   resumen: string;
   has_text_layer: boolean;
   analyzed_pages: number;
   pages_with_text: number;
   text_character_count: number;
+  can_attempt_extraction?: boolean;
+  requires_manual_entry?: boolean;
   almacenamiento_exitoso: boolean;
 }
 

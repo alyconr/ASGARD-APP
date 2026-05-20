@@ -43,6 +43,7 @@ function buildUploadResponse(): ProgramaPdfUploadResponse {
       text_character_count: 100,
       can_attempt_extraction: false,
       requires_manual_entry: false,
+      almacenamiento_exitoso: true,
     },
   };
 }
@@ -58,7 +59,7 @@ describe("ProgramaDocumentUpload", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /cargar y diagnosticar/i }),
+      screen.getByRole("button", { name: /cargar como evidencia/i }),
     );
 
     expect(
@@ -93,14 +94,14 @@ describe("ProgramaDocumentUpload", () => {
       },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /cargar y diagnosticar/i }),
+      screen.getByRole("button", { name: /cargar como evidencia/i }),
     );
 
     await waitFor(() => {
       expect(onUploaded).toHaveBeenCalledWith(response);
     });
     expect(
-      screen.getByText("PDF cargado y diagnosticado."),
+      screen.getByText("PDF cargado como evidencia documental."),
     ).toBeInTheDocument();
   });
 });

@@ -10,14 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.proyecto_excel import (
     InvalidProjectExcelUploadError,
     ProjectExcelDraftMissingError,
-    ProyectoExcelImportService,
     ProjectExcelMissingPreviewError,
     ProjectExcelStorageMissingError,
     ProjectExcelValidationError,
+    ProyectoExcelImportService,
 )
 from src.infrastructure.config.settings import Settings, get_settings
-from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.proyecto import ActividadProyecto, FaseProyecto, ProyectoFormativo
+from src.infrastructure.db.models.proyecto import (
+    ActividadProyecto,
+    FaseProyecto,
+    ProyectoFormativo,
+)
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
@@ -90,9 +93,9 @@ class ProjectRepository:
 def get_proyecto_excel_service(
     session: AsyncSession = Depends(get_async_session),
     settings: Settings = Depends(get_settings),
-) -> ProjectExcelImportService:
+) -> ProyectoExcelImportService:
     """Build the project Excel import service using request-scoped dependencies."""
-    return ProjectExcelImportService(
+    return ProyectoExcelImportService(
         session=session,
         draft_repository=DraftRepository(session),
         audit_repository=AuditRepository(session),
@@ -109,7 +112,7 @@ def get_proyecto_excel_service(
 async def preview_project_excel(
     referencia_id: uuid.UUID,
     file: UploadFile = File(...),
-    service: ProjectExcelImportService = Depends(get_proyecto_excel_service),
+    service: ProyectoExcelImportService = Depends(get_proyecto_excel_service),
 ) -> ProyectoExcelPreviewResponse:
     """Preview a project Excel workbook without relational writes."""
     filename = file.filename or ""
@@ -144,7 +147,7 @@ async def preview_project_excel(
 )
 async def confirm_project_excel_import(
     referencia_id: uuid.UUID,
-    service: ProjectExcelImportService = Depends(get_proyecto_excel_service),
+    service: ProyectoExcelImportService = Depends(get_proyecto_excel_service),
 ) -> ProyectoExcelImportResponse:
     """Confirm and materialize a previously validated project Excel import."""
     try:

@@ -262,8 +262,8 @@ describe("ProgramaConsolidadoRevision", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /editar datos/i }));
-    expect(onNavigate).toHaveBeenCalledWith("datos-programa");
+    fireEvent.click(screen.getByRole("button", { name: /revisar origen/i }));
+    expect(onNavigate).toHaveBeenCalledWith("origen-documental");
 
     fireEvent.click(screen.getByRole("button", { name: /editar estructura/i }));
     expect(onNavigate).toHaveBeenCalledWith("estructura-curricular");
@@ -399,10 +399,10 @@ describe("ProgramaConsolidadoRevision", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /corregir datos/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /revisar origen/i }));
     fireEvent.click(screen.getByRole("button", { name: /corregir estructura/i }));
 
-    expect(onNavigate).toHaveBeenCalledWith("datos-programa");
+    expect(onNavigate).toHaveBeenCalledWith("origen-documental");
     expect(onNavigate).toHaveBeenCalledWith("estructura-curricular");
   });
 

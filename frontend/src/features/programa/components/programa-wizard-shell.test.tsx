@@ -66,7 +66,7 @@ describe("ProgramaWizardShell", () => {
     expect(screen.getByText("Wizard base del programa")).toBeInTheDocument();
     expect(screen.getByText("Iniciar proceso")).toBeInTheDocument();
     expect(screen.getByText("Continuar borrador")).toBeInTheDocument();
-    expect(screen.getByText("Manual")).toBeInTheDocument(); // entry modes
+    expect(screen.getByText("Excel canonico")).toBeInTheDocument();
   });
 
   it("should allow removing local draft references without recovering them", () => {
@@ -83,10 +83,10 @@ describe("ProgramaWizardShell", () => {
       knownDrafts: [
         {
           referenciaId: "12345678-1234-4234-9234-123456789abc",
-          pasoActual: "datos-programa",
+          pasoActual: "origen-documental",
           updatedAt: "2026-04-27T00:00:00Z",
           estado: "BORRADOR",
-          label: "Borrador de programa manual",
+          label: "Borrador de programa Excel",
         },
       ],
       autosave: { state: "idle", message: "" },
@@ -123,10 +123,10 @@ describe("ProgramaWizardShell", () => {
       knownDrafts: [
         {
           referenciaId: "12345678-1234-4234-9234-123456789abc",
-          pasoActual: "datos-programa",
+          pasoActual: "origen-documental",
           updatedAt: "2026-04-27T00:00:00Z",
           estado: "BORRADOR",
-          label: "Borrador de programa manual",
+          label: "Borrador de programa Excel",
         },
       ],
       autosave: { state: "idle", message: "" },
@@ -156,7 +156,8 @@ describe("ProgramaWizardShell", () => {
       canMovePrevious: true,
       continueReferenceInput: referenciaId,
       currentStepId: "estructura-curricular",
-      currentStepIndex: 2,
+      currentStepIndex: 1,
+      draftStatus: "BORRADOR",
       errorMessage: null,
       isBootstrapping: false,
       isRecovering: false,
@@ -167,11 +168,7 @@ describe("ProgramaWizardShell", () => {
         meta: {
           referenciaId,
           entryMode: "EXCEL",
-          touchedSteps: [
-            "datos-programa",
-            "origen-documental",
-            "estructura-curricular",
-          ],
+          touchedSteps: ["origen-documental", "estructura-curricular"],
           startedAt: "2026-05-13T00:00:00Z",
           lastInteractionAt: "2026-05-13T00:00:00Z",
         },

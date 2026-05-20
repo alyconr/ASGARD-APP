@@ -215,7 +215,6 @@ def _merge_document_result_into_payload(
     meta = next_payload.get("meta")
     if isinstance(meta, dict):
         next_meta = dict(meta)
-        next_meta["entryMode"] = "PDF"
         next_meta["lastInteractionAt"] = now
         touched_steps = next_meta.get("touchedSteps")
         if isinstance(touched_steps, list):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from pydantic import BaseModel
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
@@ -15,11 +14,11 @@ class ProyectoExcelPreviewResponse(BaseModel):
     documento: StoredDocumentDTO | None
     valid: bool
     estado_validacion: str
-    resumen: dict
-    proyecto: dict | None
-    fases: list[dict]
-    pendientes_resumen: dict
-    errores: list[dict]
+    resumen: dict[str, int]
+    proyecto: dict[str, object] | None
+    fases: list[dict[str, object]]
+    pendientes_resumen: dict[str, int]
+    errores: list[dict[str, object]]
 
 
 class ProyectoExcelImportResponse(BaseModel):
@@ -29,5 +28,5 @@ class ProyectoExcelImportResponse(BaseModel):
     proyecto_id: str
     fase_ids: list[str]
     actividad_ids: list[str]
-    resumen: dict
-    pendientes_resumen: dict
+    resumen: dict[str, int]
+    pendientes_resumen: dict[str, int]

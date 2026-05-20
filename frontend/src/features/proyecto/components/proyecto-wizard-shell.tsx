@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  ClipboardList,
   FileSpreadsheet,
   FolderKanban,
   ListChecks,
@@ -15,7 +14,6 @@ import {
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
-import { ProyectoBaseInfo } from "@/features/proyecto/components/proyecto-base-info";
 import { ProyectoDocumentUpload } from "@/features/proyecto/components/proyecto-document-upload";
 import { ProyectoExcelImport } from "@/features/proyecto/components/proyecto-excel-import";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
@@ -32,9 +30,8 @@ import { cn } from "@/lib/utils";
 
 const STEP_ICONS: Record<
   ProyectoWizardStepId,
-  typeof ClipboardList
+  React.ComponentType<{ className?: string }>
 > = {
-  "datos-proyecto": ClipboardList,
   "fuente-proyecto": FileSpreadsheet,
   "estructura-proyecto": FolderKanban,
   "revision-proyecto": ListChecks,
@@ -140,7 +137,6 @@ function StepWorkspace({
   currentStep,
   currentStepNote,
   onNoteChange,
-  proyectoValue,
   payload,
   onPdfUploaded,
   onExcelPreview,
@@ -149,7 +145,6 @@ function StepWorkspace({
   currentStep: ProyectoWizardStepDefinition;
   currentStepNote: string;
   onNoteChange: (value: string) => void;
-  proyectoValue: ProyectoWizardPayload["proyecto"];
   payload: ProyectoWizardPayload | null;
   onPdfUploaded: (result: ProyectoPdfUploadResult) => void;
   onExcelPreview: (result: ProyectoExcelPreviewState) => void;
@@ -168,8 +163,8 @@ function StepWorkspace({
             {currentStep.description}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            La estructura de este paso queda lista para la tarea indicada sin
-            activar captura funcional todavia.
+            El proyecto usa PDF como evidencia documental y Excel como fuente
+            estructurada activa.
           </p>
         </div>
 
@@ -178,11 +173,9 @@ function StepWorkspace({
         </span>
       </header>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
-        <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
-          {currentStep.id === "datos-proyecto" ? (
-            <ProyectoBaseInfo value={proyectoValue} />
-          ) : currentStep.id === "fuente-proyecto" && payload !== null ? (
+      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
+          {currentStep.id === "fuente-proyecto" && payload !== null ? (
             <div className="grid gap-4">
               <ProyectoDocumentUpload
                 currentResult={payload.documental.proyecto_pdf}
@@ -279,8 +272,8 @@ export function ProyectoWizardShell({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
             El proyecto ya esta habilitado porque el programa esta COMPLETO.
-            Este flujo guarda el borrador del proyecto. La fuente estructurada
-            del proyecto sera la matriz Excel (TASK-19).
+            Este flujo guarda PDF como evidencia y usa la matriz Excel como
+            fuente estructurada del proyecto.
           </p>
         </div>
 
@@ -313,8 +306,8 @@ export function ProyectoWizardShell({
             </h3>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
               Crea un borrador independiente de tipo PROYECTO asociado al
-              programa completo. La fuente estructurada del proyecto sera la
-              matriz Excel (TASK-19).
+              programa completo. El primer paso es fuente documental:
+              PDF evidencia y Excel estructurado.
             </p>
             <ActionButton
               className="mt-4"
@@ -399,7 +392,7 @@ export function ProyectoWizardShell({
       ) : null}
 
       {controller.isWizardActive && controller.payload !== null ? (
-        <section className="grid gap-5 lg:grid-cols-[21rem_1fr]">
+        <section className="grid gap-5 lg:grid-cols-[21rem_minmax(0,1fr)]">
           <aside className="grid gap-4">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
               <WizardProgress
@@ -425,7 +418,7 @@ export function ProyectoWizardShell({
             </ActionButton>
           </aside>
 
-          <div className="grid gap-4">
+          <div className="grid min-w-0 gap-4">
             <StepWorkspace
               currentStep={currentStep}
               currentStepNote={
@@ -436,7 +429,6 @@ export function ProyectoWizardShell({
               onNoteChange={(value) =>
                 controller.updateStepNote(controller.currentStepId, value)
               }
-              proyectoValue={controller.payload.proyecto}
               payload={controller.payload}
               onPdfUploaded={(result) =>
                 controller.updateProyectoPdfResult(result)

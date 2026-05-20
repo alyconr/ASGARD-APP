@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.services.proyecto_documentos import (
-    DocumentStorageProtocol,
-    DraftRepositoryProtocol,
     InvalidProjectPdfUploadError,
     ProjectDocumentService,
     ProjectDraftMissingError,
 )
-from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
+
+pytestmark = pytest.mark.anyio
 
 
 class MockDraftRepository:
@@ -58,7 +56,7 @@ class MockStorageService:
     def __init__(self, document=None):
         self.document = document or StoredDocumentDTO(
             original_filename="test.pdf",
-            storage_key="proyectos/test-id/documentos/obj-test.pdf",
+            storage_key="proyectos-formativos/test-id/documentos/obj-test.pdf",
             size_bytes=1024,
             content_type="application/pdf",
             checksum_sha256="abc123",
@@ -77,12 +75,12 @@ def draft_factory():
             payload_json={
                 "meta": {
                     "referenciaId": str(uuid.uuid4()),
-                    "touchedSteps": ["datos-proyecto"],
+                    "touchedSteps": ["fuente-proyecto"],
                     "lastInteractionAt": datetime.now(UTC).isoformat(),
                 },
                 "documental": {},
             },
-            paso_actual="datos-proyecto",
+            paso_actual="fuente-proyecto",
             estado_borrador=EstadoBloque.BORRADOR,
         )
 
@@ -119,7 +117,7 @@ class TestUploadAndStoreProjectPdf:
         )
 
         assert result.documento.original_filename == "test.pdf"
-        assert result.documento.storage_key.startswith("proyectos/")
+        assert result.documento.storage_key.startswith("proyectos-formativos/")
         assert result.documento.content_type == "application/pdf"
 
     async def test_upload_persists_metadata_in_draft(
@@ -147,7 +145,10 @@ class TestUploadAndStoreProjectPdf:
         assert service._draft_repository.draft.paso_actual == "fuente-proyecto"
 
     async def test_upload_rejects_non_pdf(self, service):
-        with pytest.raises(InvalidProjectPdfUploadError, match="Solo se aceptan archivos PDF"):
+        with pytest.raises(
+            InvalidProjectPdfUploadError,
+            match="Solo se aceptan archivos PDF",
+        ):
             await service.upload_and_store_project_pdf(
                 referencia_id=uuid.uuid4(),
                 filename="image.png",
@@ -223,7 +224,7 @@ class TestUploadAndStoreProjectPdf:
             MagicMock(
                 id=uuid.uuid4(),
                 payload_json={"meta": {}, "documental": {}},
-                paso_actual="datos-proyecto",
+                paso_actual="fuente-proyecto",
                 estado_borrador=EstadoBloque.BORRADOR,
             )
         )
@@ -243,4 +244,4 @@ class TestUploadAndStoreProjectPdf:
             content=valid_pdf_content,
         )
 
-        assert storage.document.storage_key.startswith("proyectos/")
+        assert storage.document.storage_key.startswith("proyectos-formativos/")

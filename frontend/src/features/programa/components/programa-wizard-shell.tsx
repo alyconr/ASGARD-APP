@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpenCheck,
-  ClipboardList,
   FileSpreadsheet,
   FolderOpen,
   ListX,
@@ -18,7 +17,6 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
-import { ProgramaBaseInfo } from "@/features/programa/components/programa-base-info";
 import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
@@ -49,12 +47,6 @@ const STEP_CONTENT: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
-  "datos-programa": {
-    label: "Datos base del programa",
-    description:
-      "Los datos del programa provienen de la importacion Excel canonica. Este paso muestra el estado actual de los datos en el borrador.",
-    icon: ClipboardList,
-  },
   "origen-documental": {
     label: "Origen de informacion",
     description:
@@ -64,7 +56,7 @@ const STEP_CONTENT: Record<
   "estructura-curricular": {
     label: "Estructura curricular",
     description:
-      "El contenedor ya separa el trabajo curricular de la captura inicial.",
+      "Selecciona una competencia y trabaja su estructura sin render masivo.",
     icon: FolderOpen,
   },
   "revision-programa": {
@@ -199,11 +191,9 @@ function StepWorkspace({
         </span>
       </header>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_18rem]">
-        <div className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
-          {currentStep.id === "datos-programa" ? (
-            <ProgramaBaseInfo value={programaValue} />
-          ) : currentStep.id === "origen-documental" ? (
+      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
+          {currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
               <ProgramaDocumentUpload
                 currentResult={programaPdfResult}
@@ -517,7 +507,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
       ) : null}
 
       {controller.isWizardActive && controller.payload !== null ? (
-        <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_1fr]">
+        <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <aside className="grid gap-4">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-4 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
               <WizardProgress
@@ -541,7 +531,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
           </aside>
 
-          <div className="flex flex-col gap-4">
+          <div className="min-w-0 flex flex-col gap-4">
             <div className="flex-1 overflow-y-auto rounded-lg">
               <StepWorkspace
                 currentStep={currentStep}

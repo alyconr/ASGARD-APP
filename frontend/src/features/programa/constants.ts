@@ -12,34 +12,26 @@ import type {
 
 export const PROGRAMA_WIZARD_STEPS: ProgramaWizardStepDefinition[] = [
   {
-    id: "datos-programa",
-    index: 0,
-    label: "Datos del programa",
-    shortLabel: "01",
-    description:
-      "Entrada inicial para los datos minimos del programa y su borrador.",
-  },
-  {
     id: "origen-documental",
-    index: 1,
+    index: 0,
     label: "Origen documental",
-    shortLabel: "02",
+    shortLabel: "01",
     description:
       "PDF como evidencia y Excel canonico como fuente estructurada.",
   },
   {
     id: "estructura-curricular",
-    index: 2,
+    index: 1,
     label: "Estructura curricular",
-    shortLabel: "03",
+    shortLabel: "02",
     description:
-      "Espacio de trabajo para competencias, resultados, saberes, procesos y criterios.",
+      "Trabajo enfocado por competencia, resultados, conocimientos y criterios.",
   },
   {
     id: "revision-programa",
-    index: 3,
+    index: 2,
     label: "Revision del programa",
-    shortLabel: "04",
+    shortLabel: "03",
     description:
       "Revision consolidada del programa antes de cualquier cierre funcional.",
   },
@@ -548,9 +540,7 @@ export function normalizeProgramaPayload(
     meta: {
       referenciaId,
       entryMode:
-        meta?.entryMode === "PDF" || meta?.entryMode === "EXCEL"
-          ? meta.entryMode
-          : base.meta.entryMode,
+        meta?.entryMode === "EXCEL" ? meta.entryMode : base.meta.entryMode,
       touchedSteps: normalizeStepList(
         touchedStepsCandidate.length > 0
           ? touchedStepsCandidate

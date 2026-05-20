@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProyectoExcelImport } from "./proyecto-excel-import";
@@ -9,7 +9,7 @@ const mockOnImported = vi.fn();
 vi.mock("@/features/proyecto/excel-import-api", () => ({
   uploadProjectExcelPreview: vi.fn(),
   confirmProjectExcelImport: vi.fn(),
-  ProyectoExcelUploadError: class Error extends Error {
+  ProyectoExcelUploadError: class ProyectoExcelUploadError extends Error {
     status: number;
     constructor(status: number, detail: string) {
       super(detail);
@@ -97,7 +97,7 @@ describe("ProyectoExcelImport", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.xlsx",
-          storage_key: "proyectos/test-id/excel/test.xlsx",
+          storage_key: "proyectos-formativos/test-id/excel/test.xlsx",
           size_bytes: 204800,
           content_type:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -152,7 +152,7 @@ describe("ProyectoExcelImport", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.xlsx",
-          storage_key: "proyectos/test-id/excel/test.xlsx",
+          storage_key: "proyectos-formativos/test-id/excel/test.xlsx",
           size_bytes: 204800,
           content_type:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -241,7 +241,11 @@ describe("ProyectoExcelImport", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /previsualizar/i }));
 
-    await screen.findByText(/errores de validacion/i);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/errores de validacion/i).length,
+      ).toBeGreaterThan(0);
+    });
   });
 
   it("shows confirm import button when preview is valid", async () => {
@@ -253,7 +257,7 @@ describe("ProyectoExcelImport", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.xlsx",
-          storage_key: "proyectos/test-id/excel/test.xlsx",
+          storage_key: "proyectos-formativos/test-id/excel/test.xlsx",
           size_bytes: 204800,
           content_type:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -296,7 +300,7 @@ describe("ProyectoExcelImport", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /previsualizar/i }));
 
-    await screen.findByText(/confirmar importacion/i);
+    await screen.findByRole("button", { name: /^confirmar importacion$/i });
   });
 
   it("shows imported state after confirmation", async () => {
@@ -308,7 +312,7 @@ describe("ProyectoExcelImport", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.xlsx",
-          storage_key: "proyectos/test-id/excel/test.xlsx",
+          storage_key: "proyectos-formativos/test-id/excel/test.xlsx",
           size_bytes: 204800,
           content_type:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -365,11 +369,15 @@ describe("ProyectoExcelImport", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /previsualizar/i }));
 
-    await screen.findByText(/confirmar importacion/i);
+    await screen.findByRole("button", { name: /^confirmar importacion$/i });
 
     fireEvent.click(screen.getByRole("button", { name: /confirmar importacion/i }));
 
-    await screen.findByText(/importacion confirmada/i);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/importacion completada/i).length,
+      ).toBeGreaterThan(0);
+    });
     await screen.findByText(/2 fases/i);
     await screen.findByText(/3 actividades/i);
   });
@@ -380,7 +388,7 @@ describe("ProyectoExcelImport", () => {
         currentResult={{
           documento: {
             original_filename: "proyecto.xlsx",
-            storage_key: "proyectos/old-id/excel/test.xlsx",
+            storage_key: "proyectos-formativos/old-id/excel/test.xlsx",
             size_bytes: 1024,
             content_type:
               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

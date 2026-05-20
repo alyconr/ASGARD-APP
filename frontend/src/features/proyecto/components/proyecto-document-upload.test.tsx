@@ -7,7 +7,7 @@ const mockOnUploaded = vi.fn();
 
 vi.mock("@/features/proyecto/document-upload-api", () => ({
   uploadProyectoPdf: vi.fn(),
-  ProyectoPdfUploadError: class Error extends Error {
+  ProyectoPdfUploadError: class ProyectoPdfUploadError extends Error {
     status: number;
     constructor(status: number, detail: string) {
       super(detail);
@@ -43,12 +43,10 @@ describe("ProyectoDocumentUpload", () => {
     );
 
     expect(screen.getByText(/PDF del proyecto/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/evidencia documental/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/fuente estructurada/i),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText(/evidencia documental/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/fuente estructurada/i).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("shows file selector button", () => {
@@ -72,7 +70,7 @@ describe("ProyectoDocumentUpload", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.pdf",
-          storage_key: "proyectos/test-id/documentos/obj-1.pdf",
+          storage_key: "proyectos-formativos/test-id/documentos/obj-1.pdf",
           size_bytes: 204800,
           content_type: "application/pdf",
           checksum_sha256: "abc123",
@@ -105,7 +103,7 @@ describe("ProyectoDocumentUpload", () => {
         referencia_id: "test-ref",
         documento: {
           original_filename: "proyecto.pdf",
-          storage_key: "proyectos/test-id/documentos/obj-1.pdf",
+          storage_key: "proyectos-formativos/test-id/documentos/obj-1.pdf",
           size_bytes: 204800,
           content_type: "application/pdf",
           checksum_sha256: "abc123",
@@ -161,7 +159,7 @@ describe("ProyectoDocumentUpload", () => {
         currentResult={{
           documento: {
             original_filename: "existing.pdf",
-            storage_key: "proyectos/old-id/documentos/obj.pdf",
+            storage_key: "proyectos-formativos/old-id/documentos/obj.pdf",
             size_bytes: 1024,
             content_type: "application/pdf",
             checksum_sha256: "xyz",

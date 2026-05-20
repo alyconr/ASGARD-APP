@@ -32,7 +32,7 @@ function buildLocalAvailability(
     estado_proyecto: isComplete ? "BORRADOR" : "BLOQUEADO",
     motivo: isComplete ? null : "PROGRAMA_NO_COMPLETO",
     mensaje: isComplete
-      ? "El proyecto formativo esta habilitado porque el programa esta COMPLETO."
+      ? "El proyecto formativo esta habilitado porque el programa esta COMPLETO. Su cargue usa PDF como evidencia y Excel como fuente estructurada."
       : "El modulo proyecto esta bloqueado hasta que el programa quede cerrado como COMPLETO.",
     accion_sugerida: isComplete
       ? "iniciar_proyecto"

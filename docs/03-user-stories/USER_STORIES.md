@@ -12,6 +12,10 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 - HU-05: deja de ejecutarse desde PDF para el programa; se reemplaza por importacion Excel.
 - HU-06: se limita a completar lo estrictamente faltante, no como fuente alternativa.
 - HU-17, HU-18, HU-19: se reinterpretan para proyecto orientado a Excel/matriz.
+- `datos-programa` y `datos-proyecto` no existen como pasos de entrada manual.
+- La revision de competencias importadas se hace desde resumen compacto y modal paginada.
+- La estructura curricular se trabaja por competencia seleccionada, con conocimientos y criterios elegidos progresivamente.
+- El proyecto usa prefijos MinIO `proyectos-formativos/{referencia_id}/documentos/...` y `proyectos-formativos/{referencia_id}/excel/...`.
 
 ---
 
@@ -70,6 +74,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ---
 
 ## HU-05. Importar datos del programa desde Excel canonico
+Nota vigente: despues de confirmar la importacion, el origen documental debe mostrar un resumen compacto y abrir la revision de competencias importadas en una modal paginada.
+
 **Como** usuario gestor pedagógico  
 **Quiero** que el sistema importe los datos del programa desde Excel  
 **Para** ahorrar tiempo de digitacion y tener una base curricular estructurada.
@@ -84,7 +90,7 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 
 ## HU-06. Completar campos faltantes post-importacion
 **Como** usuario gestor pedagógico  
-**Quiero** completar manualmente los campos no importados por Excel  
+**Quiero** corregir puntualmente los campos no importados por Excel
 **Para** continuar el proceso sin bloqueos.
 
 ### Criterios de aceptación
@@ -98,6 +104,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 # 3. Épica: Gestión curricular del programa
 
 ## HU-07. Registrar competencias
+Nota vigente: la gestion curricular inicia desde selector/filtro de competencia para evitar render masivo.
+
 **Como** usuario gestor pedagógico  
 **Quiero** registrar competencias  
 **Para** estructurar el programa correctamente.
@@ -110,6 +118,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ---
 
 ## HU-08. Registrar resultados de aprendizaje
+Nota vigente: los resultados cargan al seleccionar una competencia concreta.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar resultados por competencia  
 **Para** completar la estructura curricular.
@@ -121,6 +131,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ---
 
 ## HU-09. Registrar conocimientos de saber
+Nota vigente: los conocimientos SABER aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar conocimientos de saber  
 **Para** mantener la estructura mínima obligatoria.
@@ -132,6 +144,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ---
 
 ## HU-10. Registrar conocimientos de proceso
+Nota vigente: los conocimientos PROCESO aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar conocimientos de proceso  
 **Para** completar la estructura mínima.
@@ -143,6 +157,8 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 ---
 
 ## HU-11. Registrar criterios de evaluación
+Nota vigente: los criterios aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar criterios de evaluación  
 **Para** cerrar la estructura curricular de cada competencia.
@@ -234,7 +250,7 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 
 ## HU-19. Completar campos faltantes post-importacion del proyecto
 **Como** usuario gestor pedagógico  
-**Quiero** completar manualmente el proyecto  
+**Quiero** corregir puntualmente faltantes del proyecto
 **Para** terminar la captura si la importacion no fue suficiente.
 
 ### Criterios de aceptación

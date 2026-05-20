@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -80,7 +80,7 @@ function PreviewSection({
   }
 
   return (
-    <section className="grid gap-4">
+    <section aria-label="Preview Excel del proyecto" className="grid gap-4">
       <div
         className={cn(
           "rounded-lg border p-4",
@@ -196,8 +196,15 @@ export function ProyectoExcelImport({
 }>): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [localResult, setLocalResult] =
+    useState<ProyectoExcelPreviewState | null>(currentResult);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const effectiveResult = localResult ?? currentResult;
+
+  useEffect(() => {
+    setLocalResult(currentResult);
+  }, [currentResult]);
 
   const handlePreview = async (): Promise<void> => {
     const validationError = validateExcelFile(selectedFile);
@@ -234,6 +241,7 @@ export function ProyectoExcelImport({
         confirmacion: { estado: "PENDIENTE" },
         updated_at: new Date().toISOString(),
       };
+      setLocalResult(previewState);
       onPreview(previewState);
       setState("preview");
       setMessage(
@@ -258,8 +266,8 @@ export function ProyectoExcelImport({
     try {
       const result = await confirmProjectExcelImport(referenciaId);
       const importedState: ProyectoExcelPreviewState = {
-        documento: currentResult?.documento ?? null,
-        preview: currentResult?.preview ?? null,
+        documento: effectiveResult?.documento ?? null,
+        preview: effectiveResult?.preview ?? null,
         confirmacion: {
           estado: "IMPORTADO",
           confirmed_at: new Date().toISOString(),
@@ -270,6 +278,7 @@ export function ProyectoExcelImport({
         },
         updated_at: new Date().toISOString(),
       };
+      setLocalResult(importedState);
       onImported(importedState);
       setState("success");
       setMessage(
@@ -290,13 +299,14 @@ export function ProyectoExcelImport({
     }
   };
 
-  const isImported = currentResult?.confirmacion.estado === "IMPORTADO";
-  const hasPreview = currentResult?.preview !== null;
-  const hasErrors = currentResult?.preview?.errores.length ?? 0 > 0;
+  const isImported = effectiveResult?.confirmacion.estado === "IMPORTADO";
+  const hasPreview =
+    effectiveResult?.preview !== null && effectiveResult?.preview !== undefined;
+  const hasErrors = (effectiveResult?.preview?.errores.length ?? 0) > 0;
   const canConfirm = hasPreview && !hasErrors && !isImported;
 
   return (
-    <section className="grid gap-4">
+    <section aria-label="Cargue Excel del proyecto" className="grid gap-4">
       <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -412,11 +422,11 @@ export function ProyectoExcelImport({
         </div>
       ) : null}
 
-      {currentResult && currentResult.preview !== null ? (
-        <PreviewSection preview={currentResult.preview} />
+      {effectiveResult && effectiveResult.preview !== null ? (
+        <PreviewSection preview={effectiveResult.preview} />
       ) : null}
 
-      {currentResult && currentResult.confirmacion.proyecto_id && isImported ? (
+      {effectiveResult && effectiveResult.confirmacion.proyecto_id && isImported ? (
         <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-700" />
@@ -428,19 +438,19 @@ export function ProyectoExcelImport({
             <div>
               <dt className="font-semibold">Proyecto ID</dt>
               <dd className="mt-1 text-xs break-all">
-                {currentResult.confirmacion.proyecto_id}
+                {effectiveResult.confirmacion.proyecto_id}
               </dd>
             </div>
             <div>
               <dt className="font-semibold">Fases creadas</dt>
               <dd className="mt-1">
-                {currentResult.confirmacion.fase_ids?.length ?? 0}
+                {effectiveResult.confirmacion.fase_ids?.length ?? 0}
               </dd>
             </div>
             <div className="sm:col-span-2">
               <dt className="font-semibold">Actividades creadas</dt>
               <dd className="mt-1">
-                {currentResult.confirmacion.actividad_ids?.length ?? 0}
+                {effectiveResult.confirmacion.actividad_ids?.length ?? 0}
               </dd>
             </div>
           </dl>

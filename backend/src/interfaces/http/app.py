@@ -30,14 +30,14 @@ from src.interfaces.http.controllers.programa_documentos import (
 from src.interfaces.http.controllers.programa_excel import (
     router as programa_excel_router,
 )
-from src.interfaces.http.controllers.proyecto_gate import (
-    router as proyecto_gate_router,
-)
 from src.interfaces.http.controllers.proyecto_documentos import (
     router as proyecto_documentos_router,
 )
 from src.interfaces.http.controllers.proyecto_excel import (
     router as proyecto_excel_router,
+)
+from src.interfaces.http.controllers.proyecto_gate import (
+    router as proyecto_gate_router,
 )
 from src.interfaces.http.controllers.resultados_aprendizaje import (
     router as resultados_aprendizaje_router,

@@ -45,7 +45,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "No fue posible cargar y diagnosticar el PDF.";
+  return "No fue posible cargar el PDF como evidencia.";
 }
 
 function validatePdfFile(file: File | null): string | null {

@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from src.application.dto.programa_documentos import StoredDocumentDTO
+
 
 @dataclass(frozen=True)
 class ExcelProjectPreviewDTO:
@@ -64,7 +66,7 @@ class ProyectoExcelPreviewDTO:
     """Full preview response for a project workbook."""
 
     referencia_id: uuid.UUID
-    documento: object | None
+    documento: StoredDocumentDTO | None
     valid: bool
     estado_validacion: str
     resumen: ExcelPreviewSummaryDTO

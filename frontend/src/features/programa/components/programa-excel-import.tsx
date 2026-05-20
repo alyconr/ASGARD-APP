@@ -3,10 +3,14 @@
 import { useRef, useState } from "react";
 import {
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
+  Eye,
   FileSpreadsheet,
   Loader2,
   Upload,
+  X,
 } from "lucide-react";
 
 import { notify } from "@/components/feedback/notifications";
@@ -55,8 +59,14 @@ function validateExcelFile(file: File | null): string | null {
 }
 
 function PreviewPanel({
+  imported,
+  onOpenCompetencias,
   preview,
-}: Readonly<{ preview: ProgramaExcelPreviewResponse }>): React.JSX.Element {
+}: Readonly<{
+  imported: boolean;
+  onOpenCompetencias: () => void;
+  preview: ProgramaExcelPreviewResponse;
+}>): React.JSX.Element {
   return (
     <section
       className={cn(
@@ -77,8 +87,8 @@ function PreviewPanel({
             {preview.valid ? "Workbook valido" : "Workbook con errores"}
           </p>
         </div>
-        <span className="text-xs font-semibold">
-          {preview.resumen.competencias} competencias
+        <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold">
+          {imported ? "Importacion confirmada" : preview.estado_validacion}
         </span>
       </div>
 
@@ -122,51 +132,24 @@ function PreviewPanel({
       ) : null}
 
       {preview.competencias.length > 0 ? (
-        <div className="mt-4 grid gap-3">
-          {preview.competencias.map((competencia) => (
-            <article
-              key={competencia.competencia_id}
-              className="rounded-lg border border-emerald-200 bg-white/75 p-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-semibold tracking-[0.14em] uppercase">
-                    {competencia.codigo_competencia}
-                  </p>
-                  <h4 className="mt-1 text-sm font-semibold">
-                    {competencia.nombre_competencia}
-                  </h4>
-                </div>
-                <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold">
-                  Nodo competencia
-                </span>
-              </div>
-              <div className="mt-3 grid gap-2 lg:grid-cols-3">
-                <div className="rounded-lg bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase">
-                    Resultados
-                  </p>
-                  <p className="mt-1 text-sm">
-                    {competencia.resultados_detalle.length} asociado(s)
-                  </p>
-                </div>
-                <div className="rounded-lg bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase">
-                    Conocimientos
-                  </p>
-                  <p className="mt-1 text-sm">
-                    {competencia.conocimientos_detalle.length} asociado(s)
-                  </p>
-                </div>
-                <div className="rounded-lg bg-emerald-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase">Criterios</p>
-                  <p className="mt-1 text-sm">
-                    {competencia.criterios_detalle.length} asociado(s)
-                  </p>
-                </div>
-              </div>
-            </article>
-          ))}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-white/80 px-3 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">
+              Vista curricular compacta
+            </p>
+            <p className="mt-1 text-xs leading-5">
+              {preview.resumen.competencias} competencia(s) disponibles para
+              revision paginada sin desplegarlas en linea.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenCompetencias}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+          >
+            <Eye className="h-4 w-4" />
+            Ver competencias
+          </button>
         </div>
       ) : null}
 
@@ -182,6 +165,202 @@ function PreviewPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PreviewList({
+  emptyLabel,
+  items,
+}: Readonly<{
+  emptyLabel: string;
+  items: { id: string; label: string; meta?: string | null }[];
+}>): React.JSX.Element {
+  if (items.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--muted)]">
+        {emptyLabel}
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      {items.map((item) => (
+        <article
+          key={item.id}
+          className="rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2"
+        >
+          <p className="text-sm leading-6 break-words text-[var(--foreground)]">
+            {item.label}
+          </p>
+          {item.meta !== null && item.meta !== undefined ? (
+            <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
+              {item.meta}
+            </p>
+          ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CompetenciasModal({
+  currentIndex,
+  onClose,
+  onIndexChange,
+  preview,
+}: Readonly<{
+  currentIndex: number;
+  onClose: () => void;
+  onIndexChange: (index: number) => void;
+  preview: ProgramaExcelPreviewResponse;
+}>): React.JSX.Element | null {
+  const total = preview.competencias.length;
+  const safeIndex = total === 0 ? 0 : Math.min(currentIndex, total - 1);
+  const competencia = preview.competencias[safeIndex] ?? null;
+
+  if (competencia === null) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6"
+      role="dialog"
+    >
+      <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[color:var(--card-border)] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold tracking-[0.16em] text-[var(--accent-strong)] uppercase">
+              Competencia {safeIndex + 1} de {total}
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-[var(--foreground)]">
+              {competencia.codigo_competencia}
+            </h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 break-words text-[var(--muted)]">
+              {competencia.nombre_competencia}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Cerrar modal de competencias"
+            onClick={onClose}
+            className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="min-h-0 overflow-y-auto px-5 py-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg bg-[var(--paper-strong)] px-3 py-2">
+              <p className="text-xs font-semibold text-[var(--muted)]">
+                Resultados
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                {competencia.resultados_detalle.length}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[var(--paper-strong)] px-3 py-2">
+              <p className="text-xs font-semibold text-[var(--muted)]">
+                Conocimientos
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                {competencia.conocimientos_detalle.length}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[var(--paper-strong)] px-3 py-2">
+              <p className="text-xs font-semibold text-[var(--muted)]">
+                Criterios
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                {competencia.criterios_detalle.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Resultados de aprendizaje
+              </h4>
+              <div className="mt-3">
+                <PreviewList
+                  emptyLabel="Sin resultados en el preview."
+                  items={competencia.resultados_detalle.map((item) => ({
+                    id: item.rap_id,
+                    label: item.descripcion,
+                    meta: item.rap_numero ?? item.rap_id,
+                  }))}
+                />
+              </div>
+            </section>
+
+            <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Conocimientos
+              </h4>
+              <div className="mt-3">
+                <PreviewList
+                  emptyLabel="Sin conocimientos en el preview."
+                  items={competencia.conocimientos_detalle.map(
+                    (item, index) => ({
+                      id: `${item.tipo_conocimiento}-${index}`,
+                      label: item.descripcion,
+                      meta:
+                        item.rap_id === null
+                          ? item.tipo_conocimiento
+                          : `${item.tipo_conocimiento} / ${item.rap_id}`,
+                    }),
+                  )}
+                />
+              </div>
+            </section>
+
+            <section className="min-w-0 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3 lg:col-span-2">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                Criterios
+              </h4>
+              <div className="mt-3">
+                <PreviewList
+                  emptyLabel="Sin criterios en el preview."
+                  items={competencia.criterios_detalle.map((item, index) => ({
+                    id: `${competencia.competencia_id}-criterio-${index}`,
+                    label: item.descripcion,
+                    meta: item.rap_id,
+                  }))}
+                />
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] px-5 py-4">
+          <button
+            type="button"
+            disabled={safeIndex === 0}
+            onClick={() => onIndexChange(Math.max(0, safeIndex - 1))}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Anterior
+          </button>
+          <span className="text-sm font-semibold text-[var(--muted)]">
+            {safeIndex + 1} / {total}
+          </span>
+          <button
+            type="button"
+            disabled={safeIndex >= total - 1}
+            onClick={() => onIndexChange(Math.min(total - 1, safeIndex + 1))}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Siguiente
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -202,6 +381,9 @@ export function ProgramaExcelImport({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<ExcelState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [isCompetenciasModalOpen, setIsCompetenciasModalOpen] =
+    useState(false);
+  const [competenciaModalIndex, setCompetenciaModalIndex] = useState(0);
 
   const preview = currentResult?.preview ?? null;
   const imported = currentResult?.confirmacion.estado === "IMPORTADO";
@@ -383,7 +565,25 @@ export function ProgramaExcelImport({
         </div>
       ) : null}
 
-      {preview !== null ? <PreviewPanel preview={preview} /> : null}
+      {preview !== null ? (
+        <PreviewPanel
+          imported={imported}
+          preview={preview}
+          onOpenCompetencias={() => {
+            setCompetenciaModalIndex(0);
+            setIsCompetenciasModalOpen(true);
+          }}
+        />
+      ) : null}
+
+      {preview !== null && isCompetenciasModalOpen ? (
+        <CompetenciasModal
+          currentIndex={competenciaModalIndex}
+          preview={preview}
+          onClose={() => setIsCompetenciasModalOpen(false)}
+          onIndexChange={setCompetenciaModalIndex}
+        />
+      ) : null}
     </section>
   );
 }
