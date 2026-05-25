@@ -2,7 +2,7 @@ import asyncio
 
 import asyncpg
 
-DB_URL = "postgresql://postgres:postgres@localhost:5433/sena_guias_db"
+DB_URL = "postgresql://postgres:postgres@localhost:5432/sena_guias_db"
 
 
 async def check():

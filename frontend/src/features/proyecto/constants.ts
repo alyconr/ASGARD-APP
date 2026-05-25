@@ -13,10 +13,10 @@ export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
   {
     id: "fuente-proyecto",
     index: 0,
-    label: "Fuente del proyecto",
+    label: "Fuente del proyecto formativo",
     shortLabel: "01",
     description:
-      "PDF como evidencia y matriz Excel como fuente estructurada del proyecto.",
+      "PDF como evidencia y matriz Excel como fuente estructurada del proyecto formativo.",
     taskRef: "TASK-18 / TASK-19",
   },
   {
@@ -31,10 +31,10 @@ export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
   {
     id: "revision-proyecto",
     index: 2,
-    label: "Revision del proyecto",
+    label: "Revision del proyecto formativo",
     shortLabel: "03",
     description:
-      "Lugar del consolidado editable antes del cierre del proyecto.",
+      "Lugar del consolidado editable antes del cierre del proyecto formativo.",
     taskRef: "TASK-22",
   },
 ];
@@ -181,8 +181,50 @@ export function normalizeProyectoPayload(
       version_proyecto: asCleanString(proyecto?.version_proyecto),
     },
     documental: normalizeProyectoDocumental(value.documental),
+    estructura: normalizeProyectoEstructura(value.estructura),
   };
 }
+
+function normalizeProyectoEstructura(
+  value: unknown,
+): ProyectoWizardPayload["estructura"] {
+  const estructura = asRecord(value);
+  if (estructura === null) {
+    return { fases: [], actividades: [] };
+  }
+
+  const fases = Array.isArray(estructura.fases)
+    ? estructura.fases.flatMap((item) => {
+        const record = asRecord(item);
+        if (record === null) return [];
+        return [
+          {
+            fase_id: asString(record.fase_id),
+            estado: asString(record.estado),
+          },
+        ];
+      })
+    : [];
+
+  const actividades = Array.isArray(estructura.actividades)
+    ? estructura.actividades.flatMap((item) => {
+        const record = asRecord(item);
+        if (record === null) return [];
+        return [
+          {
+            actividad_id: asString(record.actividad_id),
+            estado: asString(record.estado),
+          },
+        ];
+      })
+    : [];
+
+  return {
+    fases,
+    actividades,
+  };
+}
+
 
 function normalizeStoredDocument(
   value: unknown,

@@ -11,6 +11,7 @@ interface WizardProgressProps {
   steps: ProgramaWizardStepDefinition[];
   touchedSteps: ProgramaWizardStepId[];
   onSelectStep: (stepId: ProgramaWizardStepId) => void;
+  disabledSteps?: ProgramaWizardStepId[];
 }
 
 export function WizardProgress({
@@ -18,6 +19,7 @@ export function WizardProgress({
   steps,
   touchedSteps,
   onSelectStep,
+  disabledSteps = [],
 }: WizardProgressProps): React.JSX.Element {
   const currentIndex = steps.findIndex((step) => step.id === currentStepId);
 
@@ -27,6 +29,7 @@ export function WizardProgress({
         const isCurrent = step.id === currentStepId;
         const isCompleted = currentIndex > step.index;
         const isTouched = touchedSteps.includes(step.id);
+        const isDisabled = disabledSteps.includes(step.id);
         const statusLabel = isCurrent
           ? "Actual"
           : isCompleted
@@ -40,6 +43,7 @@ export function WizardProgress({
             <button
               type="button"
               onClick={() => onSelectStep(step.id)}
+              disabled={isDisabled}
               aria-current={isCurrent ? "step" : undefined}
               className={cn(
                 "group w-full rounded-lg border px-4 py-3 text-left transition duration-200",
@@ -47,6 +51,8 @@ export function WizardProgress({
                   "border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_10px_24px_rgba(0,132,61,0.12)]",
                 !isCurrent &&
                   "border-[color:var(--card-border)] bg-white hover:border-[var(--accent)]/45",
+                isDisabled &&
+                  "opacity-50 cursor-not-allowed hover:border-[color:var(--card-border)] bg-slate-50/50",
               )}
             >
               <div className="flex items-start gap-4">

@@ -32,8 +32,8 @@ function buildLocalAvailability(
     estado_proyecto: isComplete ? "BORRADOR" : "BLOQUEADO",
     motivo: isComplete ? null : "PROGRAMA_NO_COMPLETO",
     mensaje: isComplete
-      ? "El proyecto formativo esta habilitado porque el programa esta COMPLETO. Su cargue usa PDF como evidencia y Excel como fuente estructurada."
-      : "El modulo proyecto esta bloqueado hasta que el programa quede cerrado como COMPLETO.",
+      ? "El proyecto formativo esta habilitado porque el programa de formación esta COMPLETO. Su cargue usa PDF como evidencia y Excel como fuente estructurada."
+      : "El modulo proyecto formativo esta bloqueado hasta que el programa de formación quede cerrado como COMPLETO.",
     accion_sugerida: isComplete
       ? "iniciar_proyecto"
       : "completar_y_cerrar_programa",
@@ -108,7 +108,7 @@ export function ProyectoDisponibilidadPanel({
 
   return (
     <section
-      aria-label="Disponibilidad del modulo proyecto"
+      aria-label="Disponibilidad del modulo proyecto formativo"
       className={cn(
         "rounded-lg border bg-white p-4 shadow-[0_14px_32px_rgba(23,53,47,0.06)]",
         isBlocked ? "border-amber-200" : "border-emerald-200",

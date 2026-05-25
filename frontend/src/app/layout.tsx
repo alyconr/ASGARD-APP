@@ -18,9 +18,9 @@ const bodyFont = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "SENA Guia Aprendizaje | Wizard del programa",
+  title: "SENA Guia Aprendizaje | Wizard del programa de formación",
   description:
-    "Wizard base del programa con borradores persistentes para la Fase 1 de construccion de guias de aprendizaje SENA.",
+    "Wizard base del programa de formación con borradores persistentes para la Fase 1 de construccion de guias de aprendizaje SENA.",
 };
 
 type RootLayoutProps = Readonly<{

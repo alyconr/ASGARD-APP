@@ -48,7 +48,7 @@ describe("ProyectoExcelImport", () => {
     );
 
     expect(
-      screen.getByText(/matriz excel del proyecto/i),
+      screen.getByText(/matriz excel del proyecto formativo/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/fuente estructurada/i),

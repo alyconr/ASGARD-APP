@@ -17,7 +17,7 @@ const availability: ProyectoDisponibilidadResponse = {
   proyecto_bloqueado: false,
   estado_proyecto: "BORRADOR",
   motivo: null,
-  mensaje: "El proyecto formativo esta habilitado porque el programa esta COMPLETO.",
+  mensaje: "El proyecto formativo esta habilitado porque el programa de formación esta COMPLETO.",
   accion_sugerida: "iniciar_proyecto",
 };
 
@@ -65,7 +65,7 @@ describe("ProyectoWizardShell", () => {
     render(<ProyectoWizardShell availability={availability} />);
 
     expect(
-      screen.getByLabelText("Wizard base del proyecto"),
+      screen.getByLabelText("Wizard base del proyecto formativo"),
     ).toBeInTheDocument();
     expect(screen.getByText("Iniciar proyecto")).toBeInTheDocument();
   });
@@ -77,7 +77,7 @@ describe("ProyectoWizardShell", () => {
     render(<ProyectoWizardShell availability={availability} />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /iniciar wizard del proyecto/i }),
+      screen.getByRole("button", { name: /iniciar wizard del proyecto formativo/i }),
     );
 
     expect(startNewFlow).toHaveBeenCalledOnce();
@@ -138,8 +138,8 @@ describe("ProyectoWizardShell", () => {
 
     render(<ProyectoWizardShell availability={availability} />);
 
-    expect(screen.getByText("PDF del proyecto")).toBeInTheDocument();
-    expect(screen.getByText("Matriz Excel del proyecto")).toBeInTheDocument();
+    expect(screen.getByText("PDF del proyecto formativo")).toBeInTheDocument();
+    expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
     expect(screen.queryByText("Slot reservado")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));

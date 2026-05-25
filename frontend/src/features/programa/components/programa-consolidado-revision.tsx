@@ -21,6 +21,7 @@ import {
   ProgramaCierreError,
   validarCompletitudPrograma,
 } from "@/features/programa/programa-cierre-api";
+import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
 import type {
   ProgramaCierreResponse,
   ProgramaCompetencia,
@@ -81,6 +82,7 @@ export function ProgramaConsolidadoRevision(
     excelResult: ProgramaExcelImportState | null;
     onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
     onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
+    onSyncNeeded?: () => void;
   }>,
 ): React.JSX.Element {
   const {
@@ -94,6 +96,7 @@ export function ProgramaConsolidadoRevision(
     excelResult,
     onNavigateToStep,
     onProgramaCerrado = () => {},
+    onSyncNeeded,
   } = props;
   const [validation, setValidation] =
     useState<ProgramaCompletitudResponse | null>(null);
@@ -101,6 +104,7 @@ export function ProgramaConsolidadoRevision(
   const [isValidating, setIsValidating] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [closeMessage, setCloseMessage] = useState<string | null>(null);
+  const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
 
   const totalResultados = useMemo(
     () => competencias.reduce((sum, c) => sum + (c.resultados?.length ?? 0), 0),
@@ -151,7 +155,7 @@ export function ProgramaConsolidadoRevision(
       const message =
         error instanceof ProgramaCierreError
           ? error.detail
-          : "No fue posible validar la completitud del programa.";
+          : "No fue posible validar la completitud del programa de formación.";
       setValidationError(message);
       return null;
     } finally {
@@ -167,7 +171,7 @@ export function ProgramaConsolidadoRevision(
       return;
     }
     const confirmed = window.confirm(
-      "Confirma que revisaste el consolidado y quieres cerrar el programa como COMPLETO.",
+      "Confirma que revisaste el consolidado y quieres cerrar el programa de formación como COMPLETO.",
     );
     if (!confirmed) {
       return;
@@ -188,7 +192,7 @@ export function ProgramaConsolidadoRevision(
           setValidation(error.completitud);
         }
       } else {
-        setValidationError("No fue posible cerrar el programa.");
+        setValidationError("No fue posible cerrar el programa de formación.");
       }
     } finally {
       setIsClosing(false);
@@ -222,15 +226,23 @@ export function ProgramaConsolidadoRevision(
         hasCurricular={hasCurricular}
       />
 
+      {referenciaId ? (
+        <ProgramaPendientesConciliacion
+          competencias={competencias}
+          referenciaId={referenciaId}
+          onAssignedCompleted={onSyncNeeded}
+        />
+      ) : null}
+
       {/* Programa data section */}
       <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-[var(--foreground)]">
-              Datos del programa
+              Datos del programa de formación
             </h3>
             <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-              Fuente del programa: Excel canonico. El PDF se conserva como
+              Fuente del programa de formación: Excel canonico. El PDF se conserva como
               evidencia documental en MinIO.
             </p>
           </div>
@@ -277,14 +289,6 @@ export function ProgramaConsolidadoRevision(
               {competencias.length} competencia(s)
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigateToStep("estructura-curricular")}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            <Edit3 className="h-4 w-4" />
-            Editar estructura
-          </button>
         </div>
 
         {competencias.length === 0 ? (
@@ -295,17 +299,28 @@ export function ProgramaConsolidadoRevision(
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--muted)]">
               La estructura curricular debe tener al menos una competencia con
               resultados, conocimientos y criterios para poder cerrar el
-              programa.
+              programa de formación.
             </p>
           </div>
         ) : (
-          <div className="mt-4 grid gap-3">
-            {competencias.map((competencia) => (
-              <CompetenciaReviewCard
-                key={competencia.id}
-                competencia={competencia}
-              />
-            ))}
+          <div className="mt-4 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-4 py-6 text-center">
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              Estructura curricular cargada
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--muted)]">
+              Hay {competencias.length} competencia(s) importada(s) con resultados de aprendizaje, criterios de evaluación y conocimientos.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                id="btn-revisar-estructura"
+                onClick={() => setIsRevisionModalOpen(true)}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              >
+                <Layers3 className="h-4 w-4" />
+                Revisar estructura
+              </button>
+            </div>
           </div>
         )}
       </section>
@@ -327,7 +342,7 @@ export function ProgramaConsolidadoRevision(
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-[var(--muted)]" />
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                PDF del programa
+                PDF del programa de formación
               </p>
             </div>
             {hasPdf ? (
@@ -390,6 +405,13 @@ export function ProgramaConsolidadoRevision(
           </div>
         </div>
       </section>
+
+      {isRevisionModalOpen && (
+        <CurriculumRevisionModal
+          competencias={competencias}
+          onClose={() => setIsRevisionModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -418,7 +440,7 @@ function CompletionPanel({
   validationError: string | null;
 }>): React.JSX.Element {
   const canClose = validation?.cerrable === true && !isCompleted;
-  const pendingCount = validation?.faltantes.length ?? 0;
+  const pendingCount = validation?.faltantes?.length ?? 0;
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-5">
@@ -444,7 +466,7 @@ function CompletionPanel({
             </span>
             <div>
               <h3 className="text-base font-semibold text-[var(--foreground)]">
-                Validacion y cierre del programa
+                Validacion y cierre del programa de formación
               </h3>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
                 Estado actual:{" "}
@@ -458,18 +480,18 @@ function CompletionPanel({
           {validation === null && !isCompleted ? (
             <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
               Ejecuta la validacion para confirmar si el programa cumple codigo,
-              nombre y estructura curricular minima.
+              nombre y estructura curricular minima del programa de formación.
             </p>
           ) : null}
           {validation?.cerrable === true && !isCompleted ? (
             <p className="mt-3 text-sm leading-6 text-emerald-800">
-              El programa esta listo para cierre. La accion requiere confirmacion
+              El programa de formación esta listo para cierre. La accion requiere confirmacion
               explicita.
             </p>
           ) : null}
           {isCompleted ? (
             <p className="mt-3 text-sm leading-6 text-emerald-800">
-              {closeMessage ?? "El programa quedo cerrado como COMPLETO."}
+              {closeMessage ?? "El programa de formación quedo cerrado como COMPLETO."}
             </p>
           ) : null}
           {validationError !== null ? (
@@ -513,7 +535,7 @@ function CompletionPanel({
 
           {!validation.cerrable ? (
             <MissingList
-              faltantes={validation.faltantes}
+              faltantes={validation.faltantes ?? []}
               pendingCount={pendingCount}
               onNavigateToStep={onNavigateToStep}
             />
@@ -559,14 +581,6 @@ function MissingList({
           >
             <Edit3 className="h-4 w-4" />
             Revisar origen
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigateToStep("estructura-curricular")}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            <Layers3 className="h-4 w-4" />
-            Corregir estructura
           </button>
         </div>
       </div>
@@ -624,7 +638,7 @@ function SummaryBanner({
       <div className="flex items-center gap-2">
         <BookOpenCheck className="h-5 w-5 text-[var(--accent-strong)]" />
         <h3 className="text-sm font-semibold text-[var(--foreground)]">
-          Resumen del programa
+          Resumen del programa de formación
         </h3>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -820,6 +834,70 @@ function ReviewItem({
         {text}
       </p>
       <ProgramaOriginBadge origin={origin} />
+    </div>
+  );
+}
+
+function CurriculumRevisionModal({
+  competencias,
+  onClose,
+}: Readonly<{
+  competencias: ProgramaCompetencia[];
+  onClose: () => void;
+}>): React.JSX.Element | null {
+  const [selectedId, setSelectedId] = useState<string>(competencias[0]?.id ?? "");
+
+  const competencia = useMemo(() => {
+    return competencias.find((c) => c.id === selectedId) ?? competencias[0] ?? null;
+  }, [competencias, selectedId]);
+
+  if (competencia === null) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6"
+      role="dialog"
+    >
+      <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[color:var(--card-border)] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
+          <div className="flex-1 min-w-[240px]">
+            <label
+              htmlFor="modal-competencia-select"
+              className="block text-xs font-semibold tracking-[0.16em] text-[var(--accent-strong)] uppercase mb-1"
+            >
+              Seleccione la competencia a revisar
+            </label>
+            <select
+              id="modal-competencia-select"
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+            >
+              {competencias.map((comp) => (
+                <option key={comp.id} value={comp.id}>
+                  {comp.codigo_competencia} - {comp.nombre_competencia.substring(0, 80)}
+                  {comp.nombre_competencia.length > 80 ? "..." : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            aria-label="Cerrar modal de revisión curricular"
+            onClick={onClose}
+            className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <span className="text-xl font-medium">&times;</span>
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5 bg-[var(--paper-strong)]">
+          <CompetenciaReviewCard competencia={competencia} />
+        </div>
+      </section>
     </div>
   );
 }

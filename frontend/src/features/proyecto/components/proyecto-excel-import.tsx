@@ -315,10 +315,10 @@ export function ProyectoExcelImport({
             </span>
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                Matriz Excel del proyecto
+                Matriz Excel del proyecto formativo
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                Fuente estructurada del proyecto. Define Proyecto, Fases y
+                Fuente estructurada del proyecto formativo. Define Proyecto formativo, Fases y
                 Actividades. El PDF cargado anteriormente es solo evidencia
                 documental.
               </p>

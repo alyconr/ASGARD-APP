@@ -16,6 +16,7 @@ import {
 } from "@/features/drafts/types";
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
+import { listProgramaCompetencias } from "@/features/programa/competencias-api";
 import type {
   AutosaveState,
   ProgramaCompetenciaListResponse,
@@ -171,6 +172,8 @@ export interface ProgramaWizardController {
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
   resetFlow: () => void;
+  refreshCurriculum: () => Promise<void>;
+  disabledSteps: ProgramaWizardStepId[];
 }
 
 export function useProgramaWizard(): ProgramaWizardController {
@@ -423,26 +426,46 @@ export function useProgramaWizard(): ProgramaWizardController {
     setContinueReferenceInput(value.trim());
   }, []);
 
-  const goToStep = useCallback((stepId: ProgramaWizardStepId): void => {
-    setCurrentStepId(stepId);
-    setPayload((currentPayload) => {
-      if (currentPayload === null) {
-        return currentPayload;
-      }
+  const isRevisionStepEnabled = useMemo(() => {
+    if (payload === null) {
+      return false;
+    }
+    const hasPdf = payload.documental.programa_pdf !== null;
+    const hasExcelValid = payload.documental.programa_excel?.preview?.valid === true;
+    const hasExcelImported = payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO";
+    return hasPdf && hasExcelValid && hasExcelImported;
+  }, [payload]);
 
-      return {
-        ...currentPayload,
-        meta: {
-          ...currentPayload.meta,
-          touchedSteps: addTouchedStep(
-            currentPayload.meta.touchedSteps,
-            stepId,
-          ),
-          lastInteractionAt: new Date().toISOString(),
-        },
-      };
-    });
-  }, []);
+  const disabledSteps = useMemo<ProgramaWizardStepId[]>(() => {
+    return isRevisionStepEnabled ? [] : ["revision-programa"];
+  }, [isRevisionStepEnabled]);
+
+  const goToStep = useCallback(
+    (stepId: ProgramaWizardStepId): void => {
+      if (stepId === "revision-programa" && !isRevisionStepEnabled) {
+        return;
+      }
+      setCurrentStepId(stepId);
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              stepId,
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+        };
+      });
+    },
+    [isRevisionStepEnabled],
+  );
 
   const goToNextStep = useCallback((): void => {
     const currentIndex = getStepIndex(currentStepId);
@@ -572,6 +595,8 @@ export function useProgramaWizard(): ProgramaWizardController {
         }
 
         const now = new Date().toISOString();
+        const preview = currentPayload.documental.programa_excel?.preview;
+        const programa = preview?.programa;
 
         return {
           ...currentPayload,
@@ -579,9 +604,15 @@ export function useProgramaWizard(): ProgramaWizardController {
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "estructura-curricular",
+              "revision-programa",
             ),
             lastInteractionAt: now,
+          },
+          programa: {
+            ...currentPayload.programa,
+            codigo_programa: programa?.codigo_programa ?? currentPayload.programa.codigo_programa,
+            nombre_programa: programa?.nombre_programa ?? currentPayload.programa.nombre_programa,
+            version_programa: programa?.version_programa ?? currentPayload.programa.version_programa,
           },
           curricular: {
             ...currentPayload.curricular,
@@ -610,9 +641,73 @@ export function useProgramaWizard(): ProgramaWizardController {
           },
         };
       });
+      setCurrentStepId("revision-programa");
     },
     [],
   );
+
+  const refreshCurriculum = useCallback(async (): Promise<void> => {
+    if (activeReferenceId === null) {
+      return;
+    }
+    try {
+      const response = await listProgramaCompetencias(activeReferenceId);
+      setPayload((current) => {
+        if (current === null) {
+          return null;
+        }
+        return {
+          ...current,
+          curricular: {
+            ...current.curricular,
+            competencias: response.competencias,
+          },
+        };
+      });
+    } catch (error) {
+      console.error("Failed to refresh curriculum:", error);
+    }
+  }, [activeReferenceId]);
+
+  useEffect(() => {
+    if (activeReferenceId === null || currentStepId !== "revision-programa") {
+      return;
+    }
+
+    let isCurrent = true;
+    const fetchLatest = async () => {
+      try {
+        const response = await listProgramaCompetencias(activeReferenceId);
+        if (isCurrent) {
+          setPayload((current) => {
+            if (current === null) {
+              return null;
+            }
+            return {
+              ...current,
+              programa: {
+                codigo_programa: current.programa.codigo_programa || response.codigo_programa || "",
+                nombre_programa: current.programa.nombre_programa || response.nombre_programa || "",
+                version_programa: current.programa.version_programa || response.version_programa || "",
+              },
+              curricular: {
+                ...current.curricular,
+                programa_formacion_id: response.programa_id || current.curricular.programa_formacion_id,
+                competencias: response.competencias,
+              },
+            };
+          });
+        }
+      } catch (error) {
+        console.error("Failed to sync competencies on revision step:", error);
+      }
+    };
+
+    void fetchLatest();
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeReferenceId, currentStepId]);
 
   const updateProgramaCompetencias = useCallback(
     (result: ProgramaCompetenciaListResponse): void => {
@@ -627,7 +722,7 @@ export function useProgramaWizard(): ProgramaWizardController {
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "estructura-curricular",
+              "revision-programa",
             ),
             lastInteractionAt: new Date().toISOString(),
           },
@@ -692,7 +787,9 @@ export function useProgramaWizard(): ProgramaWizardController {
   return {
     activeReferenceId,
     autosave,
-    canMoveNext: currentStepIndex < PROGRAMA_WIZARD_STEPS.length - 1,
+    canMoveNext:
+      currentStepIndex < PROGRAMA_WIZARD_STEPS.length - 1 &&
+      (currentStepId !== "origen-documental" || isRevisionStepEnabled),
     canMovePrevious: currentStepIndex > 0,
     continueReferenceInput,
     currentStepId,
@@ -721,5 +818,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     forgetKnownDraft,
     clearKnownDrafts,
     resetFlow,
+    refreshCurriculum,
+    disabledSteps,
   };
 }

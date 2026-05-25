@@ -130,10 +130,20 @@ function buildCompletitudResponse(
 function mockFetchJson(payload: unknown, status = 200): void {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({
-      ok: status >= 200 && status < 300,
-      status,
-      json: async () => payload,
+    vi.fn().mockImplementation((input: string | Request | URL) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/pendientes-curriculares")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ pendientes: [] }),
+        });
+      }
+      return Promise.resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => payload,
+      });
     }),
   );
 }
@@ -195,6 +205,8 @@ describe("ProgramaConsolidadoRevision", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /revisar estructura/i }));
+
     expect(screen.getByText("Desarrollar software")).toBeInTheDocument();
     expect(
       screen.getByText("Analiza los requisitos del software"),
@@ -223,6 +235,8 @@ describe("ProgramaConsolidadoRevision", () => {
         onNavigateToStep={vi.fn()}
       />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /revisar estructura/i }));
 
     expect(screen.getByText("Extraido")).toBeInTheDocument();
     expect(screen.getByText("Validado")).toBeInTheDocument();
@@ -264,9 +278,6 @@ describe("ProgramaConsolidadoRevision", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /revisar origen/i }));
     expect(onNavigate).toHaveBeenCalledWith("origen-documental");
-
-    fireEvent.click(screen.getByRole("button", { name: /editar estructura/i }));
-    expect(onNavigate).toHaveBeenCalledWith("estructura-curricular");
   });
 
   it("renders practical stage competencia without children", () => {
@@ -290,11 +301,57 @@ describe("ProgramaConsolidadoRevision", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /revisar estructura/i }));
+
     expect(screen.getByText("Etapa practica")).toBeInTheDocument();
     expect(screen.getByText("Sin resultados")).toBeInTheDocument();
     expect(screen.getByText("Sin criterios")).toBeInTheDocument();
     expect(screen.getByText("Sin conocimientos SABER")).toBeInTheDocument();
     expect(screen.getByText("Sin conocimientos PROCESO")).toBeInTheDocument();
+  });
+
+  it("allows selecting and reviewing different competencias in the modal select", () => {
+    const competencia1 = buildCompetencia({
+      id: "comp-1",
+      codigo_competencia: "111111",
+      nombre_competencia: "Competencia Primera",
+      resultados: [buildResultado({ id: "res-1", descripcion: "Resultado Uno" })],
+    });
+    const competencia2 = buildCompetencia({
+      id: "comp-2",
+      codigo_competencia: "222222",
+      nombre_competencia: "Competencia Segunda",
+      resultados: [buildResultado({ id: "res-2", descripcion: "Resultado Dos" })],
+    });
+
+    render(
+      <ProgramaConsolidadoRevision
+        codigoPrograma="228106"
+        nombrePrograma="Test"
+        versionPrograma="v1"
+        competencias={[competencia1, competencia2]}
+        pdfResult={null}
+        excelResult={null}
+        onNavigateToStep={vi.fn()}
+      />,
+    );
+
+    // Open modal
+    fireEvent.click(screen.getByRole("button", { name: /revisar estructura/i }));
+
+    // By default, the first competency should be active
+    expect(screen.getByText("Competencia Primera")).toBeInTheDocument();
+    expect(screen.getByText("Resultado Uno")).toBeInTheDocument();
+    expect(screen.queryByText("Competencia Segunda")).not.toBeInTheDocument();
+
+    // Select second competency using the dropdown
+    const select = screen.getByLabelText(/Seleccione la competencia a revisar/i);
+    fireEvent.change(select, { target: { value: "comp-2" } });
+
+    // Now the second competency should be active
+    expect(screen.getByText("Competencia Segunda")).toBeInTheDocument();
+    expect(screen.getByText("Resultado Dos")).toBeInTheDocument();
+    expect(screen.queryByText("Competencia Primera")).not.toBeInTheDocument();
   });
 
   it("shows counts in summary banner", () => {
@@ -400,10 +457,8 @@ describe("ProgramaConsolidadoRevision", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
     fireEvent.click(await screen.findByRole("button", { name: /revisar origen/i }));
-    fireEvent.click(screen.getByRole("button", { name: /corregir estructura/i }));
 
     expect(onNavigate).toHaveBeenCalledWith("origen-documental");
-    expect(onNavigate).toHaveBeenCalledWith("estructura-curricular");
   });
 
   it("requires explicit confirmation before closing", async () => {
@@ -418,23 +473,37 @@ describe("ProgramaConsolidadoRevision", () => {
       },
       faltantes: [],
     });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => validation,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          referencia_id: validation.referencia_id,
-          programa_id: validation.programa_id,
-          estado: "COMPLETO",
-          mensaje: "Programa cerrado correctamente.",
-          completitud: { ...validation, estado_actual: "COMPLETO" },
-        }),
-      });
+    const fetchMock = vi.fn().mockImplementation((input: string | Request | URL) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/pendientes-curriculares")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ pendientes: [] }),
+        });
+      }
+      if (url.includes("/completitud")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => validation,
+        });
+      }
+      if (url.includes("/cierre")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            referencia_id: validation.referencia_id,
+            programa_id: validation.programa_id,
+            estado: "COMPLETO",
+            mensaje: "Programa de formación cerrado correctamente.",
+            completitud: { ...validation, estado_actual: "COMPLETO" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -467,23 +536,37 @@ describe("ProgramaConsolidadoRevision", () => {
     const validation = buildCompletitudResponse({ cerrable: true, faltantes: [] });
     vi.stubGlobal(
       "fetch",
-      vi.fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => validation,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            referencia_id: validation.referencia_id,
-            programa_id: validation.programa_id,
-            estado: "COMPLETO",
-            mensaje: "Programa cerrado correctamente.",
-            completitud: { ...validation, estado_actual: "COMPLETO" },
-          }),
-        }),
+      vi.fn().mockImplementation((input: string | Request | URL) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.includes("/pendientes-curriculares")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ pendientes: [] }),
+          });
+        }
+        if (url.includes("/completitud")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => validation,
+          });
+        }
+        if (url.includes("/cierre")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              referencia_id: validation.referencia_id,
+              programa_id: validation.programa_id,
+              estado: "COMPLETO",
+              mensaje: "Programa de formación cerrado correctamente.",
+              completitud: { ...validation, estado_actual: "COMPLETO" },
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }),
     );
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -505,7 +588,7 @@ describe("ProgramaConsolidadoRevision", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirmar y cerrar programa/i }));
 
     expect(
-      await screen.findByText("Programa cerrado correctamente."),
+      await screen.findByText("Programa de formación cerrado correctamente."),
     ).toBeInTheDocument();
     expect(screen.getByText(/Estado actual:/i)).toBeInTheDocument();
     expect(screen.getByText("COMPLETO")).toBeInTheDocument();
@@ -518,7 +601,7 @@ describe("ProgramaConsolidadoRevision", () => {
         {
           codigo: "programa.criterios",
           campo: "criterios",
-          mensaje: "El programa debe tener al menos un criterio de evaluacion.",
+          mensaje: "El programa de formación debe tener al menos un criterio de evaluacion.",
           competencia_id: null,
           competencia_codigo: null,
           competencia_nombre: null,
@@ -527,17 +610,31 @@ describe("ProgramaConsolidadoRevision", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => validation,
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 409,
-          json: async () => ({ detail: rejected }),
-        }),
+      vi.fn().mockImplementation((input: string | Request | URL) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.includes("/pendientes-curriculares")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ pendientes: [] }),
+          });
+        }
+        if (url.includes("/completitud")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => validation,
+          });
+        }
+        if (url.includes("/cierre")) {
+          return Promise.resolve({
+            ok: false,
+            status: 409,
+            json: async () => ({ detail: rejected }),
+          });
+        }
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }),
     );
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
@@ -559,7 +656,7 @@ describe("ProgramaConsolidadoRevision", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirmar y cerrar programa/i }));
 
     expect(
-      await screen.findByText(/El programa debe tener al menos un criterio/i),
+      await screen.findByText(/El programa de formación debe tener al menos un criterio/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("COMPLETO")).not.toBeInTheDocument();
   });

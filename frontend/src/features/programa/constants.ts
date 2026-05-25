@@ -20,20 +20,12 @@ export const PROGRAMA_WIZARD_STEPS: ProgramaWizardStepDefinition[] = [
       "PDF como evidencia y Excel canonico como fuente estructurada.",
   },
   {
-    id: "estructura-curricular",
+    id: "revision-programa",
     index: 1,
-    label: "Estructura curricular",
+    label: "Revision del programa de formación",
     shortLabel: "02",
     description:
-      "Trabajo enfocado por competencia, resultados, conocimientos y criterios.",
-  },
-  {
-    id: "revision-programa",
-    index: 2,
-    label: "Revision del programa",
-    shortLabel: "03",
-    description:
-      "Revision consolidada del programa antes de cualquier cierre funcional.",
+      "Revision consolidada del programa de formación antes de cualquier cierre funcional.",
   },
 ];
 

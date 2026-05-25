@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-
+mcp_config.json
 # Environment and secrets
 .env
 .env.*

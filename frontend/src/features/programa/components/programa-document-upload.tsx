@@ -174,7 +174,7 @@ export function ProgramaDocumentUpload({
             </span>
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                PDF del programa
+                PDF del programa de formación
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
                 Se conserva como evidencia documental en MinIO; no se usa para

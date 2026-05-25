@@ -24,7 +24,7 @@ function buildAvailability(
     estado_proyecto: "BLOQUEADO",
     motivo: "PROGRAMA_NO_COMPLETO",
     mensaje:
-      "El modulo proyecto esta bloqueado hasta que el programa quede cerrado como COMPLETO.",
+      "El modulo proyecto formativo esta bloqueado hasta que el programa de formación quede cerrado como COMPLETO.",
     accion_sugerida: "completar_y_cerrar_programa",
     ...overrides,
   };
@@ -61,7 +61,7 @@ describe("ProyectoDisponibilidadPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("BLOQUEADO")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Wizard base del proyecto"),
+      screen.queryByLabelText("Wizard base del proyecto formativo"),
     ).not.toBeInTheDocument();
   });
 
@@ -94,7 +94,7 @@ describe("ProyectoDisponibilidadPanel", () => {
         estado_proyecto: "BORRADOR",
         motivo: null,
         mensaje:
-          "El proyecto formativo esta habilitado porque el programa esta COMPLETO.",
+          "El proyecto formativo esta habilitado porque el programa de formación esta COMPLETO.",
         accion_sugerida: "iniciar_proyecto",
       }),
     );
@@ -115,7 +115,7 @@ describe("ProyectoDisponibilidadPanel", () => {
       screen.getByRole("button", { name: /completar programa/i }),
     ).toBeDisabled();
     expect(
-      await screen.findByLabelText("Wizard base del proyecto"),
+      await screen.findByLabelText("Wizard base del proyecto formativo"),
     ).toBeInTheDocument();
   });
 
@@ -138,7 +138,7 @@ describe("ProyectoDisponibilidadPanel", () => {
             estado_proyecto: "BORRADOR",
             motivo: null,
             mensaje:
-              "El proyecto formativo esta habilitado porque el programa esta COMPLETO.",
+              "El proyecto formativo esta habilitado porque el programa de formación esta COMPLETO.",
             accion_sugerida: "iniciar_proyecto",
           }),
       });

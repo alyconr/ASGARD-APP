@@ -53,14 +53,8 @@ const STEP_CONTENT: Record<
       "PDF como evidencia documental y Excel canonico como fuente curricular.",
     icon: FileSpreadsheet,
   },
-  "estructura-curricular": {
-    label: "Estructura curricular",
-    description:
-      "Selecciona una competencia y trabaja su estructura sin render masivo.",
-    icon: FolderOpen,
-  },
   "revision-programa": {
-    label: "Revision del programa",
+    label: "Revision del programa de formación",
     description:
       "La revision se mantiene como paso independiente antes de cualquier cierre.",
     icon: BookOpenCheck,
@@ -148,6 +142,7 @@ type StepWorkspaceProps = {
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onProgramaCerrado: (result: ProgramaCierreResponse) => void;
   competencias: ProgramaCompetencia[];
+  onSyncNeeded?: () => void;
 };
 
 function StepWorkspace({
@@ -167,6 +162,7 @@ function StepWorkspace({
   onNavigateToStep,
   onProgramaCerrado,
   competencias,
+  onSyncNeeded,
 }: StepWorkspaceProps): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
@@ -208,23 +204,6 @@ function StepWorkspace({
                 onPreviewed={onProgramaExcelPreviewed}
               />
             </div>
-          ) : currentStep.id === "estructura-curricular" ? (
-            <div className="grid gap-4">
-              <ProgramaCompetenciasManager
-                competencias={competencias}
-                referenciaId={referenceId}
-                onCompetenciasSynced={onProgramaCompetenciasSynced}
-              />
-              <section
-                aria-label="Zona secundaria de pendientes curriculares"
-                className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] p-3"
-              >
-                <ProgramaPendientesConciliacion
-                  competencias={competencias}
-                  referenciaId={referenceId}
-                />
-              </section>
-            </div>
           ) : (
             <ProgramaConsolidadoRevision
               codigoPrograma={programaValue.codigo_programa}
@@ -237,6 +216,7 @@ function StepWorkspace({
               referenciaId={referenceId}
               estadoBorrador={estadoBorrador}
               onProgramaCerrado={onProgramaCerrado}
+              onSyncNeeded={onSyncNeeded}
             />
           )}
         </div>
@@ -304,7 +284,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
           <div className="flex items-center gap-3 text-[var(--accent-strong)]">
             <RefreshCcw className="h-5 w-5 animate-spin" />
             <p className="text-sm font-semibold">
-              Revisando borrador activo del programa
+              Revisando borrador activo del programa de formación
             </p>
           </div>
         </section>
@@ -330,7 +310,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
               </p>
             </div>
             <h1 className="mt-2 text-3xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)] lg:text-4xl">
-              Wizard base del programa
+              Wizard base del programa de formación
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
               Flujo de importacion con borrador persistente, navegacion por pasos
@@ -508,13 +488,14 @@ export function ProgramaWizardShell(): React.JSX.Element {
 
       {controller.isWizardActive && controller.payload !== null ? (
         <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <aside className="grid gap-4">
+          <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6 w-full h-fit">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-4 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
               <WizardProgress
                 currentStepId={controller.currentStepId}
                 steps={PROGRAMA_WIZARD_STEPS}
                 touchedSteps={controller.payload.meta.touchedSteps}
                 onSelectStep={controller.goToStep}
+                disabledSteps={controller.disabledSteps}
               />
             </section>
 
@@ -563,6 +544,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 }
                 onNavigateToStep={controller.goToStep}
                 onProgramaCerrado={controller.markProgramaClosed}
+                onSyncNeeded={controller.refreshCurriculum}
               />
             </div>
 

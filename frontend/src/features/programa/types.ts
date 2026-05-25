@@ -4,7 +4,6 @@ export type ProgramaEntryMode = "EXCEL" | null;
 
 export type ProgramaWizardStepId =
   | "origen-documental"
-  | "estructura-curricular"
   | "revision-programa";
 
 export type AutosaveState = "idle" | "saving" | "saved" | "error";

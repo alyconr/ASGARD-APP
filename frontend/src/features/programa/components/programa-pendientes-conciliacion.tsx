@@ -202,14 +202,17 @@ function PendingAssignmentRow({
 export function ProgramaPendientesConciliacion({
   competencias,
   referenciaId,
+  onAssignedCompleted,
 }: Readonly<{
   competencias: ProgramaCompetencia[];
   referenciaId: string;
+  onAssignedCompleted?: () => void;
 }>): React.JSX.Element {
   const [pendientes, setPendientes] = useState<PendienteCurricular[]>([]);
   const [filter, setFilter] = useState<PendingFilter>("TODOS");
   const [state, setState] = useState<"loading" | "idle">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showReconciliation, setShowReconciliation] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -220,7 +223,12 @@ export function ProgramaPendientesConciliacion({
       try {
         const result = await listPendientesCurriculares(referenciaId);
         if (isCurrent) {
-          setPendientes(result.pendientes);
+          const list = result.pendientes ?? [];
+          setPendientes(list);
+          const hasPending = list.some(
+            (item) => item.estado === "PENDIENTE",
+          );
+          setShowReconciliation(hasPending);
         }
       } catch (error) {
         if (isCurrent) {
@@ -241,13 +249,13 @@ export function ProgramaPendientesConciliacion({
   }, [referenciaId]);
 
   const visiblePendientes = useMemo(() => {
-    return pendientes.filter((item) => {
+    return (pendientes ?? []).filter((item) => {
       if (filter === "TODOS") return true;
       return item.tipo_elemento === filter;
     });
   }, [filter, pendientes]);
 
-  const pendingCount = pendientes.filter(
+  const pendingCount = (pendientes ?? []).filter(
     (item) => item.estado === "PENDIENTE",
   ).length;
 
@@ -255,10 +263,18 @@ export function ProgramaPendientesConciliacion({
     setPendientes((current) =>
       current.map((item) => (item.id === updated.id ? updated : item)),
     );
+    onAssignedCompleted?.();
   };
 
+  if (state === "loading" || (!showReconciliation && errorMessage === null)) {
+    return null;
+  }
+
   return (
-    <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
+    <section
+      aria-label="Zona secundaria de pendientes curriculares"
+      className="rounded-lg border border-dashed border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

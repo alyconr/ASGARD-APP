@@ -815,8 +815,8 @@ async def test_preview_rejects_duplicate_resultado_rap_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_preview_moves_duplicate_conocimiento_in_competencia_to_pending() -> None:
-    """The same knowledge description is ambiguous in the same competence."""
+async def test_preview_discards_duplicate_conocimiento_in_competencia() -> None:
+    """The same knowledge description in the same competence is discarded."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -839,13 +839,13 @@ async def test_preview_moves_duplicate_conocimiento_in_competencia_to_pending() 
 
     assert result.valid is True
     assert result.resumen.conocimientos == 1
-    assert result.pendientes_resumen.conocimientos == 1
-    assert result.pendientes[0].motivo.value == "ASOCIACION_AMBIGUA"
+    assert result.pendientes_resumen.conocimientos == 0
+    assert len(result.pendientes) == 0
 
 
 @pytest.mark.anyio
-async def test_preview_moves_duplicate_conocimiento_same_rap_to_pending() -> None:
-    """The same knowledge description in the same RAP waits for reconciliation."""
+async def test_preview_discards_duplicate_conocimiento_same_rap() -> None:
+    """The same knowledge description in the same RAP is discarded."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -863,13 +863,14 @@ async def test_preview_moves_duplicate_conocimiento_same_rap_to_pending() -> Non
     )
 
     assert result.valid is True
-    assert result.pendientes_resumen.conocimientos == 1
-    assert result.pendientes[0].motivo.value == "ASOCIACION_AMBIGUA"
+    assert result.resumen.conocimientos == 1
+    assert result.pendientes_resumen.conocimientos == 0
+    assert len(result.pendientes) == 0
 
 
 @pytest.mark.anyio
-async def test_preview_moves_duplicate_criterio_in_competencia_to_pending() -> None:
-    """The same criterion description is ambiguous in the same competence."""
+async def test_preview_discards_duplicate_criterio_in_competencia() -> None:
+    """The same criterion description in the same competence is discarded."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -892,13 +893,13 @@ async def test_preview_moves_duplicate_criterio_in_competencia_to_pending() -> N
 
     assert result.valid is True
     assert result.resumen.criterios == 1
-    assert result.pendientes_resumen.criterios == 1
-    assert any(item.motivo.value == "ASOCIACION_AMBIGUA" for item in result.pendientes)
+    assert result.pendientes_resumen.criterios == 0
+    assert len(result.pendientes) == 0
 
 
 @pytest.mark.anyio
-async def test_preview_moves_duplicate_criterio_same_rap_to_pending() -> None:
-    """The same criterion description in the same RAP waits for reconciliation."""
+async def test_preview_discards_duplicate_criterio_same_rap() -> None:
+    """The same criterion description in the same RAP is discarded."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -916,13 +917,14 @@ async def test_preview_moves_duplicate_criterio_same_rap_to_pending() -> None:
     )
 
     assert result.valid is True
-    assert result.pendientes_resumen.criterios == 1
-    assert any(item.motivo.value == "ASOCIACION_AMBIGUA" for item in result.pendientes)
+    assert result.resumen.criterios == 1
+    assert result.pendientes_resumen.criterios == 0
+    assert len(result.pendientes) == 0
 
 
 @pytest.mark.anyio
 async def test_preview_imports_items_without_rap_when_competencia_is_clear() -> None:
-    """Items without rap_id should stay importable under their competence."""
+    """Items without rap_id stay under competence, while duplicates are discarded."""
     service, _, drafts, _, _ = build_service()
 
     result = await service.preview_program_excel(
@@ -947,8 +949,8 @@ async def test_preview_imports_items_without_rap_when_competencia_is_clear() -> 
     assert result.errores == []
     assert result.resumen.conocimientos == 1
     assert result.resumen.criterios == 1
-    assert result.pendientes_resumen.conocimientos == 1
-    assert result.pendientes_resumen.criterios == 1
+    assert result.pendientes_resumen.conocimientos == 0
+    assert result.pendientes_resumen.criterios == 0
 
 
 @pytest.mark.anyio

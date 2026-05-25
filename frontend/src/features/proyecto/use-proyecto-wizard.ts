@@ -529,35 +529,47 @@ export function useProyectoWizard({
           return currentPayload;
         }
 
+        const now = new Date().toISOString();
+        const preview = currentPayload.documental.fuente_estructurada?.preview;
+        const proyecto = preview?.proyecto;
+
         return {
           ...currentPayload,
           meta: {
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "fuente-proyecto",
+              "revision-proyecto",
             ),
-            lastInteractionAt: new Date().toISOString(),
+            lastInteractionAt: now,
+          },
+          proyecto: {
+            ...currentPayload.proyecto,
+            codigo_proyecto:
+              proyecto?.codigo_proyecto ??
+              currentPayload.proyecto.codigo_proyecto,
+            nombre_proyecto:
+              proyecto?.nombre_proyecto ??
+              currentPayload.proyecto.nombre_proyecto,
+            version_proyecto:
+              proyecto?.version_proyecto ??
+              currentPayload.proyecto.version_proyecto,
+            proyecto_formativo_id:
+              result.confirmacion.proyecto_id ??
+              currentPayload.proyecto.proyecto_formativo_id,
           },
           documental: {
             ...currentPayload.documental,
             fuente_estructurada: result,
           },
-          estructura: {
-            ...currentPayload.estructura,
-            fases: result.confirmacion.fase_ids?.map((id) => ({
-              fase_id: id,
-              estado: "IMPORTADO",
-            })) ?? [],
-            actividades: result.confirmacion.actividad_ids?.map((id) => ({
-              actividad_id: id,
-              estado: "IMPORTADO",
-            })) ?? [],
-          },
         };
       });
+      setCurrentStepId("revision-proyecto");
+      if (activeReferenceId !== null) {
+        void recoverDraftByReference(activeReferenceId, true);
+      }
     },
-    [],
+    [activeReferenceId, recoverDraftByReference],
   );
 
   const forgetKnownDraft = useCallback((referenceId: string): void => {

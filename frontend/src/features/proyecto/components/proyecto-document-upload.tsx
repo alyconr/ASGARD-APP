@@ -43,7 +43,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "No fue posible cargar el PDF del proyecto.";
+  return "No fue posible cargar el PDF del proyecto formativo.";
 }
 
 function validatePdfFile(file: File | null): string | null {
@@ -160,7 +160,7 @@ export function ProyectoDocumentUpload({
   };
 
   return (
-    <section aria-label="Cargue PDF del proyecto" className="grid gap-4">
+    <section aria-label="Cargue PDF del proyecto formativo" className="grid gap-4">
       <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -169,7 +169,7 @@ export function ProyectoDocumentUpload({
             </span>
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                PDF del proyecto
+                PDF del proyecto formativo
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
                 Se conserva como evidencia documental en MinIO; no se usa para

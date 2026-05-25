@@ -42,7 +42,7 @@ describe("ProyectoDocumentUpload", () => {
       />,
     );
 
-    expect(screen.getByText(/PDF del proyecto/i)).toBeInTheDocument();
+    expect(screen.getByText(/PDF del proyecto formativo/i)).toBeInTheDocument();
     expect(screen.getAllByText(/evidencia documental/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/fuente estructurada/i).length).toBeGreaterThan(
       0,

@@ -3,8 +3,6 @@
 import { useRef, useState } from "react";
 import {
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle2,
   Eye,
   FileSpreadsheet,
@@ -230,26 +228,38 @@ function CompetenciasModal({
       role="dialog"
     >
       <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[color:var(--card-border)] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold tracking-[0.16em] text-[var(--accent-strong)] uppercase">
-              Competencia {safeIndex + 1} de {total}
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-[var(--foreground)]">
-              {competencia.codigo_competencia}
+        <header className="flex flex-col gap-4 border-b border-[var(--line)] px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="text-lg font-semibold text-[var(--foreground)]">
+              Revisión de Estructura Curricular por Competencia
             </h3>
-            <p className="mt-1 max-w-3xl text-sm leading-6 break-words text-[var(--muted)]">
-              {competencia.nombre_competencia}
-            </p>
+            <button
+              type="button"
+              aria-label="Cerrar modal de competencias"
+              onClick={onClose}
+              className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            aria-label="Cerrar modal de competencias"
-            onClick={onClose}
-            className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            <X className="h-4 w-4" />
-          </button>
+
+          <div className="grid gap-1.5">
+            <label htmlFor="competencia-select" className="text-xs font-semibold tracking-wider text-[var(--muted)] uppercase">
+              Seleccionar competencia
+            </label>
+            <select
+              id="competencia-select"
+              value={safeIndex}
+              onChange={(e) => onIndexChange(Number(e.target.value))}
+              className="w-full rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] transition outline-none focus:border-[var(--accent)] cursor-pointer"
+            >
+              {preview.competencias.map((comp, idx) => (
+                <option key={comp.competencia_id} value={idx}>
+                  [{comp.codigo_competencia}] {comp.nombre_competencia}
+                </option>
+              ))}
+            </select>
+          </div>
         </header>
 
         <div className="min-h-0 overflow-y-auto px-5 py-4">
@@ -335,30 +345,6 @@ function CompetenciasModal({
             </section>
           </div>
         </div>
-
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] px-5 py-4">
-          <button
-            type="button"
-            disabled={safeIndex === 0}
-            onClick={() => onIndexChange(Math.max(0, safeIndex - 1))}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Anterior
-          </button>
-          <span className="text-sm font-semibold text-[var(--muted)]">
-            {safeIndex + 1} / {total}
-          </span>
-          <button
-            type="button"
-            disabled={safeIndex >= total - 1}
-            onClick={() => onIndexChange(Math.min(total - 1, safeIndex + 1))}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Siguiente
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </footer>
       </section>
     </div>
   );

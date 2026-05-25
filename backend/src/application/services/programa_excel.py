@@ -458,6 +458,7 @@ class ProgramaExcelImportService:
             draft=draft,
             workbook=workbook,
         )
+        draft.paso_actual = "revision-programa"
         draft.payload_json = _merge_excel_import_into_payload(
             payload=draft.payload_json,
             result=import_result,
@@ -1030,12 +1031,7 @@ def _move_duplicate_conocimientos_to_pending(
             _norm(row.descripcion),
         )
         if key in seen:
-            pending.append(
-                _pending_from_conocimiento(
-                    row,
-                    MotivoPendienteAsignacion.ASOCIACION_AMBIGUA,
-                )
-            )
+            # Duplicates are discarded and not sent to reconciliation
             continue
         seen.add(key)
         assignable.append(row)
@@ -1051,12 +1047,7 @@ def _move_duplicate_criterios_to_pending(
     for row in rows:
         key = (row.competencia_id, _norm(row.descripcion))
         if key in seen:
-            pending.append(
-                _pending_from_criterio(
-                    row,
-                    MotivoPendienteAsignacion.ASOCIACION_AMBIGUA,
-                )
-            )
+            # Duplicates are discarded and not sent to reconciliation
             continue
         seen.add(key)
         assignable.append(row)

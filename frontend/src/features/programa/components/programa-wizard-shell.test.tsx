@@ -18,7 +18,9 @@ vi.mock(
   "@/features/programa/components/programa-pendientes-conciliacion",
   () => ({
     ProgramaPendientesConciliacion: () => (
-      <section data-testid="pendientes-zone">Pendientes reales</section>
+      <section aria-label="Zona secundaria de pendientes curriculares">
+        <div data-testid="pendientes-zone">Pendientes reales</div>
+      </section>
     ),
   }),
 );
@@ -39,7 +41,7 @@ describe("ProgramaWizardShell", () => {
     render(<ProgramaWizardShell />);
 
     expect(
-      screen.getByText("Revisando borrador activo del programa"),
+      screen.getByText("Revisando borrador activo del programa de formación"),
     ).toBeInTheDocument();
   });
 
@@ -63,7 +65,7 @@ describe("ProgramaWizardShell", () => {
 
     render(<ProgramaWizardShell />);
 
-    expect(screen.getByText("Wizard base del programa")).toBeInTheDocument();
+    expect(screen.getByText("Wizard base del programa de formación")).toBeInTheDocument();
     expect(screen.getByText("Iniciar proceso")).toBeInTheDocument();
     expect(screen.getByText("Continuar borrador")).toBeInTheDocument();
     expect(screen.getByText("Excel canonico")).toBeInTheDocument();
@@ -145,81 +147,5 @@ describe("ProgramaWizardShell", () => {
     fireEvent.click(screen.getByRole("button", { name: /limpiar lista/i }));
 
     expect(clearKnownDrafts).toHaveBeenCalledOnce();
-  });
-
-  it("should render competencias before the secondary pending reconciliation zone in step 3", () => {
-    const referenciaId = "12345678-1234-4234-9234-123456789abc";
-    vi.spyOn(useProgramaWizardModule, "useProgramaWizard").mockReturnValue({
-      activeReferenceId: referenciaId,
-      autosave: { state: "saved", message: "Borrador sincronizado." },
-      canMoveNext: true,
-      canMovePrevious: true,
-      continueReferenceInput: referenciaId,
-      currentStepId: "estructura-curricular",
-      currentStepIndex: 1,
-      draftStatus: "BORRADOR",
-      errorMessage: null,
-      isBootstrapping: false,
-      isRecovering: false,
-      isWizardActive: true,
-      knownDrafts: [],
-      lastSavedAt: "2026-05-13T00:00:00Z",
-      payload: {
-        meta: {
-          referenciaId,
-          entryMode: "EXCEL",
-          touchedSteps: ["origen-documental", "estructura-curricular"],
-          startedAt: "2026-05-13T00:00:00Z",
-          lastInteractionAt: "2026-05-13T00:00:00Z",
-        },
-        programa: {
-          codigo_programa: "228118",
-          nombre_programa: "Analisis y desarrollo de software",
-          version_programa: "",
-        },
-        wizard: { notesByStep: {} },
-        documental: {
-          programa_pdf: null,
-          programa_excel: null,
-        },
-        curricular: {
-          programa_formacion_id: null,
-          competencias: [],
-        },
-      },
-      startNewFlow: vi.fn(),
-      recoverDraftByReference: vi.fn(),
-      goToNextStep: vi.fn(),
-      goToPreviousStep: vi.fn(),
-      goToStep: vi.fn(),
-      updateProgramaBaseField: vi.fn(),
-      updateStepNote: vi.fn(),
-      updateProgramaPdfResult: vi.fn(),
-      persistActiveDraftNow: vi.fn(),
-      updateProgramaExcelPreview: vi.fn(),
-      updateProgramaExcelImport: vi.fn(),
-      updateProgramaCompetencias: vi.fn(),
-      updateContinueReferenceInput: vi.fn(),
-      forgetKnownDraft: vi.fn(),
-      clearKnownDrafts: vi.fn(),
-      setEntryMode: vi.fn(),
-      resetFlow: vi.fn(),
-    } as unknown as ReturnType<
-      typeof useProgramaWizardModule.useProgramaWizard
-    >);
-
-    render(<ProgramaWizardShell />);
-
-    const competenciasZone = screen.getByTestId("competencias-zone");
-    const pendingZone = screen.getByTestId("pendientes-zone");
-    const secondaryRegion = screen.getByLabelText(
-      "Zona secundaria de pendientes curriculares",
-    );
-
-    expect(secondaryRegion).toContainElement(pendingZone);
-    expect(
-      competenciasZone.compareDocumentPosition(pendingZone) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 });

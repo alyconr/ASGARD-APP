@@ -163,7 +163,7 @@ function StepWorkspace({
             {currentStep.description}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            El proyecto usa PDF como evidencia documental y Excel como fuente
+            El proyecto formativo usa PDF como evidencia documental y Excel como fuente
             estructurada activa.
           </p>
         </div>
@@ -236,7 +236,7 @@ export function ProyectoWizardShell({
   if (availability.proyecto_bloqueado || !availability.programa_completo) {
     return (
       <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-        El wizard del proyecto permanece bloqueado hasta cerrar el programa.
+        El wizard del proyecto formativo permanece bloqueado hasta cerrar el programa de formación.
       </section>
     );
   }
@@ -247,7 +247,7 @@ export function ProyectoWizardShell({
         <div className="flex items-center gap-3 text-[var(--accent-strong)]">
           <RefreshCcw className="h-5 w-5 animate-spin" />
           <p className="text-sm font-semibold">
-            Revisando borrador activo del proyecto
+            Revisando borrador activo del proyecto formativo
           </p>
         </div>
       </section>
@@ -256,7 +256,7 @@ export function ProyectoWizardShell({
 
   return (
     <section
-      aria-label="Wizard base del proyecto"
+      aria-label="Wizard base del proyecto formativo"
       className="grid gap-5 rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4"
     >
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-lg border border-[color:var(--card-border)] bg-white px-5 py-4">
@@ -268,12 +268,12 @@ export function ProyectoWizardShell({
             </p>
           </div>
           <h2 className="mt-2 text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)] lg:text-3xl">
-            Wizard base del proyecto
+            Wizard base del proyecto formativo
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-            El proyecto ya esta habilitado porque el programa esta COMPLETO.
+            El proyecto formativo ya esta habilitado porque el programa de formación esta COMPLETO.
             Este flujo guarda PDF como evidencia y usa la matriz Excel como
-            fuente estructurada del proyecto.
+            fuente estructurada del proyecto formativo.
           </p>
         </div>
 
@@ -306,14 +306,14 @@ export function ProyectoWizardShell({
             </h3>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
               Crea un borrador independiente de tipo PROYECTO asociado al
-              programa completo. El primer paso es fuente documental:
+              programa de formación completo. El primer paso es fuente documental:
               PDF evidencia y Excel estructurado.
             </p>
             <ActionButton
               className="mt-4"
               onClick={() => void controller.startNewFlow()}
             >
-              Iniciar wizard del proyecto
+              Iniciar wizard del proyecto formativo
             </ActionButton>
           </section>
 
@@ -393,7 +393,7 @@ export function ProyectoWizardShell({
 
       {controller.isWizardActive && controller.payload !== null ? (
         <section className="grid gap-5 lg:grid-cols-[21rem_minmax(0,1fr)]">
-          <aside className="grid gap-4">
+          <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6 w-full h-fit">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
               <WizardProgress
                 currentStepId={controller.currentStepId}
@@ -414,7 +414,7 @@ export function ProyectoWizardShell({
               </p>
             </section>
             <ActionButton tone="quiet" onClick={controller.resetFlow}>
-              Volver al inicio del proyecto
+              Volver al inicio del proyecto formativo
             </ActionButton>
           </aside>
 

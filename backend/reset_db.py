@@ -1,6 +1,6 @@
 import psycopg
 
-DB_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
+DB_URL = "postgresql://postgres:postgres@localhost:5432/postgres"
 
 conn = psycopg.connect(DB_URL, autocommit=True)
 cur = conn.cursor()
