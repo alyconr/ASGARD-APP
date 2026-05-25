@@ -434,7 +434,11 @@ def _missing_for_competencia(
 def _is_practical_stage_competence(competencia: Competencia) -> bool:
     normalized_name = _normalize_text(competencia.nombre_competencia)
     normalized_code = competencia.codigo_competencia.strip()
-    return normalized_code == "999999999" or "etapa practica" in normalized_name
+    return (
+        normalized_code == "999999999"
+        or "etapa practica" in normalized_name
+        or "etapa productiva" in normalized_name
+    )
 
 
 def _normalize_text(value: str) -> str:

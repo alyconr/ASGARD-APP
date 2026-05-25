@@ -374,6 +374,30 @@ async def test_validacion_pasa_con_estructura_completa_y_etapa_practica() -> Non
 
 
 @pytest.mark.anyio
+async def test_validacion_pasa_con_estructura_completa_y_etapa_productiva() -> None:
+    """A complete regular competence may coexist with empty practical stage named etapa productiva with standard code."""
+    programa = build_programa()
+    programa.competencias = [
+        build_competencia(programa.id),
+        build_competencia(
+            programa.id,
+            codigo_competencia="220501046",
+            nombre_competencia="REGISTRAR ETAPA PRODUCTIVA DEL APRENDIZ",
+            resultados=0,
+            saberes=0,
+            procesos=0,
+            criterios=0,
+        ),
+    ]
+    service, _, drafts, _, _ = build_service(programa)
+
+    result = await service.validar_completitud(drafts.draft.referencia_id)
+
+    assert result.cerrable is True
+    assert result.faltantes == []
+
+
+@pytest.mark.anyio
 async def test_cierre_rechaza_programa_incompleto() -> None:
     """Closing should reject an incomplete program with structured details."""
     programa = build_programa()

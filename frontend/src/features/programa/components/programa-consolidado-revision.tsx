@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -162,6 +162,13 @@ export function ProgramaConsolidadoRevision(
       setIsValidating(false);
     }
   }, [referenciaId]);
+
+  useEffect(() => {
+    if (referenciaId) {
+      void runValidation();
+    }
+  }, [referenciaId, competencias, runValidation]);
+
 
   const handleCloseProgram = useCallback(async (): Promise<void> => {
     const currentValidation = validation?.cerrable

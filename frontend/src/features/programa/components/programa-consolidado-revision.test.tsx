@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaConsolidadoRevision } from "./programa-consolidado-revision";
 import type {
@@ -9,6 +9,40 @@ import type {
   ProgramaCompetencia,
   ResultadoAprendizaje,
 } from "@/features/programa/types";
+
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: string | Request | URL) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/pendientes-curriculares")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ pendientes: [] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          referencia_id: "11111111-1111-4111-9111-111111111111",
+          programa_id: "bbbbbbbb-bbbb-4bbb-9bbb-bbbbbbbbbbbb",
+          estado_actual: "BORRADOR",
+          cerrable: false,
+          resumen: {
+            competencias: 0,
+            resultados: 0,
+            conocimientos_saber: 0,
+            conocimientos_proceso: 0,
+            criterios: 0,
+          },
+          faltantes: [],
+        }),
+      });
+    }),
+  );
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
