@@ -135,16 +135,12 @@ function WizardProgress({
 
 function StepWorkspace({
   currentStep,
-  currentStepNote,
-  onNoteChange,
   payload,
   onPdfUploaded,
   onExcelPreview,
   onExcelImported,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
-  currentStepNote: string;
-  onNoteChange: (value: string) => void;
   payload: ProyectoWizardPayload | null;
   onPdfUploaded: (result: ProyectoPdfUploadResult) => void;
   onExcelPreview: (result: ProyectoExcelPreviewState) => void;
@@ -173,7 +169,7 @@ function StepWorkspace({
         </span>
       </header>
 
-      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="mt-5 min-w-0">
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "fuente-proyecto" && payload !== null ? (
             <div className="grid gap-4">
@@ -202,19 +198,6 @@ function StepWorkspace({
             </>
           )}
         </div>
-
-        <label className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-          <span className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-            Notas del paso
-          </span>
-          <textarea
-            value={currentStepNote}
-            onChange={(event) => onNoteChange(event.target.value)}
-            rows={7}
-            placeholder="Pendientes o decisiones de este paso."
-            className="mt-3 min-h-36 w-full resize-none rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
-          />
-        </label>
       </div>
     </section>
   );
@@ -421,14 +404,6 @@ export function ProyectoWizardShell({
           <div className="grid min-w-0 gap-4">
             <StepWorkspace
               currentStep={currentStep}
-              currentStepNote={
-                controller.payload.wizard.notesByStep[
-                  controller.currentStepId
-                ] ?? ""
-              }
-              onNoteChange={(value) =>
-                controller.updateStepNote(controller.currentStepId, value)
-              }
               payload={controller.payload}
               onPdfUploaded={(result) =>
                 controller.updateProyectoPdfResult(result)

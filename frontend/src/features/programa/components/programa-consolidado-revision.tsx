@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -162,12 +162,6 @@ export function ProgramaConsolidadoRevision(
       setIsValidating(false);
     }
   }, [referenciaId]);
-
-  useEffect(() => {
-    if (referenciaId) {
-      void runValidation();
-    }
-  }, [referenciaId, competencias, runValidation]);
 
 
   const handleCloseProgram = useCallback(async (): Promise<void> => {
@@ -870,7 +864,7 @@ function CurriculumRevisionModal({
     >
       <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[color:var(--card-border)] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
-          <div className="flex-1 min-w-[240px]">
+          <div className="flex-1 min-w-0 max-w-full sm:max-w-3xl">
             <label
               htmlFor="modal-competencia-select"
               className="block text-xs font-semibold tracking-[0.16em] text-[var(--accent-strong)] uppercase mb-1"
@@ -881,7 +875,7 @@ function CurriculumRevisionModal({
               id="modal-competencia-select"
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              className="mt-1 block w-full max-w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] truncate"
             >
               {competencias.map((comp) => (
                 <option key={comp.id} value={comp.id}>
@@ -895,7 +889,7 @@ function CurriculumRevisionModal({
             type="button"
             aria-label="Cerrar modal de revisión curricular"
             onClick={onClose}
-            className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            className="inline-flex min-h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
             <span className="text-xl font-medium">&times;</span>
           </button>

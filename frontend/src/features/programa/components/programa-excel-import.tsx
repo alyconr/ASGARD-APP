@@ -237,13 +237,13 @@ function CompetenciasModal({
               type="button"
               aria-label="Cerrar modal de competencias"
               onClick={onClose}
-              className="inline-flex min-h-10 w-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              className="inline-flex min-h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white text-[var(--foreground)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 min-w-0 max-w-full">
             <label htmlFor="competencia-select" className="text-xs font-semibold tracking-wider text-[var(--muted)] uppercase">
               Seleccionar competencia
             </label>
@@ -251,11 +251,12 @@ function CompetenciasModal({
               id="competencia-select"
               value={safeIndex}
               onChange={(e) => onIndexChange(Number(e.target.value))}
-              className="w-full rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] transition outline-none focus:border-[var(--accent)] cursor-pointer"
+              className="w-full max-w-full rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm text-[var(--foreground)] transition outline-none focus:border-[var(--accent)] cursor-pointer truncate"
             >
               {preview.competencias.map((comp, idx) => (
                 <option key={comp.competencia_id} value={idx}>
-                  [{comp.codigo_competencia}] {comp.nombre_competencia}
+                  [{comp.codigo_competencia}] {comp.nombre_competencia.substring(0, 80)}
+                  {comp.nombre_competencia.length > 80 ? "..." : ""}
                 </option>
               ))}
             </select>

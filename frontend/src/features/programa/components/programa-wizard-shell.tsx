@@ -7,7 +7,6 @@ import {
   ArrowRight,
   BookOpenCheck,
   FileSpreadsheet,
-  FolderOpen,
   ListX,
   RefreshCcw,
   Route,
@@ -17,11 +16,9 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
-import { ProgramaCompetenciasManager } from "@/features/programa/components/programa-competencias-manager";
 import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
 import { ProgramaExcelImport } from "@/features/programa/components/programa-excel-import";
-import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
 import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
@@ -29,7 +26,6 @@ import { cn } from "@/lib/utils";
 import type {
   ProgramaCierreResponse,
   ProgramaCompetencia,
-  ProgramaCompetenciaListResponse,
   ProgramaExcelImportResponse,
   ProgramaExcelImportState,
   ProgramaExcelPreviewResponse,
@@ -121,7 +117,6 @@ function ErrorBanner({
 
 type StepWorkspaceProps = {
   currentStep: ProgramaWizardStepDefinition;
-  currentStepNote: string;
   programaExcelResult: ProgramaExcelImportState | null;
   programaPdfResult: ProgramaPdfUploadResult | null;
   referenceId: string;
@@ -133,12 +128,8 @@ type StepWorkspaceProps = {
   };
   onProgramaExcelPreviewed: (result: ProgramaExcelPreviewResponse) => void;
   onProgramaExcelImported: (result: ProgramaExcelImportResponse) => void;
-  onProgramaCompetenciasSynced: (
-    result: ProgramaCompetenciaListResponse,
-  ) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
-  onNoteChange: (value: string) => void;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onProgramaCerrado: (result: ProgramaCierreResponse) => void;
   competencias: ProgramaCompetencia[];
@@ -147,7 +138,6 @@ type StepWorkspaceProps = {
 
 function StepWorkspace({
   currentStep,
-  currentStepNote,
   programaExcelResult,
   programaPdfResult,
   referenceId,
@@ -155,10 +145,8 @@ function StepWorkspace({
   programaValue,
   onProgramaExcelPreviewed,
   onProgramaExcelImported,
-  onProgramaCompetenciasSynced,
   onProgramaPdfUploaded,
   onPersistDraftBeforeExcelPreview,
-  onNoteChange,
   onNavigateToStep,
   onProgramaCerrado,
   competencias,
@@ -187,7 +175,7 @@ function StepWorkspace({
         </span>
       </header>
 
-      <div className="mt-5 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="mt-5 min-w-0">
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
@@ -220,19 +208,6 @@ function StepWorkspace({
             />
           )}
         </div>
-
-        <label className="sticky top-5 self-start rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-          <span className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-            Notas del paso
-          </span>
-          <textarea
-            value={currentStepNote}
-            onChange={(event) => onNoteChange(event.target.value)}
-            rows={7}
-            placeholder="Pendientes o decisiones de este paso."
-            className="mt-3 min-h-36 w-full resize-none rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm leading-6 text-[var(--foreground)] transition outline-none placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)]"
-          />
-        </label>
       </div>
     </section>
   );
@@ -516,11 +491,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
             <div className="flex-1 overflow-y-auto rounded-lg">
               <StepWorkspace
                 currentStep={currentStep}
-                currentStepNote={
-                  controller.payload.wizard.notesByStep[
-                    controller.currentStepId
-                  ] ?? ""
-                }
                 programaExcelResult={controller.payload.documental.programa_excel}
                 programaPdfResult={controller.payload.documental.programa_pdf}
                 competencias={controller.payload.curricular.competencias}
@@ -532,15 +502,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 programaValue={controller.payload.programa}
                 onProgramaExcelPreviewed={controller.updateProgramaExcelPreview}
                 onProgramaExcelImported={controller.updateProgramaExcelImport}
-                onProgramaCompetenciasSynced={
-                  controller.updateProgramaCompetencias
-                }
                 onProgramaPdfUploaded={controller.updateProgramaPdfResult}
                 onPersistDraftBeforeExcelPreview={
                   controller.persistActiveDraftNow
-                }
-                onNoteChange={(value) =>
-                  controller.updateStepNote(controller.currentStepId, value)
                 }
                 onNavigateToStep={controller.goToStep}
                 onProgramaCerrado={controller.markProgramaClosed}

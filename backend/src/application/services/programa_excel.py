@@ -666,6 +666,7 @@ class ProgramaExcelImportService:
                 raise ProgramaExcelValidationError(
                     "El Excel no coincide con el programa ya asociado al borrador",
                 )
+            programa.estado = EstadoBloque.BORRADOR
             return programa
 
         programa = await self._curriculum_repository.get_programa_by_code_version(
@@ -673,6 +674,7 @@ class ProgramaExcelImportService:
             row.version_programa,
         )
         if programa is not None:
+            programa.estado = EstadoBloque.BORRADOR
             return programa
 
         programa = await self._curriculum_repository.add_programa(
