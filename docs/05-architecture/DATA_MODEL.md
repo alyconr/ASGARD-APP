@@ -511,6 +511,35 @@ Representa la trazabilidad mínima del sistema.
 - entidad_id es obligatorio
 - accion es obligatoria
 
+
+---
+
+## 5.11 PlaneacionPedagogica
+
+Representa la planeación pedagógica de una competencia para un proyecto formativo.
+
+### Campos
+- id (UUID, clave primaria)
+- proyecto_id (UUID, FK a `proyectos_formativos`, CASCADE)
+- competencia_id (UUID, FK a `competencias`, CASCADE)
+- fase_id (UUID, FK a `fases_proyecto`, nullable, SET NULL)
+- actividad_id (UUID, FK a `actividades_proyecto`, nullable, SET NULL)
+- estado (EstadoBloque: BORRADOR, COMPLETO)
+- datos_complementarios (JSONB, contiene campos extensibles como estrategias didácticas, ambientes, recursos, duración, e instructor)
+- storage_key (string nullable, prefijo canónico `planeaciones-pedagogicas/{programa_id}/{proyecto_id}/{competencia_id}/planeacion.json` en MinIO)
+- file_name (string nullable, nombre del archivo generado)
+- content_type (string nullable, content-type del archivo)
+- checksum_sha256 (string nullable, hash del contenido del archivo)
+- fecha_generacion (datetime nullable, fecha en que se confirmó y cargó el archivo)
+- version (integer, versión del documento)
+- fecha_creacion (datetime)
+- fecha_actualizacion (datetime)
+
+### Relaciones M2M
+- `planeacion_resultados` (Many-to-Many entre `PlaneacionPedagogica` y `ResultadoAprendizaje`)
+- `planeacion_conocimientos` (Many-to-Many entre `PlaneacionPedagogica` y `Conocimiento`)
+- `planeacion_criterios` (Many-to-Many entre `PlaneacionPedagogica` y `CriterioEvaluacion`)
+
 ---
 
 # 6. Relaciones del modelo

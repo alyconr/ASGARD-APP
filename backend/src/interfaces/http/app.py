@@ -21,6 +21,9 @@ from src.interfaces.http.controllers.health import router as health_router
 from src.interfaces.http.controllers.pendientes_curriculares import (
     router as pendientes_curriculares_router,
 )
+from src.interfaces.http.controllers.planeacion import (
+    router as planeacion_router,
+)
 from src.interfaces.http.controllers.programa_cierre import (
     router as programa_cierre_router,
 )
@@ -79,6 +82,7 @@ def create_application() -> FastAPI:
     application.include_router(criterios_router)
     application.include_router(pendientes_curriculares_router)
     application.include_router(proyecto_cargue_router)
+    application.include_router(planeacion_router)
 
     return application
 

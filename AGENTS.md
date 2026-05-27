@@ -57,6 +57,16 @@ A partir de este refactor integral:
 - el prefijo canonico de MinIO para documentos del proyecto es `proyectos-formativos/{referencia_id}/documentos/...`;
 - el prefijo canonico de MinIO para Excel del proyecto es `proyectos-formativos/{referencia_id}/excel/...`.
 
+## Decision funcional WIZARD-PLANEACION-PEDAGOGICA
+A partir de la implementación de la planeación pedagógica:
+
+- la planeación pedagógica se organiza *por competencia* asociada al programa de formación y vinculada a una fase y actividad del proyecto formativo;
+- se implementa el modelo relacional `PlaneacionPedagogica` y tablas M2M de asociación para resultados (`planeacion_resultados`), conocimientos (`planeacion_conocimientos`), y criterios (`planeacion_criterios`);
+- los campos complementarios didácticos (estrategias didácticas, ambientes de aprendizaje, recursos y medios, duración en horas, e instructor responsable) se consolidan de forma flexible y extensible dentro de una columna JSONB `datos_complementarios`;
+- al confirmar la planeación de una competencia, se genera un archivo estructurado `.json` que se almacena en MinIO con el prefijo `planeaciones-pedagogicas/{programa_id}/{proyecto_id}/{competencia_id}/planeacion.json`;
+- la eliminación de una planeación elimina tanto el registro de base de datos como el archivo físico de MinIO;
+- completar la planeación para una competencia guarda de manera independiente el estado sin afectar o sobrescribir las demás competencias del proyecto.
+
 ---
 
 # 1. Prioridad de instrucciones

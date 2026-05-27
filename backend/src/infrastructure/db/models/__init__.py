@@ -10,6 +10,7 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
     FaseProyecto,
@@ -25,6 +26,7 @@ __all__ = [
     "ElementoCurricularPendiente",
     "EventoAuditoria",
     "FaseProyecto",
+    "PlaneacionPedagogica",
     "ProgramaFormacion",
     "ProyectoFormativo",
     "ResultadoAprendizaje",
