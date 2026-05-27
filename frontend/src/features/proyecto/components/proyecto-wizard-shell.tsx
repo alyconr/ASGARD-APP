@@ -26,6 +26,7 @@ import type {
 } from "@/features/proyecto/types";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
 import { cn } from "@/lib/utils";
+import { EstadoDocumentalResponse } from "@/features/drafts/types";
 
 const STEP_ICONS: Record<
   ProyectoWizardStepId,
@@ -137,12 +138,16 @@ function StepWorkspace({
   onPdfUploaded,
   onExcelPreview,
   onExcelImported,
+  docState,
+  onHabilitarCarguePdf,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   payload: ProyectoWizardPayload | null;
   onPdfUploaded: (result: ProyectoPdfUploadResult) => void;
   onExcelPreview: (result: ProyectoExcelPreviewState) => void;
   onExcelImported: (result: ProyectoExcelPreviewState) => void;
+  docState: EstadoDocumentalResponse | null;
+  onHabilitarCarguePdf: () => void;
 }>): React.JSX.Element {
   const Icon = STEP_ICONS[currentStep.id];
 
@@ -175,6 +180,10 @@ function StepWorkspace({
                 currentResult={payload.documental.proyecto_pdf}
                 onUploaded={onPdfUploaded}
                 referenciaId={payload.meta.referenciaId}
+                habilitado={docState?.documentos_habilitados ?? false}
+                carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                onHabilitarCarguePdf={onHabilitarCarguePdf}
+                documentoExistente={docState?.proyecto_pdf}
               />
               <ProyectoExcelImport
                 currentResult={payload.documental.fuente_estructurada}
@@ -468,6 +477,8 @@ export function ProyectoWizardShell({
               onExcelImported={(result) =>
                 controller.updateProyectoExcelImport(result)
               }
+              docState={controller.docState}
+              onHabilitarCarguePdf={controller.habilitarCarguePdf}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">

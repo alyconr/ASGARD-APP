@@ -14,6 +14,10 @@ from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.drafts import BorradorSesion
 from src.infrastructure.db.models.proyecto import ProyectoFormativo
+from src.infrastructure.storage.document_storage import (
+    build_programa_storage_prefix,
+    build_proyecto_storage_prefix,
+)
 
 
 class DocumentStorageProtocol(Protocol):
@@ -84,6 +88,25 @@ class ProyectoCargueService:
                         except ValueError:
                             pass
 
+        nombre_prog = None
+        codigo_prog = None
+        version_prog = None
+        nombre_proj = None
+        codigo_proj = None
+
+        if draft_programa is not None and isinstance(draft_programa.payload_json, dict):
+            prog_payload = draft_programa.payload_json.get("programa")
+            if isinstance(prog_payload, dict):
+                nombre_prog = prog_payload.get("nombre_programa")
+                codigo_prog = prog_payload.get("codigo_programa")
+                version_prog = prog_payload.get("version_programa")
+
+        if draft_proyecto is not None and isinstance(draft_proyecto.payload_json, dict):
+            proj_payload = draft_proyecto.payload_json.get("proyecto")
+            if isinstance(proj_payload, dict):
+                nombre_proj = proj_payload.get("nombre_proyecto")
+                codigo_proj = proj_payload.get("codigo_proyecto")
+
         # 2. If we have programa_id, find the other draft and delete DB records
         if programa_id is not None:
             # Delete relational project formativo first (due to foreign key constraint)
@@ -93,11 +116,16 @@ class ProyectoCargueService:
             proj_db_result = await self._session.execute(proj_db_statement)
             proyecto_db = proj_db_result.scalar_one_or_none()
             if proyecto_db is not None:
+                nombre_proj = proyecto_db.nombre_proyecto
+                codigo_proj = proyecto_db.codigo_proyecto
                 await self._session.delete(proyecto_db)
 
             # Delete relational program
             programa_db = await self._session.get(ProgramaFormacion, programa_id)
             if programa_db is not None:
+                nombre_prog = programa_db.nombre_programa
+                codigo_prog = programa_db.codigo_programa
+                version_prog = programa_db.version_programa
                 await self._session.delete(programa_db)
 
             await self._session.flush()
@@ -137,10 +165,26 @@ class ProyectoCargueService:
                                 break
 
         # 3. Clean files from MinIO
+        if nombre_prog and codigo_prog:
+            prefix_prog = build_programa_storage_prefix(
+                nombre=str(nombre_prog),
+                codigo=str(codigo_prog),
+                version=str(version_prog) if version_prog else "1"
+            )
+            await self._storage_service.delete_by_prefix(prefix=f"{prefix_prog}/")
+
         if programa_ref_id is not None:
             await self._storage_service.delete_by_prefix(
                 prefix=f"programas/{programa_ref_id}/"
             )
+
+        if nombre_proj and codigo_proj:
+            prefix_proj = build_proyecto_storage_prefix(
+                nombre=str(nombre_proj),
+                codigo=str(codigo_proj)
+            )
+            await self._storage_service.delete_by_prefix(prefix=f"{prefix_proj}/")
+
         if proyecto_ref_id is not None:
             await self._storage_service.delete_by_prefix(
                 prefix=f"proyectos-formativos/{proyecto_ref_id}/"

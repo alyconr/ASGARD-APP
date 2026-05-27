@@ -5,10 +5,14 @@ from __future__ import annotations
 import uuid
 
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock
 
 from src.application.dto.drafts import DraftDTO, SaveDraftCommand
 from src.application.services.drafts import DraftNotFoundError
 from src.domain.drafts.types import TipoBloqueBorrador
+from src.domain.shared.enums import EstadoBloque
+from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.session import get_async_session
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.drafts import get_draft_service
 
@@ -117,3 +121,123 @@ def test_draft_save_rejects_invalid_program_state() -> None:
     app.dependency_overrides.clear()
 
     assert response.status_code == 422
+
+
+def test_get_estado_documental_empty() -> None:
+    """The endpoint should return default/empty values when no drafts exist."""
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    session.execute.return_value = mock_result
+
+    app.dependency_overrides[get_async_session] = lambda: session
+    client = TestClient(app)
+    referencia_id = uuid.uuid4()
+
+    response = client.get(f"/api/v1/drafts/{referencia_id}/estado-documental")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    res_json = response.json()
+    assert res_json["programa_excel"] is None
+    assert res_json["proyecto_excel"] is None
+    assert res_json["programa_pdf"] is None
+    assert res_json["proyecto_pdf"] is None
+    assert res_json["programa_importado"] is False
+    assert res_json["proyecto_importado"] is False
+    assert res_json["documentos_habilitados"] is False
+    assert res_json["cargue_pdf_habilitado"] is False
+
+
+def test_get_estado_documental_with_data() -> None:
+    """The endpoint should parse and return metadata if program and project drafts are loaded."""
+    referencia_id = uuid.uuid4()
+    draft_programa = BorradorSesion(
+        tipo_bloque="PROGRAMA",
+        referencia_id=referencia_id,
+        paso_actual="revision-programa",
+        payload_json={
+            "documental": {
+                "programa_excel": {
+                    "documento": {
+                        "original_filename": "programa.xlsx",
+                        "storage_key": "programas/prog/excel/matriz-programa.xlsx",
+                        "size_bytes": 1024,
+                        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "checksum_sha256": "hash123",
+                    },
+                    "confirmacion": {"estado": "IMPORTADO"},
+                    "updated_at": "2026-05-27T20:13:00Z"
+                },
+                "programa_pdf": {
+                    "documento": {
+                        "original_filename": "programa.pdf",
+                        "storage_key": "programas/prog/documentos/programa-formacion.pdf",
+                        "size_bytes": 2048,
+                        "content_type": "application/pdf",
+                        "checksum_sha256": "pdfhash",
+                    },
+                    "updated_at": "2026-05-27T20:14:00Z"
+                }
+            }
+        },
+        estado_borrador=EstadoBloque.COMPLETO,
+    )
+    draft_proyecto = BorradorSesion(
+        tipo_bloque="PROYECTO",
+        referencia_id=referencia_id,
+        paso_actual="fuente-proyecto",
+        payload_json={
+            "documental": {
+                "fuente_estructurada": {
+                    "documento": {
+                        "original_filename": "proyecto.xlsx",
+                        "storage_key": "proyectos/proj/excel/matriz-proyecto.xlsx",
+                        "size_bytes": 4096,
+                        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "checksum_sha256": "hash456",
+                    },
+                    "confirmacion": {"estado": "IMPORTADO"},
+                    "updated_at": "2026-05-27T20:15:00Z"
+                },
+                "proyecto_pdf": {
+                    "documento": {
+                        "original_filename": "proyecto.pdf",
+                        "storage_key": "proyectos/proj/documentos/proyecto-formativo.pdf",
+                        "size_bytes": 8192,
+                        "content_type": "application/pdf",
+                        "checksum_sha256": "pdfhash2",
+                    },
+                    "updated_at": "2026-05-27T20:16:00Z"
+                },
+                "cargue_pdf_habilitado": True
+            }
+        },
+        estado_borrador=EstadoBloque.BORRADOR,
+    )
+
+    session = AsyncMock()
+    mock_result_prog = MagicMock()
+    mock_result_prog.scalar_one_or_none.return_value = draft_programa
+    mock_result_proj = MagicMock()
+    mock_result_proj.scalar_one_or_none.return_value = draft_proyecto
+    session.execute.side_effect = [mock_result_prog, mock_result_proj]
+
+    app.dependency_overrides[get_async_session] = lambda: session
+    client = TestClient(app)
+
+    response = client.get(f"/api/v1/drafts/{referencia_id}/estado-documental")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    res_json = response.json()
+    assert res_json["programa_excel"]["original_filename"] == "programa.xlsx"
+    assert res_json["programa_pdf"]["original_filename"] == "programa.pdf"
+    assert res_json["proyecto_excel"]["original_filename"] == "proyecto.xlsx"
+    assert res_json["proyecto_pdf"]["original_filename"] == "proyecto.pdf"
+    assert res_json["programa_importado"] is True
+    assert res_json["proyecto_importado"] is True
+    assert res_json["documentos_habilitados"] is True
+    assert res_json["cargue_pdf_habilitado"] is True

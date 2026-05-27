@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
+import unicodedata
 from typing import Protocol
 from urllib.parse import quote
 
@@ -203,3 +205,36 @@ def build_pdf_metadata(
         "original-filename-encoding": PDF_METADATA_FILENAME_ENCODING,
         "checksum-sha256": checksum_sha256,
     }
+
+
+def sanitize_directory_name(name: str) -> str:
+    """Normalize and sanitize a name to make it suitable as a directory name in MinIO.
+
+    1. Removes accents (unicodedata.normalize('NFKD')).
+    2. Keeps only basic alphanumeric, spaces, hyphens, and underscores.
+    3. Replaces spaces/special characters with hyphens.
+    4. Converts to lowercase.
+    5. Avoids double hyphens.
+    """
+    if not name:
+        return "sin-nombre"
+    normalized = unicodedata.normalize("NFKD", name)
+    without_accents = "".join(c for c in normalized if not unicodedata.combining(c))
+    replaced = re.sub(r"[^a-zA-Z0-9\-_]+", "-", without_accents)
+    clean = re.sub(r"-+", "-", replaced).strip("-")
+    return clean.lower() or "sin-nombre"
+
+
+def build_programa_storage_prefix(*, nombre: str, codigo: str, version: str | None) -> str:
+    """Build a business-legible path prefix for training programs."""
+    nombre_san = sanitize_directory_name(nombre)
+    codigo_san = sanitize_directory_name(codigo)
+    version_san = sanitize_directory_name(version or "1")
+    return f"programas/{nombre_san}-{codigo_san}-{version_san}"
+
+
+def build_proyecto_storage_prefix(*, nombre: str, codigo: str) -> str:
+    """Build a business-legible path prefix for project formativos."""
+    nombre_san = sanitize_directory_name(nombre)
+    codigo_san = sanitize_directory_name(codigo)
+    return f"proyectos-formativos/{nombre_san}-{codigo_san}"

@@ -67,6 +67,14 @@ A partir de la implementación de la planeación pedagógica:
 - la eliminación de una planeación elimina tanto el registro de base de datos como el archivo físico de MinIO;
 - completar la planeación para una competencia guarda de manera independiente el estado sin afectar o sobrescribir las demás competencias del proyecto.
 
+## Decision funcional REFACTOR-FLUJO-DOCUMENTAL-RESTRICCION-REHIDRATACION
+A partir del refactor del flujo documental de programa y proyecto:
+
+- el cargue de PDFs de evidencia para programa y proyecto se bloquea en frontend y backend hasta que ambas matrices Excel (programa y proyecto) se encuentren en estado `IMPORTADO`;
+- el backend expone un endpoint de rehidratación `GET /api/v1/drafts/{referencia_id}/estado-documental` para consultar y reconstruir el estado completo y metadatos de los archivos del wizard;
+- al confirmarse ambas matrices Excel, se habilita una acción "Habilitar cargue de documentos PDF" que guarda el flag `cargue_pdf_habilitado` en la sección `documental` del borrador del proyecto formativo, lo que desbloquea visual y operativamente la carga de PDFs;
+- todos los archivos subidos a MinIO se guardan en rutas legibles y normalizadas bajo los prefijos de negocio `programas/{nombre_programa_sanitizado}-{codigo_programa}-{version_programa}/` y `proyectos-formativos/{nombre_proyecto_sanitizado}-{codigo_proyecto_sofia}/`, removiendo carpetas con UUIDs aleatorios de la estructura de MinIO.
+
 ---
 
 # 1. Prioridad de instrucciones

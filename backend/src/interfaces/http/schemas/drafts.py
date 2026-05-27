@@ -73,3 +73,27 @@ class SaveDraftInput(BaseModel):
         """Ensure draft state is valid for the requested block type."""
         validate_draft_state(self.tipo_bloque, self.estado_borrador)
         return self
+
+
+class DocumentoMetadataDTO(BaseModel):
+    """Metadata representing a stored file."""
+
+    original_filename: str
+    storage_key: str
+    size_bytes: int
+    content_type: str
+    checksum_sha256: str
+    updated_at: str | None = None
+
+
+class EstadoDocumentalResponse(BaseModel):
+    """Response representing the overall document upload state for a wizard session."""
+
+    programa_excel: DocumentoMetadataDTO | None = None
+    proyecto_excel: DocumentoMetadataDTO | None = None
+    programa_pdf: DocumentoMetadataDTO | None = None
+    proyecto_pdf: DocumentoMetadataDTO | None = None
+    programa_importado: bool = False
+    proyecto_importado: bool = False
+    documentos_habilitados: bool = False
+    cargue_pdf_habilitado: bool = False

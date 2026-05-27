@@ -34,3 +34,23 @@ export class DraftApiError extends Error {
     this.detail = detail;
   }
 }
+
+export interface DocumentoMetadataDTO {
+  original_filename: string;
+  storage_key: string;
+  size_bytes: number;
+  content_type: string;
+  checksum_sha256: string;
+  updated_at?: string | null;
+}
+
+export interface EstadoDocumentalResponse {
+  programa_excel: DocumentoMetadataDTO | null;
+  proyecto_excel: DocumentoMetadataDTO | null;
+  programa_pdf: DocumentoMetadataDTO | null;
+  proyecto_pdf: DocumentoMetadataDTO | null;
+  programa_importado: boolean;
+  proyecto_importado: boolean;
+  documentos_habilitados: boolean;
+  cargue_pdf_habilitado: boolean;
+}

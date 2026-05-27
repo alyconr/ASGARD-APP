@@ -18,6 +18,7 @@ import {
 import { notify } from "@/components/feedback/notifications";
 import type { ProyectoPdfUploadResult } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
+import { DocumentoMetadataDTO } from "@/features/drafts/types";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 
@@ -108,10 +109,18 @@ export function ProyectoDocumentUpload({
   currentResult,
   onUploaded,
   referenciaId,
+  habilitado = true,
+  carguePdfHabilitado = false,
+  onHabilitarCarguePdf,
+  documentoExistente,
 }: Readonly<{
   currentResult: ProyectoPdfUploadResult | null;
   onUploaded: (result: ProyectoPdfUploadResult) => void;
   referenciaId: string;
+  habilitado?: boolean;
+  carguePdfHabilitado?: boolean;
+  onHabilitarCarguePdf?: () => void;
+  documentoExistente?: DocumentoMetadataDTO | null;
 }>): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -159,9 +168,66 @@ export function ProyectoDocumentUpload({
     }
   };
 
+  const simulatedResult: ProyectoPdfUploadResult | null = currentResult ?? (documentoExistente ? {
+    documento: {
+      original_filename: documentoExistente.original_filename,
+      storage_key: documentoExistente.storage_key,
+      size_bytes: documentoExistente.size_bytes,
+      content_type: documentoExistente.content_type,
+      checksum_sha256: documentoExistente.checksum_sha256,
+      etag: null,
+    },
+    uso: "EVIDENCIA_DOCUMENTAL" as const,
+    updated_at: documentoExistente.updated_at ?? new Date().toISOString(),
+  } : null);
+
+  const isDisabled = !habilitado || !carguePdfHabilitado;
+
   return (
     <section aria-label="Cargue PDF del proyecto formativo" className="grid gap-4">
-      <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
+      {!habilitado ? (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-955">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold">Cargue de PDF de evidencia bloqueado</p>
+              <p className="mt-1 text-sm leading-6 text-rose-800">
+                El cargue de la evidencia documental PDF en MinIO se habilitará únicamente cuando se importen y confirmen las matrices de Excel canónicas tanto del programa de formación como del proyecto formativo.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {habilitado && !carguePdfHabilitado ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-955">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-emerald-950">Estructuras Excel importadas con éxito</p>
+                <p className="mt-1 text-sm leading-6 text-amber-900">
+                  Ambas matrices Excel (programa y proyecto) han sido confirmadas. Presione el botón a continuación para habilitar la carga del documento PDF como soporte de evidencia documental.
+                </p>
+              </div>
+            </div>
+            {onHabilitarCarguePdf ? (
+              <button
+                type="button"
+                onClick={onHabilitarCarguePdf}
+                className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+              >
+                Habilitar cargue de documentos PDF
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className={cn(
+        "rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4",
+        isDisabled && "opacity-50 pointer-events-none"
+      )}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">
@@ -183,7 +249,7 @@ export function ProyectoDocumentUpload({
             type="button"
             onClick={() => inputRef.current?.click()}
             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent-strong)] transition hover:bg-[var(--accent-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-            disabled={currentResult !== null}
+            disabled={isDisabled || simulatedResult !== null}
           >
             <Upload className="h-4 w-4" />
             Seleccionar PDF
@@ -201,6 +267,7 @@ export function ProyectoDocumentUpload({
             setState("idle");
             setMessage(file === null ? null : "Archivo listo para cargar.");
           }}
+          disabled={isDisabled}
         />
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-3">
@@ -217,20 +284,20 @@ export function ProyectoDocumentUpload({
 
           <button
             type="button"
-            disabled={state === "uploading" || currentResult !== null}
+            disabled={state === "uploading" || isDisabled || simulatedResult !== null}
             onClick={() => void handleUpload()}
             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
           >
             {state === "uploading" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : currentResult !== null ? (
+            ) : simulatedResult !== null ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : (
               <FileCheck2 className="h-4 w-4" />
             )}
             {state === "uploading"
               ? "Cargando..."
-              : currentResult !== null
+              : simulatedResult !== null
                 ? "Cargado"
                 : "Cargar como evidencia"}
           </button>
@@ -267,8 +334,8 @@ export function ProyectoDocumentUpload({
         </div>
       ) : null}
 
-      {currentResult !== null ? (
-        <DocumentMetadata value={currentResult} />
+      {simulatedResult !== null ? (
+        <DocumentMetadata value={simulatedResult} />
       ) : null}
     </section>
   );

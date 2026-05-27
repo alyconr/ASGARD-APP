@@ -13,10 +13,12 @@ import {
   DraftApiError,
   type DraftResponse,
   type DraftStatus,
+  type EstadoDocumentalResponse,
 } from "@/features/drafts/types";
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import { listProgramaCompetencias } from "@/features/programa/competencias-api";
+import { getEstadoDocumental } from "@/features/proyecto/cargue-api";
 import type {
   AutosaveState,
   ProgramaCompetenciaListResponse,
@@ -174,6 +176,8 @@ export interface ProgramaWizardController {
   resetFlow: () => void;
   refreshCurriculum: () => Promise<void>;
   disabledSteps: ProgramaWizardStepId[];
+  docState: EstadoDocumentalResponse | null;
+  fetchDocState: () => Promise<void>;
 }
 
 export function useProgramaWizard(): ProgramaWizardController {
@@ -195,6 +199,28 @@ export function useProgramaWizard(): ProgramaWizardController {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
+
+  const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(null);
+
+  const fetchDocState = useCallback(async (): Promise<void> => {
+    if (activeReferenceId === null) {
+      return;
+    }
+    try {
+      const state = await getEstadoDocumental(activeReferenceId);
+      setDocState(state);
+    } catch (error) {
+      console.error("Error fetching document state:", error);
+    }
+  }, [activeReferenceId]);
+
+  useEffect(() => {
+    if (activeReferenceId !== null) {
+      void fetchDocState();
+    } else {
+      setDocState(null);
+    }
+  }, [activeReferenceId, fetchDocState]);
 
   const lastPersistedSnapshotRef = useRef<string | null>(null);
 
@@ -686,9 +712,9 @@ export function useProgramaWizard(): ProgramaWizardController {
             return {
               ...current,
               programa: {
-                codigo_programa: current.programa.codigo_programa || response.codigo_programa || "",
-                nombre_programa: current.programa.nombre_programa || response.nombre_programa || "",
-                version_programa: current.programa.version_programa || response.version_programa || "",
+                codigo_programa: current.programa.codigo_programa || "",
+                nombre_programa: current.programa.nombre_programa || "",
+                version_programa: current.programa.version_programa || "",
               },
               curricular: {
                 ...current.curricular,
@@ -820,5 +846,7 @@ export function useProgramaWizard(): ProgramaWizardController {
     resetFlow,
     refreshCurriculum,
     disabledSteps,
+    docState,
+    fetchDocState,
   };
 }

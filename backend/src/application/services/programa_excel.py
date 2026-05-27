@@ -12,6 +12,7 @@ from typing import Protocol
 from openpyxl import load_workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.infrastructure.storage.document_storage import build_programa_storage_prefix
 from src.application.dto.programa_excel import (
     ExcelCompetenciaPreviewDTO,
     ExcelConocimientoPreviewDTO,
@@ -405,8 +406,15 @@ class ProgramaExcelImportService:
         stored_document: StoredDocumentDTO | None = None
 
         if workbook.is_valid:
+            assert workbook.programa is not None
+            prefix = build_programa_storage_prefix(
+                nombre=workbook.programa.nombre_programa,
+                codigo=workbook.programa.codigo_programa,
+                version=workbook.programa.version_programa,
+            )
+            key = f"{prefix}/excel/matriz-programa.xlsx"
             stored_document = await self._storage_service.save_excel(
-                key=_build_excel_storage_key(referencia_id, filename),
+                key=key,
                 content=content,
                 content_type=content_type or EXCEL_CONTENT_TYPE,
                 original_filename=filename,

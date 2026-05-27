@@ -207,7 +207,7 @@ export function ProgramaPendientesConciliacion({
   competencias: ProgramaCompetencia[];
   referenciaId: string;
   onAssignedCompleted?: () => void;
-}>): React.JSX.Element {
+}>): React.JSX.Element | null {
   const [pendientes, setPendientes] = useState<PendienteCurricular[]>([]);
   const [filter, setFilter] = useState<PendingFilter>("TODOS");
   const [state, setState] = useState<"loading" | "idle">("loading");
@@ -310,13 +310,6 @@ export function ProgramaPendientesConciliacion({
           </button>
         ))}
       </div>
-
-      {state === "loading" ? (
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-white px-3 py-3 text-sm text-[var(--muted)]">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando pendientes curriculares...
-        </div>
-      ) : null}
 
       {errorMessage !== null ? (
         <div

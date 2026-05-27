@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 from src.application.dto.proyecto_documentos import ProjectPdfUploadResultDTO
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
@@ -111,7 +112,41 @@ class ProjectDocumentService:
                 "No existe un borrador de proyecto para asociar el PDF",
             )
 
-        storage_key = _build_storage_key(referencia_id, filename)
+        # Guard: check that both excels are imported
+        program_draft = await self._draft_repository.get_by_block_reference(
+            TipoBloqueBorrador.PROGRAMA,
+            referencia_id,
+        )
+        prog_imported = False
+        if program_draft is not None:
+            prog_excel = program_draft.payload_json.get("documental", {}).get("programa_excel") or {}
+            prog_imported = prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+
+        proj_excel = draft.payload_json.get("documental", {}).get("fuente_estructurada") or {}
+        proj_imported = proj_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+
+        if not prog_imported or not proj_imported:
+            raise InvalidProjectPdfUploadError(
+                "El cargue de PDF de evidencia solo se permite despues de que "
+                "las matrices de programa y proyecto esten validadas e importadas."
+            )
+
+        proyecto_data = draft.payload_json.get("proyecto") or {}
+        nombre = str(proyecto_data.get("nombre_proyecto") or "").strip()
+        codigo = str(proyecto_data.get("codigo_proyecto") or "").strip()
+
+        if not nombre or not codigo:
+            raise InvalidProjectPdfUploadError(
+                "No se encontraron los datos del proyecto en el borrador. "
+                "Por favor, importe la matriz Excel del proyecto primero."
+            )
+
+        prefix = build_proyecto_storage_prefix(
+            nombre=nombre,
+            codigo=codigo,
+        )
+        storage_key = f"{prefix}/documentos/proyecto-formativo.pdf"
+
         stored_document = await self._storage_service.save_pdf(
             key=storage_key,
             content=content,

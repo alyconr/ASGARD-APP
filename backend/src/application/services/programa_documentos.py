@@ -15,6 +15,7 @@ from src.application.dto.programa_documentos import (
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.storage.document_storage import build_programa_storage_prefix
 
 
 class ProgramaDraftMissingError(Exception):
@@ -123,6 +124,43 @@ class ProgramaDocumentService:
                 "No existe un borrador de programa para asociar el PDF",
             )
 
+        # Guard: check that both excels are imported
+        prog_excel = draft.payload_json.get("documental", {}).get("programa_excel") or {}
+        prog_imported = prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+
+        project_draft = await self._draft_repository.get_by_block_reference(
+            TipoBloqueBorrador.PROYECTO,
+            referencia_id,
+        )
+        proj_imported = False
+        if project_draft is not None:
+            proj_excel = project_draft.payload_json.get("documental", {}).get("fuente_estructurada") or {}
+            proj_imported = proj_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+
+        if not prog_imported or not proj_imported:
+            raise InvalidProgramPdfUploadError(
+                "El cargue de PDF de evidencia solo se permite despues de que "
+                "las matrices de programa y proyecto esten validadas e importadas."
+            )
+
+        programa_data = draft.payload_json.get("programa") or {}
+        nombre = str(programa_data.get("nombre_programa") or "").strip()
+        codigo = str(programa_data.get("codigo_programa") or "").strip()
+        version = str(programa_data.get("version_programa") or "").strip()
+
+        if not nombre or not codigo:
+            raise InvalidProgramPdfUploadError(
+                "No se encontraron los datos del programa en el borrador. "
+                "Por favor, importe la matriz Excel del programa primero."
+            )
+
+        prefix = build_programa_storage_prefix(
+            nombre=nombre,
+            codigo=codigo,
+            version=version,
+        )
+        storage_key = f"{prefix}/documentos/programa-formacion.pdf"
+
         diagnostic = self._diagnostic_service.diagnose(content)
         diagnostic = PdfLegibilityDiagnosticDTO(
             estado_legibilidad=diagnostic.estado_legibilidad,
@@ -135,7 +173,6 @@ class ProgramaDocumentService:
             can_attempt_extraction=False,
             requires_manual_entry=diagnostic.requires_manual_entry,
         )
-        storage_key = _build_storage_key(referencia_id, filename)
         stored_document = await self._storage_service.save_pdf(
             key=storage_key,
             content=content,

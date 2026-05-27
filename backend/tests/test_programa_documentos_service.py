@@ -43,9 +43,17 @@ class FakeSession:
 class FakeDraftRepository:
     """In-memory draft repository keyed by logical block identity."""
 
-    def __init__(self, draft: BorradorSesion | None) -> None:
-        """Store one optional draft."""
-        self.draft = draft
+    def __init__(self, drafts: list[BorradorSesion]) -> None:
+        """Store drafts in a dictionary."""
+        self.drafts = {(d.tipo_bloque, d.referencia_id): d for d in drafts}
+
+    @property
+    def draft(self) -> BorradorSesion | None:
+        """Fallback property for single-draft legacy assertions."""
+        for d in self.drafts.values():
+            if d.tipo_bloque == "PROGRAMA":
+                return d
+        return None
 
     async def get_by_block_reference(
         self,
@@ -53,17 +61,11 @@ class FakeDraftRepository:
         referencia_id: uuid.UUID,
     ) -> BorradorSesion | None:
         """Return the draft when the logical key matches."""
-        if (
-            self.draft is not None
-            and self.draft.tipo_bloque == tipo_bloque.value
-            and self.draft.referencia_id == referencia_id
-        ):
-            return self.draft
-        return None
+        return self.drafts.get((tipo_bloque.value, referencia_id))
 
     async def save(self, draft: BorradorSesion) -> BorradorSesion:
         """Persist the draft in memory."""
-        self.draft = draft
+        self.drafts[(draft.tipo_bloque, draft.referencia_id)] = draft
         return draft
 
 
@@ -144,6 +146,18 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
                 "entryMode": "EXCEL",
                 "touchedSteps": ["origen-documental"],
             },
+            "programa": {
+                "nombre_programa": "Analisis y Desarrollo de Software",
+                "codigo_programa": "228118",
+                "version_programa": "1",
+            },
+            "documental": {
+                "programa_excel": {
+                    "confirmacion": {
+                        "estado": "IMPORTADO"
+                    }
+                }
+            }
         },
         estado_borrador=EstadoBloque.BORRADOR,
     )
@@ -156,7 +170,24 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
 async def test_upload_program_pdf_updates_existing_draft_payload() -> None:
     """A valid PDF should be stored and associated to the same draft reference."""
     referencia_id = uuid.uuid4()
-    draft_repository = FakeDraftRepository(build_draft(referencia_id))
+    prog_draft = build_draft(referencia_id)
+    proj_draft = BorradorSesion(
+        tipo_bloque=TipoBloqueBorrador.PROYECTO.value,
+        referencia_id=referencia_id,
+        paso_actual="fuente-proyecto",
+        payload_json={
+            "meta": {"referenciaId": str(referencia_id)},
+            "documental": {
+                "fuente_estructurada": {
+                    "confirmacion": {
+                        "estado": "IMPORTADO"
+                    }
+                }
+            }
+        },
+        estado_borrador=EstadoBloque.BORRADOR,
+    )
+    draft_repository = FakeDraftRepository([prog_draft, proj_draft])
     audit_repository = FakeAuditRepository()
     session = FakeSession()
     service = ProgramaDocumentService(
@@ -190,7 +221,7 @@ async def test_upload_program_pdf_rejects_missing_draft() -> None:
     """The service must not generate a new referencia_id or implicit draft."""
     service = ProgramaDocumentService(
         session=FakeSession(),
-        draft_repository=FakeDraftRepository(None),
+        draft_repository=FakeDraftRepository([]),
         audit_repository=FakeAuditRepository(),
         storage_service=FakeStorageService(),
         diagnostic_service=FakeDiagnosticService(),
@@ -210,7 +241,7 @@ async def test_upload_program_pdf_rejects_non_pdf() -> None:
     """Non-PDF uploads should fail before storage or diagnosis."""
     service = ProgramaDocumentService(
         session=FakeSession(),
-        draft_repository=FakeDraftRepository(build_draft(uuid.uuid4())),
+        draft_repository=FakeDraftRepository([build_draft(uuid.uuid4())]),
         audit_repository=FakeAuditRepository(),
         storage_service=FakeStorageService(),
         diagnostic_service=FakeDiagnosticService(),

@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: string | Request | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
       if (url.includes("/pendientes-curriculares")) {
         return Promise.resolve({
           ok: true,
@@ -165,7 +165,7 @@ function mockFetchJson(payload: unknown, status = 200): void {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: string | Request | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
       if (url.includes("/pendientes-curriculares")) {
         return Promise.resolve({
           ok: true,
@@ -508,7 +508,7 @@ describe("ProgramaConsolidadoRevision", () => {
       faltantes: [],
     });
     const fetchMock = vi.fn().mockImplementation((input: string | Request | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
       if (url.includes("/pendientes-curriculares")) {
         return Promise.resolve({
           ok: true,
@@ -571,7 +571,7 @@ describe("ProgramaConsolidadoRevision", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: string | Request | URL) => {
-        const url = typeof input === "string" ? input : input.url;
+        const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
         if (url.includes("/pendientes-curriculares")) {
           return Promise.resolve({
             ok: true,
@@ -645,7 +645,7 @@ describe("ProgramaConsolidadoRevision", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: string | Request | URL) => {
-        const url = typeof input === "string" ? input : input.url;
+        const url = typeof input === "string" ? input : (input instanceof URL ? input.href : input.url);
         if (url.includes("/pendientes-curriculares")) {
           return Promise.resolve({
             ok: true,

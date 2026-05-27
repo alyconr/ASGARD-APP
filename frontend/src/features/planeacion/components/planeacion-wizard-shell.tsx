@@ -1,18 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
   Download,
-  Edit2,
-  FileText,
-  HelpCircle,
-  Layers,
-  ListChecks,
-  Play,
-  Plus,
   RefreshCcw,
   Save,
   Trash2,
@@ -26,6 +19,7 @@ import {
   type PlaneacionResponse,
   type PlaneacionSaveRequest,
   type ContextoCompetencia,
+  type ContextoFase,
   savePlaneacionBorrador,
   confirmarPlaneacion,
   deletePlaneacion,
@@ -81,18 +75,18 @@ export function PlaneacionWizardShell({
   const [confirmedPlanning, setConfirmedPlanning] = useState<PlaneacionResponse | null>(null);
 
   // Load existing plannings for this project
-  const loadPlannings = async () => {
+  const loadPlannings = useCallback(async () => {
     try {
       const list = await listPlaneacionesProyecto(contexto.proyecto_id);
       setPlanningsList(list);
     } catch {
       toast.error("Error al cargar la lista de planeaciones");
     }
-  };
+  }, [contexto.proyecto_id]);
 
   useEffect(() => {
     void loadPlannings();
-  }, [contexto.proyecto_id]);
+  }, [loadPlannings]);
 
   // Map competence map
   const competenciasMap = useMemo(() => {
@@ -105,7 +99,7 @@ export function PlaneacionWizardShell({
 
   // Filtered activities based on selected phase
   const faseMap = useMemo(() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, ContextoFase>();
     contexto.fases.forEach((f) => map.set(f.id, f));
     return map;
   }, [contexto.fases]);
@@ -203,8 +197,9 @@ export function PlaneacionWizardShell({
         toast.success("Borrador guardado correctamente");
       }
       return res.id;
-    } catch (error: any) {
-      toast.error(error.message || "Error al guardar el borrador");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error al guardar el borrador";
+      toast.error(msg);
       return null;
     } finally {
       setIsSaving(false);
@@ -226,8 +221,9 @@ export function PlaneacionWizardShell({
       await loadPlannings();
       toast.success("Planeación pedagógica aprobada y almacenada en MinIO");
       setActiveStep("confirmacion");
-    } catch (error: any) {
-      toast.error(error.message || "Error al aprobar la planeación");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error al aprobar la planeación";
+      toast.error(msg);
     } finally {
       setIsSaving(false);
     }
@@ -493,7 +489,7 @@ export function PlaneacionWizardShell({
                         className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)] disabled:bg-slate-50 disabled:opacity-50"
                       >
                         <option value="">-- Selecciona una Actividad --</option>
-                        {availableActividades.map((a: any) => (
+                        {availableActividades.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.descripcion}
                           </option>
@@ -767,7 +763,7 @@ export function PlaneacionWizardShell({
                       <h4 className="text-xs font-bold text-slate-500 uppercase">Fase y Actividad</h4>
                       <p className="mt-1 font-semibold">
                         {faseId ? faseMap.get(faseId)?.nombre_fase : "Sin fase"} 
-                        {actividadId ? ` / ${availableActividades.find((a: any) => a.id === actividadId)?.descripcion}` : ""}
+                        {actividadId ? ` / ${availableActividades.find((a) => a.id === actividadId)?.descripcion}` : ""}
                       </p>
                     </div>
                   </div>

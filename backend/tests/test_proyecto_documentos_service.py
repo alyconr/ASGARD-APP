@@ -20,15 +20,34 @@ pytestmark = pytest.mark.anyio
 
 
 class MockDraftRepository:
-    def __init__(self, draft=None):
-        self.draft = draft
+    def __init__(self, drafts=None):
+        if drafts is None:
+            self.drafts = {}
+        elif isinstance(drafts, list):
+            self.drafts = {(d.tipo_bloque if hasattr(d, "tipo_bloque") else "PROYECTO", d.referencia_id if hasattr(d, "referencia_id") else None): d for d in drafts}
+        else:
+            self.drafts = {("PROYECTO", drafts.referencia_id if hasattr(drafts, "referencia_id") else None): drafts}
         self.saved = False
 
+    @property
+    def draft(self):
+        for (tipo, ref), d in self.drafts.items():
+            if tipo == "PROYECTO":
+                return d
+        return next(iter(self.drafts.values())) if self.drafts else None
+
     async def get_by_block_reference(self, tipo_bloque, referencia_id):
-        return self.draft
+        val = self.drafts.get((tipo_bloque, referencia_id))
+        if val is not None:
+            return val
+        for (tipo, ref), d in self.drafts.items():
+            if tipo == tipo_bloque:
+                return d
+        return None
 
     async def save(self, draft):
         self.saved = True
+        self.drafts[(draft.tipo_bloque, draft.referencia_id)] = draft
         return draft
 
 
@@ -56,7 +75,7 @@ class MockStorageService:
     def __init__(self, document=None):
         self.document = document or StoredDocumentDTO(
             original_filename="test.pdf",
-            storage_key="proyectos-formativos/test-id/documentos/obj-test.pdf",
+            storage_key="proyectos-formativos/diseno-de-soluciones-tecnologicas-987654/documentos/proyecto-formativo.pdf",
             size_bytes=1024,
             content_type="application/pdf",
             checksum_sha256="abc123",
@@ -69,16 +88,29 @@ class MockStorageService:
 
 @pytest.fixture
 def draft_factory():
-    def _build():
+    def _build(referencia_id=None):
+        ref_id = referencia_id or uuid.uuid4()
         return MagicMock(
             id=uuid.uuid4(),
+            tipo_bloque="PROYECTO",
+            referencia_id=ref_id,
             payload_json={
                 "meta": {
-                    "referenciaId": str(uuid.uuid4()),
+                    "referenciaId": str(ref_id),
                     "touchedSteps": ["fuente-proyecto"],
                     "lastInteractionAt": datetime.now(UTC).isoformat(),
                 },
-                "documental": {},
+                "proyecto": {
+                    "nombre_proyecto": "Diseño de Soluciones Tecnologicas",
+                    "codigo_proyecto": "987654",
+                },
+                "documental": {
+                    "fuente_estructurada": {
+                        "confirmacion": {
+                            "estado": "IMPORTADO"
+                        }
+                    }
+                },
             },
             paso_actual="fuente-proyecto",
             estado_borrador=EstadoBloque.BORRADOR,
@@ -88,9 +120,38 @@ def draft_factory():
 
 
 @pytest.fixture
-def service(draft_factory):
+def program_draft_factory():
+    def _build(referencia_id):
+        return MagicMock(
+            id=uuid.uuid4(),
+            tipo_bloque="PROGRAMA",
+            referencia_id=referencia_id,
+            payload_json={
+                "meta": {
+                    "referenciaId": str(referencia_id),
+                },
+                "documental": {
+                    "programa_excel": {
+                        "confirmacion": {
+                            "estado": "IMPORTADO"
+                        }
+                    }
+                },
+            },
+            paso_actual="origen-documental",
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+
+    return _build
+
+
+@pytest.fixture
+def service(draft_factory, program_draft_factory):
     session = MockSession()
-    draft_repository = MockDraftRepository(draft_factory())
+    ref_id = uuid.uuid4()
+    proj = draft_factory(referencia_id=ref_id)
+    prog = program_draft_factory(referencia_id=ref_id)
+    draft_repository = MockDraftRepository([proj, prog])
     audit_repository = MockAuditRepository()
     storage_service = MockStorageService()
 
@@ -172,7 +233,7 @@ class TestUploadAndStoreProjectPdf:
 
     async def test_upload_rejects_missing_draft(self, valid_pdf_content):
         session = MockSession()
-        draft_repository = MockDraftRepository(draft=None)
+        draft_repository = MockDraftRepository(drafts=[])
         audit_repository = MockAuditRepository()
         storage_service = MockStorageService()
 
@@ -216,14 +277,46 @@ class TestUploadAndStoreProjectPdf:
     async def test_upload_stores_document_in_minio(self, valid_pdf_content):
         storage = MockStorageService()
         session = MockSession()
-        draft_repository = MockDraftRepository(
-            MagicMock(
-                id=uuid.uuid4(),
-                payload_json={"meta": {}, "documental": {}},
-                paso_actual="fuente-proyecto",
-                estado_borrador=EstadoBloque.BORRADOR,
-            )
+        ref_id = uuid.uuid4()
+        proj_draft = MagicMock(
+            id=uuid.uuid4(),
+            tipo_bloque="PROYECTO",
+            referencia_id=ref_id,
+            payload_json={
+                "meta": {},
+                "proyecto": {
+                    "nombre_proyecto": "Diseño de Soluciones Tecnologicas",
+                    "codigo_proyecto": "987654",
+                },
+                "documental": {
+                    "fuente_estructurada": {
+                        "confirmacion": {
+                            "estado": "IMPORTADO"
+                        }
+                    }
+                }
+            },
+            paso_actual="fuente-proyecto",
+            estado_borrador=EstadoBloque.BORRADOR,
         )
+        prog_draft = MagicMock(
+            id=uuid.uuid4(),
+            tipo_bloque="PROGRAMA",
+            referencia_id=ref_id,
+            payload_json={
+                "meta": {},
+                "documental": {
+                    "programa_excel": {
+                        "confirmacion": {
+                            "estado": "IMPORTADO"
+                        }
+                    }
+                }
+            },
+            paso_actual="origen-documental",
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        draft_repository = MockDraftRepository([proj_draft, prog_draft])
         audit = MockAuditRepository()
 
         service = ProjectDocumentService(
@@ -234,7 +327,7 @@ class TestUploadAndStoreProjectPdf:
         )
 
         await service.upload_and_store_project_pdf(
-            referencia_id=uuid.uuid4(),
+            referencia_id=ref_id,
             filename="proyecto.pdf",
             content_type="application/pdf",
             content=valid_pdf_content,

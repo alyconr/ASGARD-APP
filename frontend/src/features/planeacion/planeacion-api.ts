@@ -55,7 +55,7 @@ export interface PlaneacionSaveRequest {
   resultados_ids: string[];
   conocimientos_ids: string[];
   criterios_ids: string[];
-  datos_complementarios: Record<string, any>;
+  datos_complementarios: Record<string, unknown>;
 }
 
 export interface PlaneacionResponse {
@@ -65,7 +65,7 @@ export interface PlaneacionResponse {
   fase_id: string | null;
   actividad_id: string | null;
   estado: string;
-  datos_complementarios: Record<string, any>;
+  datos_complementarios: Record<string, unknown>;
   resultados_ids: string[];
   conocimientos_ids: string[];
   criterios_ids: string[];

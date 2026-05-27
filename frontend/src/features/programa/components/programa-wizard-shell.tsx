@@ -23,6 +23,7 @@ import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
+import { EstadoDocumentalResponse } from "@/features/drafts/types";
 import type {
   ProgramaCierreResponse,
   ProgramaCompetencia,
@@ -134,6 +135,7 @@ type StepWorkspaceProps = {
   onProgramaCerrado: (result: ProgramaCierreResponse) => void;
   competencias: ProgramaCompetencia[];
   onSyncNeeded?: () => void;
+  docState: EstadoDocumentalResponse | null;
 };
 
 function StepWorkspace({
@@ -151,6 +153,7 @@ function StepWorkspace({
   onProgramaCerrado,
   competencias,
   onSyncNeeded,
+  docState,
 }: StepWorkspaceProps): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
@@ -183,6 +186,9 @@ function StepWorkspace({
                 currentResult={programaPdfResult}
                 referenciaId={referenceId}
                 onUploaded={onProgramaPdfUploaded}
+                habilitado={docState?.documentos_habilitados ?? false}
+                carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                documentoExistente={docState?.programa_pdf}
               />
               <ProgramaExcelImport
                 currentResult={programaExcelResult}
@@ -509,6 +515,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 onNavigateToStep={controller.goToStep}
                 onProgramaCerrado={controller.markProgramaClosed}
                 onSyncNeeded={controller.refreshCurriculum}
+                docState={controller.docState}
               />
             </div>
 

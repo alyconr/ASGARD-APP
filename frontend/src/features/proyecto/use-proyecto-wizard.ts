@@ -11,7 +11,8 @@ import {
 
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
-import type { DraftResponse, DraftStatus } from "@/features/drafts/types";
+import type { DraftResponse, DraftStatus, EstadoDocumentalResponse } from "@/features/drafts/types";
+import { getEstadoDocumental } from "@/features/proyecto/cargue-api";
 import {
   clearActiveProyectoDraftReference,
   clearKnownProyectoDrafts,
@@ -143,6 +144,9 @@ export interface ProyectoWizardController {
   updateProyectoPdfResult: (result: ProyectoPdfUploadResult) => void;
   updateProyectoExcelPreview: (result: ProyectoExcelPreviewState) => void;
   updateProyectoExcelImport: (result: ProyectoExcelPreviewState) => void;
+  docState: EstadoDocumentalResponse | null;
+  fetchDocState: () => Promise<void>;
+  habilitarCarguePdf: () => Promise<void>;
 }
 
 export function useProyectoWizard({
@@ -170,6 +174,44 @@ export function useProyectoWizard({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
+
+  const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(null);
+
+  const fetchDocState = useCallback(async (): Promise<void> => {
+    if (activeReferenceId === null) {
+      return;
+    }
+    try {
+      const state = await getEstadoDocumental(activeReferenceId);
+      setDocState(state);
+    } catch (error) {
+      console.error("Error fetching document state:", error);
+    }
+  }, [activeReferenceId]);
+
+  useEffect(() => {
+    if (activeReferenceId !== null) {
+      void fetchDocState();
+    } else {
+      setDocState(null);
+    }
+  }, [activeReferenceId, fetchDocState]);
+
+  const habilitarCarguePdf = useCallback(async (): Promise<void> => {
+    if (payload === null || activeReferenceId === null) {
+      return;
+    }
+    setPayload((current) => {
+      if (current === null) return null;
+      return {
+        ...current,
+        documental: {
+          ...current.documental,
+          cargue_pdf_habilitado: true,
+        },
+      };
+    });
+  }, [payload, activeReferenceId]);
 
   const lastPersistedSnapshotRef = useRef<string | null>(null);
 
@@ -210,6 +252,7 @@ export function useProyectoWizard({
           state: "saved",
           message: "Borrador del proyecto sincronizado.",
         });
+        void fetchDocState();
         setKnownDrafts((currentDrafts) => {
           const summary = buildSummaryFromDraftResponse(
             draft,
@@ -232,7 +275,7 @@ export function useProyectoWizard({
         return false;
       }
     },
-    [],
+    [fetchDocState],
   );
 
   const recoverDraftByReference = useCallback(
@@ -633,5 +676,8 @@ export function useProyectoWizard({
     updateProyectoPdfResult,
     updateProyectoExcelPreview,
     updateProyectoExcelImport,
+    docState,
+    fetchDocState,
+    habilitarCarguePdf,
   };
 }

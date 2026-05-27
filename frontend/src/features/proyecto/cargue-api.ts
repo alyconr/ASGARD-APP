@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
+import { EstadoDocumentalResponse } from "@/features/drafts/types";
 
 export async function eliminarCargueCompleto(referenciaId: string): Promise<void> {
   const response = await fetch(
@@ -19,4 +20,22 @@ export async function eliminarCargueCompleto(referenciaId: string): Promise<void
     } catch {}
     throw new Error(errorDetail);
   }
+}
+
+export async function getEstadoDocumental(
+  referenciaId: string,
+): Promise<EstadoDocumentalResponse> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/drafts/${referenciaId}/estado-documental`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("No fue posible recuperar el estado documental.");
+  }
+
+  return response.json() as Promise<EstadoDocumentalResponse>;
 }

@@ -12,6 +12,7 @@ from typing import Protocol
 from openpyxl import load_workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 from src.application.dto.proyecto_excel import (
     ExcelActividadPreviewDTO,
     ExcelCompetenciaPreviewDTO,
@@ -333,8 +334,14 @@ class ProyectoExcelImportService:
         stored_document: StoredDocumentDTO | None = None
 
         if workbook.is_valid:
+            assert workbook.proyecto is not None
+            prefix = build_proyecto_storage_prefix(
+                nombre=workbook.proyecto.nombre_proyecto,
+                codigo=workbook.proyecto.codigo_proyecto_sofia,
+            )
+            key = f"{prefix}/excel/matriz-proyecto.xlsx"
             stored_document = await self._storage_service.save_excel(
-                key=_build_excel_storage_key(referencia_id, filename),
+                key=key,
                 content=content,
                 content_type=content_type or EXCEL_CONTENT_TYPE,
                 original_filename=filename,
