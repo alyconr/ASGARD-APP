@@ -120,9 +120,7 @@ class TestUploadAndStoreProjectPdf:
         assert result.documento.storage_key.startswith("proyectos-formativos/")
         assert result.documento.content_type == "application/pdf"
 
-    async def test_upload_persists_metadata_in_draft(
-        self, service, valid_pdf_content
-    ):
+    async def test_upload_persists_metadata_in_draft(self, service, valid_pdf_content):
         await service.upload_and_store_project_pdf(
             referencia_id=uuid.uuid4(),
             filename="proyecto.pdf",
@@ -132,9 +130,7 @@ class TestUploadAndStoreProjectPdf:
 
         assert service._draft_repository.saved is True
 
-    async def test_upload_sets_proyecto_paso_actual(
-        self, service, valid_pdf_content
-    ):
+    async def test_upload_sets_proyecto_paso_actual(self, service, valid_pdf_content):
         await service.upload_and_store_project_pdf(
             referencia_id=uuid.uuid4(),
             filename="proyecto.pdf",

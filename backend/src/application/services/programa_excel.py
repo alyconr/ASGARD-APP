@@ -347,6 +347,9 @@ class ProgramaExcelRepositoryProtocol(Protocol):
     async def clear_curriculum(self, *, programa_id: uuid.UUID) -> None:
         """Remove all curriculum rows for a program before re-import."""
 
+    async def has_project_formativo(self, programa_id: uuid.UUID) -> bool:
+        """Return whether the program already has an imported project."""
+
 
 class AsyncSessionProtocol(Protocol):
     """Subset of async session behavior required by this service."""
@@ -387,6 +390,17 @@ class ProgramaExcelImportService:
         """Store and validate a canonical Excel workbook without relational writes."""
         _validate_excel_upload(filename=filename, content=content)
         draft = await self._get_program_draft(referencia_id)
+        draft_programa_id = _extract_programa_id(draft.payload_json)
+        if draft_programa_id is not None:
+            if await self._curriculum_repository.has_project_formativo(
+                draft_programa_id
+            ):
+                raise ProgramaExcelValidationError(
+                    "El programa ya tiene un proyecto formativo importado. "
+                    "Debe eliminar el cargue actual antes de poder "
+                    "volver a importar el programa."
+                )
+
         workbook = parse_canonical_workbook(content)
         stored_document: StoredDocumentDTO | None = None
 
@@ -432,7 +446,19 @@ class ProgramaExcelImportService:
     ) -> ProgramaExcelImportDTO:
         """Materialize a previously validated canonical workbook."""
         draft = await self._get_program_draft(referencia_id)
+        draft_programa_id = _extract_programa_id(draft.payload_json)
+        if draft_programa_id is not None:
+            if await self._curriculum_repository.has_project_formativo(
+                draft_programa_id
+            ):
+                raise ProgramaExcelValidationError(
+                    "El programa ya tiene un proyecto formativo importado. "
+                    "Debe eliminar el cargue actual antes de poder "
+                    "volver a importar el programa."
+                )
+
         preview_payload = _get_valid_excel_preview_payload(draft.payload_json)
+
         document_payload = _as_record(preview_payload.get("documento"))
         storage_key = _read_string(document_payload or {}, "storage_key")
         if not storage_key:

@@ -13,26 +13,17 @@ export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
   {
     id: "fuente-proyecto",
     index: 0,
-    label: "Fuente del proyecto formativo",
+    label: "Origen documental",
     shortLabel: "01",
     description:
       "PDF como evidencia y matriz Excel como fuente estructurada del proyecto formativo.",
     taskRef: "TASK-18 / TASK-19",
   },
   {
-    id: "estructura-proyecto",
-    index: 1,
-    label: "Fases y actividades",
-    shortLabel: "02",
-    description:
-      "Base navegable para la gestion futura de fases y actividades.",
-    taskRef: "TASK-20 / TASK-21",
-  },
-  {
     id: "revision-proyecto",
-    index: 2,
-    label: "Revision del proyecto formativo",
-    shortLabel: "03",
+    index: 1,
+    label: "Revisión del proyecto formativo",
+    shortLabel: "02",
     description:
       "Lugar del consolidado editable antes del cierre del proyecto formativo.",
     taskRef: "TASK-22",
@@ -332,7 +323,53 @@ function normalizeProyectoDocumental(
                     typeof f.orden === "number" && Number.isFinite(f.orden)
                       ? f.orden
                       : null,
-                  actividades: asNumber(f.actividades),
+                  actividades: (Array.isArray(f.actividades) ? f.actividades : []).flatMap((actItem) => {
+                    const act = asRecord(actItem);
+                    if (act === null) return [];
+                    return [
+                      {
+                        actividad_id: asString(act.actividad_id),
+                        descripcion: asString(act.descripcion),
+                        orden:
+                          typeof act.orden === "number" && Number.isFinite(act.orden)
+                            ? act.orden
+                            : null,
+                        competencias: (Array.isArray(act.competencias) ? act.competencias : []).flatMap((compItem) => {
+                          const comp = asRecord(compItem);
+                          if (comp === null) return [];
+                          return [
+                            {
+                              competencia_id: asString(comp.competencia_id),
+                              codigo_competencia: asString(comp.codigo_competencia),
+                              nombre_competencia: asString(comp.nombre_competencia),
+                              resultados: (Array.isArray(comp.resultados) ? comp.resultados : []).flatMap((rapItem) => {
+                                const rap = asRecord(rapItem);
+                                if (rap === null) return [];
+                                return [
+                                  {
+                                    rap_id: asString(rap.rap_id),
+                                    rap_numero: asString(rap.rap_numero),
+                                    resultado_aprendizaje: asString(rap.resultado_aprendizaje),
+                                    tipo_resultado: asString(rap.tipo_resultado),
+                                    orden_resultado:
+                                      typeof rap.orden_resultado === "number" && Number.isFinite(rap.orden_resultado)
+                                        ? rap.orden_resultado
+                                        : null,
+                                    pagina_origen:
+                                      typeof rap.pagina_origen === "string" ? rap.pagina_origen : null,
+                                    observaciones:
+                                      typeof rap.observaciones === "string" ? rap.observaciones : null,
+                                  }
+                                ];
+                              }),
+                            }
+                          ];
+                        }),
+                      }
+                    ];
+                  }),
+                  numero_competencias: asNumber(f.numero_competencias),
+                  numero_resultados: asNumber(f.numero_resultados),
                 },
               ];
             }),
@@ -413,6 +450,7 @@ function normalizePreviewSummary(
     proyecto: asNumber(s?.proyecto),
     fases: asNumber(s?.fases),
     actividades: asNumber(s?.actividades),
+    resultados_especificos: asNumber(s?.resultados_especificos),
   };
 }
 

@@ -30,6 +30,9 @@ from src.interfaces.http.controllers.programa_documentos import (
 from src.interfaces.http.controllers.programa_excel import (
     router as programa_excel_router,
 )
+from src.interfaces.http.controllers.proyecto_cargue import (
+    router as proyecto_cargue_router,
+)
 from src.interfaces.http.controllers.proyecto_documentos import (
     router as proyecto_documentos_router,
 )
@@ -75,6 +78,7 @@ def create_application() -> FastAPI:
     application.include_router(conocimientos_proceso_router)
     application.include_router(criterios_router)
     application.include_router(pendientes_curriculares_router)
+    application.include_router(proyecto_cargue_router)
 
     return application
 

@@ -2,7 +2,6 @@ import type { DraftStatus } from "@/features/drafts/types";
 
 export type ProyectoWizardStepId =
   | "fuente-proyecto"
-  | "estructura-proyecto"
   | "revision-proyecto";
 
 export interface ProyectoWizardStepDefinition {
@@ -44,6 +43,7 @@ export interface ExcelPreviewSummary {
   proyecto: number;
   fases: number;
   actividades: number;
+  resultados_especificos: number;
 }
 
 export interface ExcelProjectPreview {
@@ -52,11 +52,37 @@ export interface ExcelProjectPreview {
   version_proyecto: string;
 }
 
+export interface ExcelResultPreview {
+  rap_id: string;
+  rap_numero: string;
+  resultado_aprendizaje: string;
+  tipo_resultado: string;
+  orden_resultado: number | null;
+  pagina_origen: string | null;
+  observaciones: string | null;
+}
+
+export interface ExcelCompetenciaPreview {
+  competencia_id: string;
+  codigo_competencia: string;
+  nombre_competencia: string;
+  resultados: ExcelResultPreview[];
+}
+
+export interface ExcelActividadPreview {
+  actividad_id: string;
+  descripcion: string;
+  orden: number | null;
+  competencias: ExcelCompetenciaPreview[];
+}
+
 export interface ExcelFasePreview {
   fase_id: string;
   nombre_fase: string;
   orden: number | null;
-  actividades: number;
+  actividades: ExcelActividadPreview[];
+  numero_competencias: number;
+  numero_resultados: number;
 }
 
 export interface ProyectoExcelPreviewState {

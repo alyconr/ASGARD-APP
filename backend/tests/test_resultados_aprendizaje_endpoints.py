@@ -142,9 +142,7 @@ class FakeProgramaResultadoService:
             raise ResultadoAprendizajeNotFoundError(
                 "No existe el resultado solicitado para esta competencia"
             )
-        self.resultados = [
-            item for item in self.resultados if item.id != resultado_id
-        ]
+        self.resultados = [item for item in self.resultados if item.id != resultado_id]
         return ResultadoAprendizajeDeleteDTO(
             referencia_id=referencia_id,
             competencia_id=competencia_id,

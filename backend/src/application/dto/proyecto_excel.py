@@ -18,21 +18,48 @@ class ExcelProjectPreviewDTO:
 
 
 @dataclass(frozen=True)
-class ExcelFasePreviewDTO:
-    """Preview data for a Fase sheet row."""
+class ExcelResultPreviewDTO:
+    """Preview data for a RAP from Planeacion_Proyecto."""
 
-    fase_id: str
-    nombre_fase: str
-    orden: int | None
-    actividades: int
+    rap_id: str
+    rap_numero: str
+    resultado_aprendizaje: str
+    tipo_resultado: str
+    orden_resultado: int | None
+    pagina_origen: str | None
+    observaciones: str | None
+
+
+@dataclass(frozen=True)
+class ExcelCompetenciaPreviewDTO:
+    """Preview data for a Competence from Planeacion_Proyecto."""
+
+    competencia_id: str
+    codigo_competencia: str
+    nombre_competencia: str
+    resultados: list[ExcelResultPreviewDTO]
 
 
 @dataclass(frozen=True)
 class ExcelActividadPreviewDTO:
-    """Preview data for an Actividad sheet row."""
+    """Preview data for an Activity from Planeacion_Proyecto."""
 
+    actividad_id: str
     descripcion: str
     orden: int | None
+    competencias: list[ExcelCompetenciaPreviewDTO]
+
+
+@dataclass(frozen=True)
+class ExcelFasePreviewDTO:
+    """Preview data for a Phase from Planeacion_Proyecto."""
+
+    fase_id: str
+    nombre_fase: str
+    orden: int | None
+    actividades: list[ExcelActividadPreviewDTO]
+    numero_competencias: int
+    numero_resultados: int
 
 
 @dataclass(frozen=True)
@@ -42,6 +69,7 @@ class ExcelPreviewSummaryDTO:
     proyecto: int
     fases: int
     actividades: int
+    resultados_especificos: int
 
 
 @dataclass(frozen=True)

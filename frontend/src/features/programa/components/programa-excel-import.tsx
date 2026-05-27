@@ -12,12 +12,14 @@ import {
 } from "lucide-react";
 
 import { notify } from "@/components/feedback/notifications";
+import { eliminarCargueCompleto } from "@/features/proyecto/cargue-api";
 import {
   confirmProgramaExcelImport,
   previewProgramaExcel,
   ProgramaExcelImportError,
 } from "@/features/programa/excel-import-api";
 import { cn } from "@/lib/utils";
+
 import type {
   ProgramaExcelImportResponse,
   ProgramaExcelImportState,
@@ -367,13 +369,42 @@ export function ProgramaExcelImport({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [state, setState] = useState<ExcelState>("idle");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
   const [isCompetenciasModalOpen, setIsCompetenciasModalOpen] =
     useState(false);
   const [competenciaModalIndex, setCompetenciaModalIndex] = useState(0);
 
   const preview = currentResult?.preview ?? null;
   const imported = currentResult?.confirmacion.estado === "IMPORTADO";
+
+  const handleEliminarCargue = async (): Promise<void> => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que deseas eliminar por completo el cargue del programa y del proyecto? Esta acción eliminará permanentemente todos los datos y archivos de la base de datos y de MinIO."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await eliminarCargueCompleto(referenciaId);
+      setSelectedFile(null);
+      setState("idle");
+      setMessage("El cargue ha sido eliminado con exito. Puedes subir un nuevo archivo Excel.");
+      notify.success("Cargue eliminado", {
+        description: "Los datos y archivos del programa y proyecto han sido borrados de la base de datos y MinIO.",
+      });
+      window.location.reload();
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Error al eliminar el cargue.";
+      notify.error("Error al eliminar cargue", {
+        description: errMsg,
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   const handlePreview = async (): Promise<void> => {
     const validationError = validateExcelFile(selectedFile);
@@ -537,20 +568,35 @@ export function ProgramaExcelImport({
         <div
           role={state === "error" ? "alert" : "status"}
           className={cn(
-            "flex items-start gap-2 rounded-lg border px-4 py-3 text-sm leading-6",
+            "flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm leading-6",
             state === "error"
               ? "border-rose-200 bg-rose-50 text-rose-900"
               : "border-emerald-200 bg-emerald-50 text-emerald-900",
           )}
         >
-          {state === "error" ? (
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex items-start gap-2">
+            {state === "error" ? (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <p>{message}</p>
+          </div>
+          {(message.includes("ya tiene un proyecto") || message.includes("ya ha sido importado")) && (
+            <div className="mt-3 flex justify-end border-t border-rose-100 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void handleEliminarCargue()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-100/50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors"
+              >
+                Eliminar cargue actual
+              </button>
+            </div>
           )}
-          <p>{message}</p>
         </div>
       ) : null}
+
 
       {preview !== null ? (
         <PreviewPanel
@@ -571,6 +617,26 @@ export function ProgramaExcelImport({
           onIndexChange={setCompetenciaModalIndex}
         />
       ) : null}
+
+      {imported && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+              <p className="text-sm font-semibold text-emerald-950">El programa curricular ha sido importado relacionalmente.</p>
+            </div>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleEliminarCargue()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors shrink-0"
+            >
+              Eliminar cargue completo
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
+

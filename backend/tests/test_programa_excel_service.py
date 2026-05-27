@@ -404,29 +404,33 @@ class FakeProgramaExcelRepository:
     async def clear_curriculum(self, *, programa_id: uuid.UUID) -> None:
         """Clear all curriculum rows for a program."""
         competencia_ids_to_remove = {
-            c.id for c in self.competencias.values()
-            if c.programa_id == programa_id
+            c.id for c in self.competencias.values() if c.programa_id == programa_id
         }
         self.competencias = {
-            k: v for k, v in self.competencias.items()
-            if v.programa_id != programa_id
+            k: v for k, v in self.competencias.items() if v.programa_id != programa_id
         }
         self.resultados = {
-            k: v for k, v in self.resultados.items()
+            k: v
+            for k, v in self.resultados.items()
             if v.competencia_id not in competencia_ids_to_remove
         }
         self.conocimientos = {
-            k: v for k, v in self.conocimientos.items()
+            k: v
+            for k, v in self.conocimientos.items()
             if v.competencia_id not in competencia_ids_to_remove
         }
         self.criterios = {
-            k: v for k, v in self.criterios.items()
+            k: v
+            for k, v in self.criterios.items()
             if v.competencia_id not in competencia_ids_to_remove
         }
         self.pendientes = {
-            k: v for k, v in self.pendientes.items()
-            if v.programa_id != programa_id
+            k: v for k, v in self.pendientes.items() if v.programa_id != programa_id
         }
+
+    async def has_project_formativo(self, programa_id: uuid.UUID) -> bool:
+        """Return whether the program already has an imported project."""
+        return False
 
 
 def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:

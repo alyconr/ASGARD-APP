@@ -89,6 +89,19 @@ class ProjectRepository:
         await self._session.flush()
         return actividad
 
+    async def proyecto_exists(
+        self,
+        *,
+        programa_id: uuid.UUID,
+    ) -> bool:
+        from sqlalchemy import select
+
+        statement = select(ProyectoFormativo.id).where(
+            ProyectoFormativo.programa_id == programa_id
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none() is not None
+
 
 def get_proyecto_excel_service(
     session: AsyncSession = Depends(get_async_session),

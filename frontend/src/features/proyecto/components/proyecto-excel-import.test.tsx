@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProyectoExcelImport } from "./proyecto-excel-import";
@@ -106,7 +106,7 @@ describe("ProyectoExcelImport", () => {
         },
         valid: true,
         estado_validacion: "VALIDO",
-        resumen: { proyecto: 1, fases: 2, actividades: 3 },
+        resumen: { proyecto: 1, fases: 2, actividades: 3, resultados_especificos: 4 },
         proyecto: {
           codigo_proyecto: "PR-001",
           nombre_proyecto: "Proyecto de prueba",
@@ -117,7 +117,16 @@ describe("ProyectoExcelImport", () => {
             fase_id: "F1",
             nombre_fase: "Fase 1",
             orden: 1,
-            actividades: 2,
+            actividades: [
+              {
+                actividad_id: "A1",
+                descripcion: "Actividad 1",
+                orden: 1,
+                competencias: [],
+              },
+            ],
+            numero_competencias: 1,
+            numero_resultados: 2,
           },
         ],
         pendientes_resumen: { total: 0 },
@@ -161,7 +170,7 @@ describe("ProyectoExcelImport", () => {
         },
         valid: true,
         estado_validacion: "VALIDO",
-        resumen: { proyecto: 1, fases: 2, actividades: 3 },
+        resumen: { proyecto: 1, fases: 2, actividades: 3, resultados_especificos: 4 },
         proyecto: {
           codigo_proyecto: "PR-001",
           nombre_proyecto: "Proyecto de prueba",
@@ -172,7 +181,16 @@ describe("ProyectoExcelImport", () => {
             fase_id: "F1",
             nombre_fase: "Fase 1",
             orden: 1,
-            actividades: 2,
+            actividades: [
+              {
+                actividad_id: "A1",
+                descripcion: "Actividad 1",
+                orden: 1,
+                competencias: [],
+              },
+            ],
+            numero_competencias: 1,
+            numero_resultados: 2,
           },
         ],
         pendientes_resumen: { total: 0 },
@@ -198,7 +216,11 @@ describe("ProyectoExcelImport", () => {
     await screen.findByText(/excel valido/i);
     await screen.findByText(/PR-001/i);
     await screen.findByText(/Proyecto de prueba/i);
-    await screen.findByText(/Fase 1/i);
+    const viewButton = await screen.findByRole("button", { name: /ver fases de proyecto/i });
+    act(() => {
+      fireEvent.click(viewButton);
+    });
+    expect((await screen.findAllByText(/Fase 1/i)).length).toBeGreaterThan(0);
   });
 
   it("shows validation errors when workbook is invalid", async () => {
@@ -211,7 +233,7 @@ describe("ProyectoExcelImport", () => {
         documento: null,
         valid: false,
         estado_validacion: "INVALIDO",
-        resumen: { proyecto: 0, fases: 0, actividades: 0 },
+        resumen: { proyecto: 0, fases: 0, actividades: 0, resultados_especificos: 0 },
         proyecto: null,
         fases: [],
         pendientes_resumen: { total: 0 },
@@ -266,7 +288,7 @@ describe("ProyectoExcelImport", () => {
         },
         valid: true,
         estado_validacion: "VALIDO",
-        resumen: { proyecto: 1, fases: 2, actividades: 3 },
+        resumen: { proyecto: 1, fases: 2, actividades: 3, resultados_especificos: 4 },
         proyecto: {
           codigo_proyecto: "PR-001",
           nombre_proyecto: "Proyecto de prueba",
@@ -277,7 +299,16 @@ describe("ProyectoExcelImport", () => {
             fase_id: "F1",
             nombre_fase: "Fase 1",
             orden: 1,
-            actividades: 2,
+            actividades: [
+              {
+                actividad_id: "A1",
+                descripcion: "Actividad 1",
+                orden: 1,
+                competencias: [],
+              },
+            ],
+            numero_competencias: 1,
+            numero_resultados: 2,
           },
         ],
         pendientes_resumen: { total: 0 },
@@ -321,7 +352,7 @@ describe("ProyectoExcelImport", () => {
         },
         valid: true,
         estado_validacion: "VALIDO",
-        resumen: { proyecto: 1, fases: 2, actividades: 3 },
+        resumen: { proyecto: 1, fases: 2, actividades: 3, resultados_especificos: 4 },
         proyecto: {
           codigo_proyecto: "PR-001",
           nombre_proyecto: "Proyecto de prueba",
@@ -332,7 +363,16 @@ describe("ProyectoExcelImport", () => {
             fase_id: "F1",
             nombre_fase: "Fase 1",
             orden: 1,
-            actividades: 2,
+            actividades: [
+              {
+                actividad_id: "A1",
+                descripcion: "Actividad 1",
+                orden: 1,
+                competencias: [],
+              },
+            ],
+            numero_competencias: 1,
+            numero_resultados: 2,
           },
         ],
         pendientes_resumen: { total: 0 },
@@ -349,7 +389,7 @@ describe("ProyectoExcelImport", () => {
         proyecto_id: "new-proyecto-id",
         fase_ids: ["f1-id", "f2-id"],
         actividad_ids: ["a1-id", "a2-id", "a3-id"],
-        resumen: { proyecto: 1, fases: 2, actividades: 3 },
+        resumen: { proyecto: 1, fases: 2, actividades: 3, resultados_especificos: 4 },
         pendientes_resumen: { total: 0 },
       });
     });

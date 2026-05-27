@@ -172,8 +172,7 @@ def _build_storage_key(referencia_id: uuid.UUID, filename: str) -> str:
         safe_filename = "proyecto.pdf"
     object_id = uuid.uuid4()
     return (
-        f"proyectos-formativos/{referencia_id}/documentos/"
-        f"{object_id}-{safe_filename}"
+        f"proyectos-formativos/{referencia_id}/documentos/{object_id}-{safe_filename}"
     )
 
 
@@ -194,11 +193,7 @@ def _merge_document_result_into_payload(
         if isinstance(touched_steps, list):
             next_meta["touchedSteps"] = [
                 *[step for step in touched_steps if isinstance(step, str)],
-                *(
-                    []
-                    if "fuente-proyecto" in touched_steps
-                    else ["fuente-proyecto"]
-                ),
+                *([] if "fuente-proyecto" in touched_steps else ["fuente-proyecto"]),
             ]
         else:
             next_meta["touchedSteps"] = ["fuente-proyecto"]

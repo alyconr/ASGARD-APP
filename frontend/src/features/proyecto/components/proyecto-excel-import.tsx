@@ -4,16 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   FileSpreadsheet,
+  Layers,
   Loader2,
   Upload,
+  X,
 } from "lucide-react";
 
 import {
   confirmProjectExcelImport,
   uploadProjectExcelPreview,
 } from "@/features/proyecto/excel-import-api";
+import { eliminarCargueCompleto } from "@/features/proyecto/cargue-api";
 import { notify } from "@/components/feedback/notifications";
+
 import type {
   ExcelFasePreview,
   ExcelPreviewSummary,
@@ -70,9 +76,306 @@ function validateExcelFile(file: File | null): string | null {
   return null;
 }
 
+interface CurriculumFasesModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  fases: ExcelFasePreview[];
+}
+
+function CurriculumFasesModal({
+  isOpen,
+  onClose,
+  fases,
+}: Readonly<CurriculumFasesModalProps>): React.JSX.Element | null {
+  const [expandedFases, setExpandedFases] = useState<Record<string, boolean>>({});
+  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
+  const [selectedCompetenciaByActivity, setSelectedCompetenciaByActivity] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedCompetenciaByActivity((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      fases.forEach((fase) => {
+        fase.actividades.forEach((act) => {
+          if (!next[act.actividad_id] && act.competencias.length > 0) {
+            next[act.actividad_id] = act.competencias[0].competencia_id;
+            changed = true;
+          }
+        });
+      });
+      return changed ? next : prev;
+    });
+  }, [fases, isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const toggleFase = (faseId: string): void => {
+    setExpandedFases((prev) => ({
+      ...prev,
+      [faseId]: !prev[faseId],
+    }));
+  };
+
+  const toggleActivity = (actId: string): void => {
+    setExpandedActivities((prev) => ({
+      ...prev,
+      [actId]: !prev[actId],
+    }));
+  };
+
+  const handleCompetenciaChange = (actId: string, compId: string): void => {
+    setSelectedCompetenciaByActivity((prev) => ({
+      ...prev,
+      [actId]: compId,
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
+      <div className="relative flex flex-col w-full max-w-4xl max-h-[85vh] bg-white rounded-xl shadow-2xl border border-[color:var(--card-border)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Header */}
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[color:var(--card-border)] bg-[var(--paper-strong)]">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+              <Layers className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-bold text-[var(--foreground)]">
+                Fases y Estructura Curricular del Proyecto
+              </h2>
+              <p className="text-xs text-[var(--muted)]">
+                Previsualización detallada de la planeación pedagógica importada
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg border border-[color:var(--card-border)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] transition-all"
+            aria-label="Cerrar modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+
+        {/* Scrollable Content */}
+        <div className="flex-1 p-6 overflow-y-auto space-y-4">
+          {fases.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-10 w-10 text-[var(--muted)] mb-2" />
+              <p className="text-sm font-semibold text-[var(--foreground)]">No hay fases detectadas</p>
+              <p className="text-xs text-[var(--muted)]">El archivo Excel no contiene datos de planeación válidos.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {fases.map((fase) => {
+                const isFaseExpanded = !!expandedFases[fase.fase_id];
+                return (
+                  <div
+                    key={fase.fase_id}
+                    className="border border-[color:var(--card-border)] rounded-lg overflow-hidden bg-white shadow-sm transition-all"
+                  >
+                    {/* Fase Accordion Header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleFase(fase.fase_id)}
+                      className="flex items-center justify-between w-full px-5 py-4 text-left font-semibold hover:bg-[var(--paper-strong)] transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs bg-[var(--accent-soft)] text-[var(--accent-strong)] px-2 py-0.5 rounded font-mono">
+                          Fase {fase.orden !== null ? fase.orden : ""}
+                        </span>
+                        <span className="text-base font-bold text-[var(--foreground)]">
+                          {fase.nombre_fase}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-[var(--muted)] hidden sm:inline">
+                          {fase.actividades.length} Actividad{fase.actividades.length !== 1 ? "es" : ""} • {fase.numero_competencias} Competencia{fase.numero_competencias !== 1 ? "s" : ""} • {fase.numero_resultados} RAP{fase.numero_resultados !== 1 ? "s" : ""}
+                        </span>
+                        {isFaseExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-[var(--muted)]" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-[var(--muted)]" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Fase Content (Activities Accordion) */}
+                    {isFaseExpanded && (
+                      <div className="px-5 pb-4 border-t border-[color:var(--card-border)] bg-[var(--paper-strong)]/30 space-y-3 pt-3">
+                        {fase.actividades.length === 0 ? (
+                          <p className="text-xs text-[var(--muted)] py-2">
+                            No hay actividades registradas en esta fase.
+                          </p>
+                        ) : (
+                          fase.actividades.map((act) => {
+                            const isActExpanded = !!expandedActivities[act.actividad_id];
+                            const selectedCompId = selectedCompetenciaByActivity[act.actividad_id] ?? "";
+                            const selectedComp = act.competencias.find(
+                              (c) => c.competencia_id === selectedCompId
+                            );
+
+                            const compCount = act.competencias.length;
+                            const resCount = act.competencias.reduce(
+                              (acc, c) => acc + c.resultados.length,
+                              0
+                            );
+
+                            return (
+                              <div
+                                key={act.actividad_id}
+                                className="border border-[color:var(--card-border)] rounded-md bg-white overflow-hidden shadow-sm"
+                              >
+                                {/* Activity Accordion Header */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleActivity(act.actividad_id)}
+                                  className="flex items-center justify-between w-full px-4 py-3 text-left hover:bg-[var(--paper-strong)] transition-colors"
+                                >
+                                  <div className="flex items-start gap-2.5 min-w-0 pr-4">
+                                    <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono shrink-0 mt-0.5">
+                                      Act {act.orden !== null ? act.orden : ""}
+                                    </span>
+                                    <span className="text-sm font-semibold text-[var(--foreground)] truncate">
+                                      {act.descripcion}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <span className="text-xs text-[var(--muted)]">
+                                      {compCount} Comp. • {resCount} RAP
+                                    </span>
+                                    {isActExpanded ? (
+                                      <ChevronUp className="h-4 w-4 text-[var(--muted)]" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 text-[var(--muted)]" />
+                                    )}
+                                  </div>
+                                </button>
+
+                                {/* Activity Content */}
+                                {isActExpanded && (
+                                  <div className="p-4 border-t border-[color:var(--card-border)] bg-slate-50/50 space-y-4">
+                                    {/* Competence Selector */}
+                                    <div className="flex flex-col gap-1.5">
+                                      <label
+                                        htmlFor={`comp-select-${act.actividad_id}`}
+                                        className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider"
+                                      >
+                                        Seleccionar Competencia
+                                      </label>
+                                      {act.competencias.length === 0 ? (
+                                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded">
+                                          Esta actividad no tiene competencias asociadas.
+                                        </p>
+                                      ) : (
+                                        <select
+                                          id={`comp-select-${act.actividad_id}`}
+                                          value={selectedCompId}
+                                          onChange={(e) =>
+                                            handleCompetenciaChange(act.actividad_id, e.target.value)
+                                          }
+                                          className="w-full max-w-full rounded-md border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm shadow-sm focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                                        >
+                                          {act.competencias.map((comp) => (
+                                            <option key={comp.competencia_id} value={comp.competencia_id}>
+                                              [{comp.codigo_competencia}] {comp.nombre_competencia}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+                                    </div>
+
+                                    {/* RAPs for the selected Competence */}
+                                    {selectedComp && (
+                                      <div className="space-y-2">
+                                        <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                                          Resultados de Aprendizaje ({selectedComp.resultados.length})
+                                        </p>
+                                        {selectedComp.resultados.length === 0 ? (
+                                          <p className="text-xs text-[var(--muted)] italic">
+                                            No hay resultados asociados a esta competencia en esta actividad.
+                                          </p>
+                                        ) : (
+                                          <div className="grid gap-2">
+                                            {selectedComp.resultados.map((rap) => (
+                                              <div
+                                                key={rap.rap_id}
+                                                className="bg-white border border-[color:var(--card-border)] rounded p-3 text-xs shadow-sm flex flex-col gap-2"
+                                              >
+                                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-slate-100 pb-1.5">
+                                                  <span className="font-semibold text-slate-800">
+                                                    RAP #{rap.rap_numero}
+                                                  </span>
+                                                  <div className="flex gap-1.5">
+                                                    <span className={cn(
+                                                      "px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                                                      (rap.tipo_resultado || "").trim().toUpperCase() === "ESPECIFICO"
+                                                        ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                                        : "bg-slate-100 text-slate-600"
+                                                    )}>
+                                                      {rap.tipo_resultado}
+                                                    </span>
+                                                    {rap.pagina_origen && (
+                                                      <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">
+                                                        Pág. {rap.pagina_origen}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                                <p className="text-slate-600 leading-relaxed font-medium">
+                                                  {rap.resultado_aprendizaje}
+                                                </p>
+                                                {rap.observaciones && (
+                                                  <div className="text-[10px] text-amber-700 bg-amber-50/50 border border-amber-100/50 rounded p-1.5 font-medium">
+                                                    <strong>Obs:</strong> {rap.observaciones}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <footer className="flex justify-end gap-3 px-6 py-4 border-t border-[color:var(--card-border)] bg-[var(--paper-strong)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] transition-all"
+          >
+            Cerrar vista
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function PreviewSection({
+  onOpenFases,
   preview,
 }: Readonly<{
+  onOpenFases: () => void;
   preview: ProyectoExcelPreviewState["preview"];
 }>): React.JSX.Element | null {
   if (preview === null) {
@@ -122,7 +425,7 @@ function PreviewSection({
           </dl>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <div className="mt-4 grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
           <div className="rounded-lg bg-white/60 p-3">
             <p className="text-2xl font-bold">{preview.resumen.proyecto}</p>
             <p className="text-xs text-[var(--muted)]">Proyecto</p>
@@ -135,27 +438,31 @@ function PreviewSection({
             <p className="text-2xl font-bold">{preview.resumen.actividades}</p>
             <p className="text-xs text-[var(--muted)]">Actividades</p>
           </div>
+          <div className="rounded-lg bg-white/60 p-3">
+            <p className="text-2xl font-bold">{preview.resumen.resultados_especificos}</p>
+            <p className="text-xs text-[var(--muted)]">Resultados específicos</p>
+          </div>
         </div>
       </div>
 
       {preview.fases.length > 0 ? (
-        <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-          <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-            Fases detectadas
-          </p>
-          <ul className="mt-3 grid gap-2">
-            {preview.fases.map((fase) => (
-              <li
-                key={fase.fase_id}
-                className="flex items-center justify-between rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] px-3 py-2 text-sm"
-              >
-                <span className="font-semibold">{fase.nombre_fase}</span>
-                <span className="text-xs text-[var(--muted)]">
-                  {fase.actividades} actividad{fase.actividades !== 1 ? "es" : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
+              Estructura de Fases
+            </p>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Se detectaron {preview.fases.length} fases con actividades y planeación curricular.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenFases}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-white px-4 py-2 text-sm font-semibold text-[var(--accent-strong)] transition hover:bg-[var(--accent-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            <Layers className="h-4 w-4" />
+            Ver fases de proyecto
+          </button>
         </section>
       ) : null}
 
@@ -172,7 +479,9 @@ function PreviewSection({
               >
                 <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
                 <span>
-                  [{error.hoja}] {error.mensaje}
+                  [{error.hoja}
+                  {error.fila !== null ? ` - Fila ${error.fila}` : ""}
+                  {error.campo ? `, Campo '${error.campo}'` : ""}]: {error.mensaje}
                 </span>
               </li>
             ))}
@@ -196,11 +505,42 @@ export function ProyectoExcelImport({
 }>): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [localResult, setLocalResult] =
+
     useState<ProyectoExcelPreviewState | null>(currentResult);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [isFasesModalOpen, setIsFasesModalOpen] = useState<boolean>(false);
   const effectiveResult = localResult ?? currentResult;
+
+  const handleEliminarCargue = async (): Promise<void> => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que deseas eliminar por completo el cargue del proyecto y del programa? Esta acción eliminará permanentemente todos los datos y archivos de la base de datos y de MinIO."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await eliminarCargueCompleto(referenciaId);
+      setSelectedFile(null);
+      setLocalResult(null);
+      setState("idle");
+      setMessage("El cargue ha sido eliminado con exito. Puedes subir un nuevo archivo Excel.");
+      notify.success("Cargue eliminado", {
+        description: "Los datos y archivos del programa y proyecto han sido borrados de la base de datos y MinIO.",
+      });
+      window.location.reload();
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Error al eliminar el cargue.";
+      notify.error("Error al eliminar cargue", {
+        description: errMsg,
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   useEffect(() => {
     setLocalResult(currentResult);
@@ -403,27 +743,63 @@ export function ProyectoExcelImport({
 
       {message !== null ? (
         <div
-          role={state === "error" ? "alert" : "status"}
+          role={state === "error" || (state === "preview" && effectiveResult?.preview?.valid === false) ? "alert" : "status"}
           className={cn(
-            "flex items-start gap-2 rounded-lg border px-4 py-3 text-sm leading-6",
-            state === "error"
+            "flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm leading-6",
+            state === "error" || (state === "preview" && effectiveResult?.preview?.valid === false)
               ? "border-rose-200 bg-rose-50 text-rose-900"
               : state === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                 : "border-blue-200 bg-blue-50 text-blue-900",
           )}
         >
-          {state === "error" ? (
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex items-start gap-2">
+            {state === "error" || (state === "preview" && effectiveResult?.preview?.valid === false) ? (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <p className="font-semibold">{message}</p>
+          </div>
+          {state === "preview" && effectiveResult?.preview?.valid === false && effectiveResult.preview.errores.length > 0 && (
+            <ul className="mt-1 ml-6 list-disc text-xs text-rose-800 grid gap-1">
+              {effectiveResult.preview.errores.map((error, index) => (
+                <li key={index}>
+                  [{error.hoja}
+                  {error.fila !== null ? ` - Fila ${error.fila}` : ""}
+                  {error.campo ? `, Campo '${error.campo}'` : ""}]: {error.mensaje}
+                </li>
+              ))}
+            </ul>
           )}
-          <p>{message}</p>
+          {(message.includes("ya ha sido importado") || message.includes("ya tiene un proyecto")) && (
+            <div className="mt-3 flex justify-end border-t border-rose-100 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void handleEliminarCargue()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-100/50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors"
+              >
+                Eliminar cargue actual
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 
+
       {effectiveResult && effectiveResult.preview !== null ? (
-        <PreviewSection preview={effectiveResult.preview} />
+        <>
+          <PreviewSection
+            preview={effectiveResult.preview}
+            onOpenFases={() => setIsFasesModalOpen(true)}
+          />
+          <CurriculumFasesModal
+            isOpen={isFasesModalOpen}
+            onClose={() => setIsFasesModalOpen(false)}
+            fases={effectiveResult.preview.fases}
+          />
+        </>
       ) : null}
 
       {effectiveResult && effectiveResult.confirmacion.proyecto_id && isImported ? (
@@ -454,8 +830,19 @@ export function ProyectoExcelImport({
               </dd>
             </div>
           </dl>
+          <div className="mt-4 flex justify-end border-t border-emerald-100 pt-3">
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleEliminarCargue()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            >
+              Eliminar cargue y volver a empezar
+            </button>
+          </div>
         </section>
       ) : null}
+
     </section>
   );
 }

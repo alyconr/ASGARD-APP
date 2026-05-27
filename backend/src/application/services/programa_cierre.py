@@ -140,9 +140,7 @@ class ProgramaCierreService:
                 _missing(
                     codigo="programa.competencias",
                     campo="competencias",
-                    mensaje=(
-                        "Registra al menos una competencia asociada al programa."
-                    ),
+                    mensaje=("Registra al menos una competencia asociada al programa."),
                 )
             )
 
@@ -153,9 +151,7 @@ class ProgramaCierreService:
 
         for competencia in competencias:
             resultados = [
-                item
-                for item in competencia.resultados
-                if item.descripcion.strip()
+                item for item in competencia.resultados if item.descripcion.strip()
             ]
             saberes = [
                 item

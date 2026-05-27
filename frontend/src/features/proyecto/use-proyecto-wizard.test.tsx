@@ -223,7 +223,7 @@ describe("useProyectoWizard", () => {
       result.current.goToNextStep();
     });
 
-    expect(result.current.currentStepId).toBe("estructura-proyecto");
+    expect(result.current.currentStepId).toBe("revision-proyecto");
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 600));
@@ -234,7 +234,7 @@ describe("useProyectoWizard", () => {
         "PROYECTO",
         projectReferenceId,
         expect.objectContaining({
-          paso_actual: "estructura-proyecto",
+          paso_actual: "revision-proyecto",
           payload_json: expect.any(Object),
         }),
       );

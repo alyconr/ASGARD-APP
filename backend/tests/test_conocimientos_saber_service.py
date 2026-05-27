@@ -50,8 +50,7 @@ class FakeConocimientoSaberRepository:
         return [
             c
             for c in self.conocimientos
-            if c.competencia_id == competencia_id
-            and c.tipo == TipoConocimiento.SABER
+            if c.competencia_id == competencia_id and c.tipo == TipoConocimiento.SABER
         ]
 
     async def get_by_id_for_competencia(

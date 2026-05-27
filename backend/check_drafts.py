@@ -17,8 +17,7 @@ async def check():
     )
     for d in drafts:
         print(
-            f'{d["tipo_bloque"]}: '
-            f'{d["referencia_id"]} - {d["estado_borrador"]}',
+            f"{d['tipo_bloque']}: {d['referencia_id']} - {d['estado_borrador']}",
         )
     total = await conn.fetchval("SELECT COUNT(*) FROM borradores_sesion")
     print(f"\nTotal drafts: {total}")

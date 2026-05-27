@@ -108,6 +108,9 @@ class MockProjectRepository:
         self.created_actividades.append(a)
         return a
 
+    async def proyecto_exists(self, *, programa_id):
+        return False
+
 
 def create_valid_workbook():
     wb = Workbook()
@@ -116,27 +119,130 @@ def create_valid_workbook():
     proyecto_sheet.title = "Proyecto"
     proyecto_sheet.append(
         [
-            "codigo_proyecto",
+            "proyecto_id",
             "nombre_proyecto",
-            "version_proyecto",
-            "programa_referencia",
+            "codigo_proyecto_sofia",
+            "codigo_programa",
+            "nombre_programa",
+            "fuente_archivo",
             "observaciones",
         ],
     )
-    proyecto_sheet.append(["PR-001", "Proyecto de prueba", "1.0", "prog-ref", ""])
-
-    fases_sheet = wb.create_sheet("Fases")
-    fases_sheet.append(
-        ["fase_id", "nombre_fase", "orden", "descripcion", "observaciones"],
+    proyecto_sheet.append(
+        [
+            "PROJ-01",
+            "Proyecto de prueba",
+            "PR-001",
+            "prog-ref",
+            "Programa de prueba",
+            "fuente.pdf",
+            "observaciones proyecto",
+        ]
     )
-    fases_sheet.append(["F1", "Fase 1", 1, "Descripcion fase 1", ""])
-    fases_sheet.append(["F2", "Fase 2", 2, "Descripcion fase 2", ""])
 
-    actividades_sheet = wb.create_sheet("Actividades")
-    actividades_sheet.append(["fase_id", "descripcion", "orden", "observaciones"])
-    actividades_sheet.append(["F1", "Actividad 1.1", 1, ""])
-    actividades_sheet.append(["F1", "Actividad 1.2", 2, ""])
-    actividades_sheet.append(["F2", "Actividad 2.1", 1, ""])
+    planeacion_sheet = wb.create_sheet("Planeacion_Proyecto")
+    planeacion_sheet.append(
+        [
+            "proyecto_id",
+            "fase_id",
+            "fase_proyecto",
+            "actividad_id",
+            "actividad_proyecto",
+            "tipo_resultado",
+            "competencia_id",
+            "codigo_competencia",
+            "nombre_competencia",
+            "rap_id",
+            "rap_numero",
+            "resultado_aprendizaje",
+            "orden_fase",
+            "orden_actividad",
+            "orden_resultado",
+            "pagina_origen",
+            "observaciones",
+        ],
+    )
+    planeacion_sheet.append(
+        [
+            "PROJ-01",
+            "F1",
+            "Fase 1",
+            "A1",
+            "Actividad 1.1",
+            "ESPECIFICO",
+            "C1",
+            "240201050",
+            "Competencia de prueba 1",
+            "R1",
+            "1",
+            "Resultado de aprendizaje 1",
+            1,
+            1,
+            1,
+            "12",
+            "",
+        ]
+    )
+    planeacion_sheet.append(
+        [
+            "PROJ-01",
+            "F1",
+            "Fase 1",
+            "A2",
+            "Actividad 1.2",
+            "ESPECIFICO",
+            "C1",
+            "240201050",
+            "Competencia de prueba 1",
+            "R2",
+            "2",
+            "Resultado de aprendizaje 2",
+            1,
+            2,
+            2,
+            "13",
+            "",
+        ]
+    )
+    planeacion_sheet.append(
+        [
+            "PROJ-01",
+            "F2",
+            "Fase 2",
+            "A3",
+            "Actividad 2.1",
+            "TRANSVERSAL",
+            "C2",
+            "240201051",
+            "Competencia de prueba 2",
+            "R3",
+            "1",
+            "Resultado de aprendizaje 3",
+            2,
+            1,
+            1,
+            "15",
+            "",
+        ]
+    )
+
+    validacion_sheet = wb.create_sheet("Validacion_Proyecto")
+    validacion_sheet.append(
+        [
+            "tipo_validacion",
+            "descripcion",
+            "estado",
+            "observaciones",
+        ]
+    )
+    validacion_sheet.append(
+        [
+            "CURRICULAR",
+            "Validacion basica del diseno",
+            "OK",
+            "Ninguna",
+        ]
+    )
 
     return wb
 
@@ -201,17 +307,30 @@ class TestPreviewProjectExcel:
 
     async def test_preview_rejects_missing_sheets(self, service):
         wb = Workbook()
-        wb.active.title = "Proyecto"
-        wb.active.append(
+        proyecto_sheet = wb.active
+        proyecto_sheet.title = "Proyecto"
+        proyecto_sheet.append(
             [
-                "codigo_proyecto",
+                "proyecto_id",
                 "nombre_proyecto",
-                "version_proyecto",
-                "programa_referencia",
+                "codigo_proyecto_sofia",
+                "codigo_programa",
+                "nombre_programa",
+                "fuente_archivo",
                 "observaciones",
-            ],
+            ]
         )
-        wb.active.append(["PR-001", "Test", "1.0", "", ""])
+        proyecto_sheet.append(
+            [
+                "PROJ-01",
+                "Proyecto de prueba",
+                "PR-001",
+                "prog-99",
+                "Prog Name",
+                "test.pdf",
+                "",
+            ]
+        )
         content = io.BytesIO()
         wb.save(content)
         content.seek(0)

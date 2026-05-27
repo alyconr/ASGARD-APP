@@ -147,8 +147,8 @@ class FakeProgramaConocimientoProcesoService:
 def test_conocimientos_proceso_endpoints_create_list_update_delete() -> None:
     """The HTTP API should expose the PROCESO knowledge CRUD contract."""
     fake_service = FakeProgramaConocimientoProcesoService()
-    app.dependency_overrides[get_programa_conocimiento_proceso_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_proceso_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -204,8 +204,8 @@ def test_conocimientos_proceso_endpoints_create_list_update_delete() -> None:
 def test_conocimientos_proceso_endpoint_rejects_duplicate_description() -> None:
     """The HTTP API should map duplicate PROCESO descriptions to conflict responses."""
     fake_service = FakeProgramaConocimientoProcesoService()
-    app.dependency_overrides[get_programa_conocimiento_proceso_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_proceso_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -238,8 +238,8 @@ def test_conocimientos_proceso_endpoint_rejects_duplicate_description() -> None:
 def test_conocimientos_proceso_endpoint_rejects_blank_description() -> None:
     """The HTTP API should reject blank PROCESO descriptions."""
     fake_service = FakeProgramaConocimientoProcesoService()
-    app.dependency_overrides[get_programa_conocimiento_proceso_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_proceso_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -260,8 +260,8 @@ def test_conocimientos_proceso_endpoint_rejects_blank_description() -> None:
 def test_conocimientos_proceso_endpoint_rejects_foreign_competencia() -> None:
     """The HTTP API should reject operations outside the current program."""
     fake_service = FakeProgramaConocimientoProcesoService()
-    app.dependency_overrides[get_programa_conocimiento_proceso_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_proceso_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -285,8 +285,8 @@ def test_conocimientos_proceso_endpoint_rejects_foreign_competencia() -> None:
 def test_conocimientos_proceso_endpoint_rejects_explicit_saber_type() -> None:
     """The TASK-11 endpoint should not accept SABER input."""
     fake_service = FakeProgramaConocimientoProcesoService()
-    app.dependency_overrides[get_programa_conocimiento_proceso_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_proceso_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()

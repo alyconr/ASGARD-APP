@@ -147,8 +147,8 @@ class FakeProgramaConocimientoSaberService:
 def test_conocimientos_saber_endpoints_create_list_update_delete() -> None:
     """The HTTP API should expose the SABER knowledge CRUD contract."""
     fake_service = FakeProgramaConocimientoSaberService()
-    app.dependency_overrides[get_programa_conocimiento_saber_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_saber_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -204,8 +204,8 @@ def test_conocimientos_saber_endpoints_create_list_update_delete() -> None:
 def test_conocimientos_saber_endpoint_rejects_duplicate_description() -> None:
     """The HTTP API should map duplicate SABER descriptions to conflict responses."""
     fake_service = FakeProgramaConocimientoSaberService()
-    app.dependency_overrides[get_programa_conocimiento_saber_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_saber_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -230,16 +230,15 @@ def test_conocimientos_saber_endpoint_rejects_duplicate_description() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
-        "Ya existe un conocimiento SABER con esta descripcion exacta "
-        "en la competencia"
+        "Ya existe un conocimiento SABER con esta descripcion exacta en la competencia"
     )
 
 
 def test_conocimientos_saber_endpoint_rejects_blank_description() -> None:
     """The HTTP API should reject blank SABER descriptions."""
     fake_service = FakeProgramaConocimientoSaberService()
-    app.dependency_overrides[get_programa_conocimiento_saber_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_saber_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -260,8 +259,8 @@ def test_conocimientos_saber_endpoint_rejects_blank_description() -> None:
 def test_conocimientos_saber_endpoint_rejects_foreign_competencia() -> None:
     """The HTTP API should reject operations outside the current program."""
     fake_service = FakeProgramaConocimientoSaberService()
-    app.dependency_overrides[get_programa_conocimiento_saber_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_saber_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()
@@ -285,8 +284,8 @@ def test_conocimientos_saber_endpoint_rejects_foreign_competencia() -> None:
 def test_conocimientos_saber_endpoint_rejects_explicit_proceso_type() -> None:
     """The TASK-10 endpoint should not accept PROCESO input."""
     fake_service = FakeProgramaConocimientoSaberService()
-    app.dependency_overrides[get_programa_conocimiento_saber_service] = (
-        lambda: fake_service
+    app.dependency_overrides[get_programa_conocimiento_saber_service] = lambda: (
+        fake_service
     )
     client = TestClient(app)
     referencia_id = uuid.uuid4()

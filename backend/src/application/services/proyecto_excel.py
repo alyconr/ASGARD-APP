@@ -1,4 +1,4 @@
-"""Canonical Excel preview and import service for project TASK-19."""
+"""Canonical Excel preview and import service for project formativo."""
 
 from __future__ import annotations
 
@@ -13,10 +13,13 @@ from openpyxl import load_workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.proyecto_excel import (
+    ExcelActividadPreviewDTO,
+    ExcelCompetenciaPreviewDTO,
     ExcelFasePreviewDTO,
     ExcelPendingSummaryDTO,
     ExcelPreviewSummaryDTO,
     ExcelProjectPreviewDTO,
+    ExcelResultPreviewDTO,
     ExcelValidationIssueDTO,
     ProyectoExcelImportDTO,
     ProyectoExcelPreviewDTO,
@@ -32,23 +35,37 @@ from src.infrastructure.db.models.proyecto import (
 
 CANONICAL_SHEETS: dict[str, list[str]] = {
     "Proyecto": [
-        "codigo_proyecto",
+        "proyecto_id",
         "nombre_proyecto",
-        "version_proyecto",
-        "programa_referencia",
+        "codigo_proyecto_sofia",
+        "codigo_programa",
+        "nombre_programa",
+        "fuente_archivo",
         "observaciones",
     ],
-    "Fases": [
+    "Planeacion_Proyecto": [
+        "proyecto_id",
         "fase_id",
-        "nombre_fase",
-        "orden",
-        "descripcion",
+        "fase_proyecto",
+        "actividad_id",
+        "actividad_proyecto",
+        "tipo_resultado",
+        "competencia_id",
+        "codigo_competencia",
+        "nombre_competencia",
+        "rap_id",
+        "rap_numero",
+        "resultado_aprendizaje",
+        "orden_fase",
+        "orden_actividad",
+        "orden_resultado",
+        "pagina_origen",
         "observaciones",
     ],
-    "Actividades": [
-        "fase_id",
+    "Validacion_Proyecto": [
+        "tipo_validacion",
         "descripcion",
-        "orden",
+        "estado",
         "observaciones",
     ],
 }
@@ -76,35 +93,101 @@ class ProjectExcelStorageMissingError(Exception):
     """Raised when the stored workbook cannot be read for confirmation."""
 
 
+# Builder classes for consolidating flat sheets
+class ResultBuilder:
+    def __init__(
+        self,
+        rap_id: str,
+        rap_numero: str,
+        resultado_aprendizaje: str,
+        tipo_resultado: str,
+        orden_resultado: int | None,
+        pagina_origen: str | None,
+        observaciones: str | None,
+    ):
+        self.rap_id = rap_id
+        self.rap_numero = rap_numero
+        self.resultado_aprendizaje = resultado_aprendizaje
+        self.tipo_resultado = tipo_resultado
+        self.orden_resultado = orden_resultado
+        self.pagina_origen = pagina_origen
+        self.observaciones = observaciones
+
+
+class CompetenciaBuilder:
+    def __init__(
+        self, competencia_id: str, codigo_competencia: str, nombre_competencia: str
+    ):
+        self.competencia_id = competencia_id
+        self.codigo_competencia = codigo_competencia
+        self.nombre_competencia = nombre_competencia
+        self.resultados: dict[str, ResultBuilder] = {}
+
+
+class ActividadBuilder:
+    def __init__(self, actividad_id: str, descripcion: str, orden: int | None):
+        self.actividad_id = actividad_id
+        self.descripcion = descripcion
+        self.orden = orden
+        self.competencias: dict[str, CompetenciaBuilder] = {}
+
+
+class FaseBuilder:
+    def __init__(self, fase_id: str, nombre_fase: str, orden: int | None):
+        self.fase_id = fase_id
+        self.nombre_fase = nombre_fase
+        self.orden = orden
+        self.actividades: dict[str, ActividadBuilder] = {}
+
+
 @dataclass(frozen=True)
 class ProjectRow:
-    codigo_proyecto: str
+    proyecto_id: str
     nombre_proyecto: str
-    version_proyecto: str
+    codigo_proyecto_sofia: str
+    codigo_programa: str
+    nombre_programa: str
+    fuente_archivo: str | None
+    observaciones: str | None
     raw: dict[str, object]
 
 
 @dataclass(frozen=True)
-class FaseRow:
+class PlaneacionRow:
+    proyecto_id: str
     fase_id: str
-    nombre_fase: str
-    orden: int | None
+    fase_proyecto: str
+    actividad_id: str
+    actividad_proyecto: str
+    tipo_resultado: str
+    competencia_id: str
+    codigo_competencia: str
+    nombre_competencia: str
+    rap_id: str
+    rap_numero: str
+    resultado_aprendizaje: str
+    orden_fase: int | None
+    orden_actividad: int | None
+    orden_resultado: int | None
+    pagina_origen: str | None
+    observaciones: str | None
     raw: dict[str, object]
 
 
 @dataclass(frozen=True)
-class ActividadRow:
-    fase_id: str
+class ValidacionRow:
+    tipo_validacion: str
     descripcion: str
-    orden: int | None
+    estado: str
+    observaciones: str | None
     raw: dict[str, object]
 
 
 @dataclass(frozen=True)
 class CanonicalWorkbook:
     proyecto: ProjectRow | None
-    fases: list[FaseRow]
-    actividades: list[ActividadRow]
+    planeacion: list[PlaneacionRow]
+    validacion: list[ValidacionRow]
     errores: list[ExcelValidationIssueDTO]
 
     @property
@@ -188,6 +271,13 @@ class ProjectRepositoryProtocol(Protocol):
     ) -> ActividadProyecto:
         """Create a project activity."""
 
+    async def proyecto_exists(
+        self,
+        *,
+        programa_id: uuid.UUID,
+    ) -> bool:
+        """Return whether a project already exists for the training program."""
+
 
 class AsyncSessionProtocol(Protocol):
     """Subset of async session behavior required by this service."""
@@ -228,7 +318,18 @@ class ProyectoExcelImportService:
         """Store and validate a canonical Excel workbook without relational writes."""
         _validate_excel_upload(filename=filename, content=content)
         draft = await self._get_project_draft(referencia_id)
+        meta = _as_record(draft.payload_json.get("meta")) or {}
+        programa_id_text = _read_string(meta, "programaId")
+        if programa_id_text:
+            if await self._project_repository.proyecto_exists(
+                programa_id=uuid.UUID(programa_id_text)
+            ):
+                raise ProjectExcelValidationError(
+                    "El proyecto formativo ya ha sido importado. "
+                    "Para cargarlo nuevamente, primero debe borrar el cargue actual."
+                )
         workbook = parse_canonical_workbook(content)
+
         stored_document: StoredDocumentDTO | None = None
 
         if workbook.is_valid:
@@ -272,7 +373,18 @@ class ProyectoExcelImportService:
     ) -> ProyectoExcelImportDTO:
         """Materialize a previously validated canonical workbook."""
         draft = await self._get_project_draft(referencia_id)
+        meta = _as_record(draft.payload_json.get("meta")) or {}
+        programa_id_text = _read_string(meta, "programaId")
+        if programa_id_text:
+            if await self._project_repository.proyecto_exists(
+                programa_id=uuid.UUID(programa_id_text)
+            ):
+                raise ProjectExcelValidationError(
+                    "El proyecto formativo ya ha sido importado. "
+                    "Para cargarlo nuevamente, primero debe borrar el cargue actual."
+                )
         preview_payload = _get_valid_excel_preview_payload(draft.payload_json)
+
         document_payload = _as_record(preview_payload.get("documento"))
         storage_key = _read_string(document_payload or {}, "storage_key")
         if not storage_key:
@@ -341,14 +453,15 @@ class ProyectoExcelImportService:
 
         meta = _as_record(draft.payload_json.get("meta")) or {}
         programa_id_text = (
-            _read_string(meta, "programaId")
-            or "00000000-0000-0000-0000-000000000000"
+            _read_string(meta, "programaId") or "00000000-0000-0000-0000-000000000000"
         )
+
+        # Sofia code is used as codigo_proyecto, default version to "1"
         proyecto = await self._project_repository.create_proyecto(
             programa_id=uuid.UUID(programa_id_text),
-            codigo_proyecto=workbook.proyecto.codigo_proyecto,
+            codigo_proyecto=workbook.proyecto.codigo_proyecto_sofia,
             nombre_proyecto=workbook.proyecto.nombre_proyecto,
-            version_proyecto=workbook.proyecto.version_proyecto,
+            version_proyecto="1",
         )
         await self._session.refresh(proyecto)
 
@@ -356,28 +469,44 @@ class ProyectoExcelImportService:
         fase_ids: list[uuid.UUID] = []
         actividad_ids: list[uuid.UUID] = []
 
-        for fase_row in workbook.fases:
+        # Find unique Fases from workbook.planeacion
+        unique_fases = {}
+        for r in workbook.planeacion:
+            if r.fase_id not in unique_fases:
+                unique_fases[r.fase_id] = (r.fase_proyecto, r.orden_fase)
+
+        for fid, (nombre_fase, orden_fase) in unique_fases.items():
             fase = await self._project_repository.create_fase(
                 proyecto_id=proyecto.id,
-                nombre_fase=fase_row.nombre_fase,
-                orden=fase_row.orden,
+                nombre_fase=nombre_fase,
+                orden=orden_fase,
             )
             await self._session.refresh(fase)
-            fase_by_excel_id[fase_row.fase_id] = fase.id
+            fase_by_excel_id[fid] = fase.id
             fase_ids.append(fase.id)
 
-        for actividad_row in workbook.actividades:
-            fase_id = fase_by_excel_id.get(actividad_row.fase_id)
+        # Find unique Actividades from workbook.planeacion
+        unique_actividades = {}
+        for r in workbook.planeacion:
+            if r.actividad_id not in unique_actividades:
+                unique_actividades[r.actividad_id] = (
+                    r.fase_id,
+                    r.actividad_proyecto,
+                    r.orden_actividad,
+                )
+
+        for aid, (fid, descripcion, orden_actividad) in unique_actividades.items():
+            fase_id = fase_by_excel_id.get(fid)
             if fase_id is None:
                 raise ProjectExcelValidationError(
-                    f"Actividad en fila {actividad_row.raw.get('_row_index')} "
-                    f"referencia fase_id '{actividad_row.fase_id}' no encontrada "
+                    f"Actividad con actividad_id '{aid}' "
+                    f"referencia fase_id '{fid}' no encontrada "
                     "en Fases",
                 )
             actividad = await self._project_repository.create_actividad(
                 fase_id=fase_id,
-                descripcion=actividad_row.descripcion,
-                orden=actividad_row.orden,
+                descripcion=descripcion,
+                orden=orden_actividad,
             )
             await self._session.refresh(actividad)
             actividad_ids.append(actividad.id)
@@ -404,8 +533,8 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
     except Exception as error:
         return CanonicalWorkbook(
             proyecto=None,
-            fases=[],
-            actividades=[],
+            planeacion=[],
+            validacion=[],
             errores=[
                 ExcelValidationIssueDTO(
                     hoja="Workbook",
@@ -470,19 +599,19 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
         return CanonicalWorkbook(None, [], [], errores)
 
     proyecto = _parse_proyecto(rows_by_sheet["Proyecto"], errores)
-    fases = _parse_fases(rows_by_sheet["Fases"], errores)
-    actividades = _parse_actividades(rows_by_sheet["Actividades"], errores)
+    planeacion = _parse_planeacion(rows_by_sheet["Planeacion_Proyecto"], errores)
+    validacion = _parse_validacion(rows_by_sheet["Validacion_Proyecto"], errores)
 
     _validate_cross_references(
-        fases=fases,
-        actividades=actividades,
+        proyecto=proyecto,
+        planeacion=planeacion,
         errores=errores,
     )
 
     return CanonicalWorkbook(
         proyecto=proyecto,
-        fases=fases,
-        actividades=actividades,
+        planeacion=planeacion,
+        validacion=validacion,
         errores=errores,
     )
 
@@ -503,73 +632,174 @@ def _parse_proyecto(
         return None
 
     row = rows[0]
-    codigo = _required_string(row, "Proyecto", "codigo_proyecto", errores)
+    pid = _required_string(row, "Proyecto", "proyecto_id", errores)
     nombre = _required_string(row, "Proyecto", "nombre_proyecto", errores)
-    version = _required_string(row, "Proyecto", "version_proyecto", errores)
-    if codigo is None or nombre is None or version is None:
+    cod_sofia = _required_string(row, "Proyecto", "codigo_proyecto_sofia", errores)
+    cod_prog = _required_string(row, "Proyecto", "codigo_programa", errores)
+    nom_prog = _required_string(row, "Proyecto", "nombre_programa", errores)
+    fuente = _optional_string(row.get("fuente_archivo"))
+    obs = _optional_string(row.get("observaciones"))
+
+    if (
+        pid is None
+        or nombre is None
+        or cod_sofia is None
+        or cod_prog is None
+        or nom_prog is None
+    ):
         return None
-    return ProjectRow(codigo, nombre, version, _public_record(row))
+    return ProjectRow(
+        proyecto_id=pid,
+        nombre_proyecto=nombre,
+        codigo_proyecto_sofia=cod_sofia,
+        codigo_programa=cod_prog,
+        nombre_programa=nom_prog,
+        fuente_archivo=fuente,
+        observaciones=obs,
+        raw=_public_record(row),
+    )
 
 
-def _parse_fases(
+def _parse_planeacion(
     rows: list[dict[str, object]],
     errores: list[ExcelValidationIssueDTO],
-) -> list[FaseRow]:
-    parsed: list[FaseRow] = []
+) -> list[PlaneacionRow]:
+    parsed: list[PlaneacionRow] = []
     for row in rows:
-        fase_id = _required_string(row, "Fases", "fase_id", errores)
-        nombre = _required_string(row, "Fases", "nombre_fase", errores)
-        orden = _optional_int(row, "Fases", "orden", errores)
-        if fase_id is None or nombre is None:
+        pid = _required_string(row, "Planeacion_Proyecto", "proyecto_id", errores)
+        fid = _required_string(row, "Planeacion_Proyecto", "fase_id", errores)
+        fase_proj = _required_string(
+            row, "Planeacion_Proyecto", "fase_proyecto", errores
+        )
+        aid = _required_string(row, "Planeacion_Proyecto", "actividad_id", errores)
+        act_proj = _required_string(
+            row, "Planeacion_Proyecto", "actividad_proyecto", errores
+        )
+
+        tipo_res = _required_string(
+            row, "Planeacion_Proyecto", "tipo_resultado", errores
+        )
+        comp_id = _required_string(
+            row, "Planeacion_Proyecto", "competencia_id", errores
+        )
+        cod_comp = _required_string(
+            row, "Planeacion_Proyecto", "codigo_competencia", errores
+        )
+        nom_comp = _required_string(
+            row, "Planeacion_Proyecto", "nombre_competencia", errores
+        )
+
+        is_practical = False
+        if cod_comp is not None and nom_comp is not None:
+            is_practical = _is_practical_stage(cod_comp, nom_comp)
+
+        rap_id: str | None = None
+        rap_num: str | None = None
+        rap_desc: str | None = None
+        if is_practical:
+            rap_id = _optional_string(row.get("rap_id")) or ""
+            rap_num = _optional_string(row.get("rap_numero")) or ""
+            rap_desc = _optional_string(row.get("resultado_aprendizaje")) or ""
+        else:
+            rap_id = _required_string(row, "Planeacion_Proyecto", "rap_id", errores)
+            rap_num = _required_string(
+                row, "Planeacion_Proyecto", "rap_numero", errores
+            )
+            rap_desc = _required_string(
+                row, "Planeacion_Proyecto", "resultado_aprendizaje", errores
+            )
+
+        orden_f = _optional_int(row, "Planeacion_Proyecto", "orden_fase", errores)
+        orden_a = _optional_int(row, "Planeacion_Proyecto", "orden_actividad", errores)
+        orden_r = _optional_int(row, "Planeacion_Proyecto", "orden_resultado", errores)
+
+        pag_orig = _optional_string(row.get("pagina_origen"))
+        obs = _optional_string(row.get("observaciones"))
+
+        if (
+            pid is None
+            or fid is None
+            or fase_proj is None
+            or aid is None
+            or act_proj is None
+            or tipo_res is None
+            or comp_id is None
+            or cod_comp is None
+            or nom_comp is None
+            or rap_id is None
+            or rap_num is None
+            or rap_desc is None
+        ):
             continue
+
         parsed.append(
-            FaseRow(
-                fase_id=fase_id,
-                nombre_fase=nombre,
-                orden=orden,
+            PlaneacionRow(
+                proyecto_id=pid,
+                fase_id=fid,
+                fase_proyecto=fase_proj,
+                actividad_id=aid,
+                actividad_proyecto=act_proj,
+                tipo_resultado=tipo_res,
+                competencia_id=comp_id,
+                codigo_competencia=cod_comp,
+                nombre_competencia=nom_comp,
+                rap_id=rap_id,
+                rap_numero=rap_num,
+                resultado_aprendizaje=rap_desc,
+                orden_fase=orden_f,
+                orden_actividad=orden_a,
+                orden_resultado=orden_r,
+                pagina_origen=pag_orig,
+                observaciones=obs,
                 raw=_public_record(row),
-            ),
+            )
         )
     return parsed
 
 
-def _parse_actividades(
+def _parse_validacion(
     rows: list[dict[str, object]],
     errores: list[ExcelValidationIssueDTO],
-) -> list[ActividadRow]:
-    parsed: list[ActividadRow] = []
+) -> list[ValidacionRow]:
+    parsed: list[ValidacionRow] = []
     for row in rows:
-        fase_id = _required_string(row, "Actividades", "fase_id", errores)
-        descripcion = _required_string(row, "Actividades", "descripcion", errores)
-        orden = _optional_int(row, "Actividades", "orden", errores)
-        if fase_id is None or descripcion is None:
+        tipo = _required_string(row, "Validacion_Proyecto", "tipo_validacion", errores)
+        desc = _required_string(row, "Validacion_Proyecto", "descripcion", errores)
+        estado = _required_string(row, "Validacion_Proyecto", "estado", errores)
+        obs = _optional_string(row.get("observaciones"))
+        if tipo is None or desc is None or estado is None:
             continue
         parsed.append(
-            ActividadRow(
-                fase_id=fase_id,
-                descripcion=descripcion,
-                orden=orden,
+            ValidacionRow(
+                tipo_validacion=tipo,
+                descripcion=desc,
+                estado=estado,
+                observaciones=obs,
                 raw=_public_record(row),
-            ),
+            )
         )
     return parsed
 
 
 def _validate_cross_references(
     *,
-    fases: list[FaseRow],
-    actividades: list[ActividadRow],
+    proyecto: ProjectRow | None,
+    planeacion: list[PlaneacionRow],
     errores: list[ExcelValidationIssueDTO],
 ) -> None:
-    fase_ids = {row.fase_id for row in fases}
-    for actividad in actividades:
-        if actividad.fase_id not in fase_ids:
+    if proyecto is None:
+        return
+    for row in planeacion:
+        if row.proyecto_id != proyecto.proyecto_id:
             errores.append(
                 ExcelValidationIssueDTO(
-                    hoja="Actividades",
-                    fila=_row_index(actividad.raw),
-                    campo="fase_id",
-                    mensaje="fase_id no existe en hoja Fases",
+                    hoja="Planeacion_Proyecto",
+                    fila=_row_index(row.raw),
+                    campo="proyecto_id",
+                    mensaje=(
+                        f"proyecto_id '{row.proyecto_id}' no coincide con "
+                        f"el de la hoja Proyecto '{proyecto.proyecto_id}'"
+                    ),
                 ),
             )
 
@@ -592,6 +822,132 @@ def _build_excel_storage_key(referencia_id: uuid.UUID, filename: str) -> str:
     return f"proyectos-formativos/{referencia_id}/excel/{object_id}-{safe_filename}"
 
 
+def count_resultados_especificos(planeacion: list[PlaneacionRow]) -> int:
+    unique_raps = set()
+    for r in planeacion:
+        if r.rap_id and r.tipo_resultado:
+            if r.tipo_resultado.strip().upper() == "ESPECIFICO":
+                unique_raps.add(r.rap_id)
+    return len(unique_raps)
+
+
+def build_fase_previews(planeacion: list[PlaneacionRow]) -> list[ExcelFasePreviewDTO]:
+    fases_map: dict[str, FaseBuilder] = {}
+    for r in planeacion:
+        fid = r.fase_id
+        if not fid:
+            continue
+        if fid not in fases_map:
+            fases_map[fid] = FaseBuilder(
+                fase_id=fid, nombre_fase=r.fase_proyecto, orden=r.orden_fase
+            )
+        fase = fases_map[fid]
+
+        aid = r.actividad_id
+        if not aid:
+            continue
+        if aid not in fase.actividades:
+            fase.actividades[aid] = ActividadBuilder(
+                actividad_id=aid,
+                descripcion=r.actividad_proyecto,
+                orden=r.orden_actividad,
+            )
+        act = fase.actividades[aid]
+
+        cid = r.competencia_id
+        if not cid:
+            continue
+        if cid not in act.competencias:
+            act.competencias[cid] = CompetenciaBuilder(
+                competencia_id=cid,
+                codigo_competencia=r.codigo_competencia,
+                nombre_competencia=r.nombre_competencia,
+            )
+        comp = act.competencias[cid]
+
+        rid = r.rap_id
+        if not rid:
+            continue
+        if rid not in comp.resultados:
+            comp.resultados[rid] = ResultBuilder(
+                rap_id=rid,
+                rap_numero=r.rap_numero,
+                resultado_aprendizaje=r.resultado_aprendizaje,
+                tipo_resultado=r.tipo_resultado,
+                orden_resultado=r.orden_resultado,
+                pagina_origen=r.pagina_origen,
+                observaciones=r.observaciones,
+            )
+
+    sorted_fase_builders = sorted(
+        fases_map.values(), key=lambda f: (f.orden or 9999, f.nombre_fase)
+    )
+    fase_dtos: list[ExcelFasePreviewDTO] = []
+
+    for f in sorted_fase_builders:
+        act_dtos: list[ExcelActividadPreviewDTO] = []
+        unique_competence_ids = set()
+        unique_rap_ids = set()
+
+        sorted_act_builders = sorted(
+            f.actividades.values(), key=lambda a: (a.orden or 9999, a.descripcion)
+        )
+        for a in sorted_act_builders:
+            comp_dtos: list[ExcelCompetenciaPreviewDTO] = []
+            sorted_comp_builders = sorted(
+                a.competencias.values(),
+                key=lambda c: (c.codigo_competencia, c.nombre_competencia),
+            )
+            for c in sorted_comp_builders:
+                unique_competence_ids.add(c.competencia_id)
+                res_dtos: list[ExcelResultPreviewDTO] = []
+                sorted_res_builders = sorted(
+                    c.resultados.values(),
+                    key=lambda r: (r.orden_resultado or 9999, r.rap_numero),
+                )
+                for res in sorted_res_builders:
+                    unique_rap_ids.add(res.rap_id)
+                    res_dtos.append(
+                        ExcelResultPreviewDTO(
+                            rap_id=res.rap_id,
+                            rap_numero=res.rap_numero,
+                            resultado_aprendizaje=res.resultado_aprendizaje,
+                            tipo_resultado=res.tipo_resultado,
+                            orden_resultado=res.orden_resultado,
+                            pagina_origen=res.pagina_origen,
+                            observaciones=res.observaciones,
+                        )
+                    )
+                comp_dtos.append(
+                    ExcelCompetenciaPreviewDTO(
+                        competencia_id=c.competencia_id,
+                        codigo_competencia=c.codigo_competencia,
+                        nombre_competencia=c.nombre_competencia,
+                        resultados=res_dtos,
+                    )
+                )
+            act_dtos.append(
+                ExcelActividadPreviewDTO(
+                    actividad_id=a.actividad_id,
+                    descripcion=a.descripcion,
+                    orden=a.orden,
+                    competencias=comp_dtos,
+                )
+            )
+
+        fase_dtos.append(
+            ExcelFasePreviewDTO(
+                fase_id=f.fase_id,
+                nombre_fase=f.nombre_fase,
+                orden=f.orden,
+                actividades=act_dtos,
+                numero_competencias=len(unique_competence_ids),
+                numero_resultados=len(unique_rap_ids),
+            )
+        )
+    return fase_dtos
+
+
 def _build_preview_dto(
     *,
     referencia_id: uuid.UUID,
@@ -606,34 +962,28 @@ def _build_preview_dto(
         resumen=_build_summary(workbook),
         proyecto=(
             ExcelProjectPreviewDTO(
-                codigo_proyecto=workbook.proyecto.codigo_proyecto,
+                codigo_proyecto=workbook.proyecto.codigo_proyecto_sofia,
                 nombre_proyecto=workbook.proyecto.nombre_proyecto,
-                version_proyecto=workbook.proyecto.version_proyecto,
+                version_proyecto="1",
             )
             if workbook.proyecto is not None
             else None
         ),
-        fases=[
-            ExcelFasePreviewDTO(
-                fase_id=row.fase_id,
-                nombre_fase=row.nombre_fase,
-                orden=row.orden,
-                actividades=sum(
-                    1 for a in workbook.actividades if a.fase_id == row.fase_id
-                ),
-            )
-            for row in workbook.fases
-        ],
+        fases=build_fase_previews(workbook.planeacion),
         pendientes_resumen=ExcelPendingSummaryDTO(total=0),
         errores=workbook.errores,
     )
 
 
 def _build_summary(workbook: CanonicalWorkbook) -> ExcelPreviewSummaryDTO:
+    unique_fases = {r.fase_id for r in workbook.planeacion if r.fase_id}
+    unique_actividades = {r.actividad_id for r in workbook.planeacion if r.actividad_id}
+
     return ExcelPreviewSummaryDTO(
         proyecto=1 if workbook.proyecto is not None else 0,
-        fases=len(workbook.fases),
-        actividades=len(workbook.actividades),
+        fases=len(unique_fases),
+        actividades=len(unique_actividades),
+        resultados_especificos=count_resultados_especificos(workbook.planeacion),
     )
 
 
@@ -693,8 +1043,7 @@ def _merge_excel_import_into_payload(
 
     next_payload["estructura"] = {
         "fases": [
-            {"fase_id": str(fid), "estado": "IMPORTADO"}
-            for fid in result.fase_ids
+            {"fase_id": str(fid), "estado": "IMPORTADO"} for fid in result.fase_ids
         ],
         "actividades": [
             {"actividad_id": str(aid), "estado": "IMPORTADO"}
@@ -707,6 +1056,7 @@ def _merge_excel_import_into_payload(
                 "proyecto": result.resumen.proyecto,
                 "fases": result.resumen.fases,
                 "actividades": result.resumen.actividades,
+                "resultados_especificos": result.resumen.resultados_especificos,
             },
         },
     }
@@ -727,6 +1077,7 @@ def _preview_to_payload(
                 "proyecto": preview.resumen.proyecto,
                 "fases": preview.resumen.fases,
                 "actividades": preview.resumen.actividades,
+                "resultados_especificos": preview.resumen.resultados_especificos,
             },
             "proyecto": (
                 {
@@ -739,12 +1090,43 @@ def _preview_to_payload(
             ),
             "fases": [
                 {
-                    "fase_id": item.fase_id,
-                    "nombre_fase": item.nombre_fase,
-                    "orden": item.orden,
-                    "actividades": item.actividades,
+                    "fase_id": f.fase_id,
+                    "nombre_fase": f.nombre_fase,
+                    "orden": f.orden,
+                    "numero_competencias": f.numero_competencias,
+                    "numero_resultados": f.numero_resultados,
+                    "actividades": [
+                        {
+                            "actividad_id": a.actividad_id,
+                            "descripcion": a.descripcion,
+                            "orden": a.orden,
+                            "competencias": [
+                                {
+                                    "competencia_id": c.competencia_id,
+                                    "codigo_competencia": c.codigo_competencia,
+                                    "nombre_competencia": c.nombre_competencia,
+                                    "resultados": [
+                                        {
+                                            "rap_id": r.rap_id,
+                                            "rap_numero": r.rap_numero,
+                                            "resultado_aprendizaje": (
+                                                r.resultado_aprendizaje
+                                            ),
+                                            "tipo_resultado": r.tipo_resultado,
+                                            "orden_resultado": r.orden_resultado,
+                                            "pagina_origen": r.pagina_origen,
+                                            "observaciones": r.observaciones,
+                                        }
+                                        for r in c.resultados
+                                    ],
+                                }
+                                for c in a.competencias
+                            ],
+                        }
+                        for a in f.actividades
+                    ],
                 }
-                for item in preview.fases
+                for f in preview.fases
             ],
             "pendientes_resumen": {
                 "total": preview.pendientes_resumen.total,
@@ -896,3 +1278,23 @@ def _row_index(row: dict[str, object]) -> int | None:
 
 def _public_record(row: dict[str, object]) -> dict[str, object]:
     return {k: v for k, v in row.items() if not k.startswith("_")}
+
+
+def _is_practical_stage(codigo_competencia: str, nombre_competencia: str) -> bool:
+    import unicodedata
+
+    def normalize(val: str) -> str:
+        without_accents = "".join(
+            char
+            for char in unicodedata.normalize("NFKD", val)
+            if not unicodedata.combining(char)
+        )
+        return re.sub(r"\s+", " ", without_accents).strip().lower()
+
+    normalized_name = normalize(nombre_competencia)
+    normalized_code = codigo_competencia.strip()
+    return (
+        normalized_code == "999999999"
+        or "etapa practica" in normalized_name
+        or "etapa productiva" in normalized_name
+    )

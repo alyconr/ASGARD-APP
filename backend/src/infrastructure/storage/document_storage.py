@@ -46,6 +46,9 @@ class DocumentStorageService(Protocol):
     async def read_excel(self, *, key: str) -> bytes:
         """Read a stored Excel workbook by key."""
 
+    async def delete_by_prefix(self, *, prefix: str) -> None:
+        """Remove all objects matching the prefix from the bucket."""
+
 
 class MinioDocumentStorageService:
     """S3-compatible document storage backed by MinIO."""
@@ -172,6 +175,21 @@ class MinioDocumentStorageService:
             return
 
         self._client.make_bucket(self._bucket_name, location=self._region)
+
+    async def delete_by_prefix(self, *, prefix: str) -> None:
+        """Remove all objects matching the given prefix from the bucket."""
+
+        def remove() -> None:
+            self._ensure_bucket()
+            objects_to_delete = self._client.list_objects(
+                bucket_name=self._bucket_name,
+                prefix=prefix,
+                recursive=True,
+            )
+            for obj in objects_to_delete:
+                self._client.remove_object(self._bucket_name, obj.object_name)
+
+        await anyio.to_thread.run_sync(remove)
 
 
 def build_pdf_metadata(

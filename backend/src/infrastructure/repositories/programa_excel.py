@@ -297,3 +297,13 @@ class ProgramaExcelImportRepository:
             )
         )
         await self._session.flush()
+
+    async def has_project_formativo(self, programa_id: uuid.UUID) -> bool:
+        """Return whether the program already has an imported project."""
+        from src.infrastructure.db.models.proyecto import ProyectoFormativo
+
+        statement = select(ProyectoFormativo.id).where(
+            ProyectoFormativo.programa_id == programa_id
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none() is not None

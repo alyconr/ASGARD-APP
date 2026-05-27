@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   FileSpreadsheet,
-  FolderKanban,
   ListChecks,
   RefreshCcw,
   Route,
@@ -33,7 +32,6 @@ const STEP_ICONS: Record<
   React.ComponentType<{ className?: string }>
 > = {
   "fuente-proyecto": FileSpreadsheet,
-  "estructura-proyecto": FolderKanban,
   "revision-proyecto": ListChecks,
 };
 
@@ -185,18 +183,74 @@ function StepWorkspace({
                 referenciaId={payload.meta.referenciaId}
               />
             </div>
-          ) : (
-            <>
-              <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
-                Slot reservado
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                {currentStep.taskRef} conectara aqui su modulo especifico. Por
-                ahora este espacio solo guarda navegacion, notas y estado del
-                borrador.
-              </p>
-            </>
-          )}
+          ) : payload !== null ? (
+            <div className="grid gap-6">
+              <div className="rounded-lg bg-[var(--paper-strong)] p-4 border border-[color:var(--card-border)]">
+                <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3 uppercase tracking-wider">
+                  Resumen General del Proyecto
+                </h4>
+                <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium text-[var(--muted)]">Nombre del Proyecto</dt>
+                    <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.nombre_proyecto || "No asignado (Cargar Excel)"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-[var(--muted)]">Código del Proyecto (SOFIA)</dt>
+                    <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.codigo_proyecto || "No asignado (Cargar Excel)"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-[var(--muted)]">Referencia de Sesión</dt>
+                    <dd className="mt-1 text-xs break-all text-[var(--foreground)]">{payload.meta.referenciaId}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-[var(--muted)]">Programa Asociado</dt>
+                    <dd className="mt-1 text-[var(--foreground)]">{payload.meta.programaId || "Desconocido"}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Evidencia Documental (PDF)
+                  </h4>
+                  {payload.documental.proyecto_pdf ? (
+                    <div className="text-sm">
+                      <p className="font-semibold text-emerald-700 font-medium">✓ Cargado</p>
+                      <p className="mt-1 text-[var(--muted)] truncate">Archivo: {payload.documental.proyecto_pdf.documento.original_filename}</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-amber-700 font-medium">⚠️ No se ha cargado el PDF del proyecto formativo</p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                    Estructura Curricular (Excel)
+                  </h4>
+                  {payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                    <div className="text-sm">
+                      <p className="font-semibold text-emerald-700 font-medium">✓ Importado y Confirmado</p>
+                      <p className="mt-1 text-[var(--muted)]">Fases: {payload.documental.fuente_estructurada.preview?.resumen.fases ?? 0}</p>
+                      <p className="text-[var(--muted)]">Actividades: {payload.documental.fuente_estructurada.preview?.resumen.actividades ?? 0}</p>
+                      <p className="text-[var(--muted)]">Resultados específicos: {payload.documental.fuente_estructurada.preview?.resumen.resultados_especificos ?? 0}</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-amber-700 font-medium">⚠️ Estructura pendiente de importación / confirmación</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-2">
+                  Trazabilidad de la Información
+                </h4>
+                <p className="text-xs leading-5 text-[var(--muted)]">
+                  La estructura de planeación, fases, actividades y resultados de aprendizaje (RAP) específicos ha sido importada de manera exclusiva a partir de la matriz de Excel canónico suministrada por el usuario, sirviendo el archivo PDF cargado como sustento y evidencia documental del cargue en la plataforma MinIO.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

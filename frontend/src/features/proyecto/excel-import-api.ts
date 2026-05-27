@@ -1,4 +1,11 @@
-import type { ProyectoStoredDocument } from "@/features/proyecto/types";
+import type {
+  ExcelFasePreview,
+  ExcelPendingSummary,
+  ExcelPreviewSummary,
+  ExcelProjectPreview,
+  ExcelValidationIssue,
+  ProyectoStoredDocument,
+} from "./types";
 import { getApiBaseUrl } from "@/lib/api";
 
 export class ProyectoExcelUploadError extends Error {
@@ -32,31 +39,11 @@ export interface ProyectoExcelPreviewResponse {
   documento: ProyectoStoredDocument | null;
   valid: boolean;
   estado_validacion: "VALIDO" | "INVALIDO";
-  resumen: {
-    proyecto: number;
-    fases: number;
-    actividades: number;
-  };
-  proyecto: {
-    codigo_proyecto: string;
-    nombre_proyecto: string;
-    version_proyecto: string;
-  } | null;
-  fases: {
-    fase_id: string;
-    nombre_fase: string;
-    orden: number | null;
-    actividades: number;
-  }[];
-  pendientes_resumen: {
-    total: number;
-  };
-  errores: {
-    hoja: string;
-    fila: number | null;
-    campo: string | null;
-    mensaje: string;
-  }[];
+  resumen: ExcelPreviewSummary;
+  proyecto: ExcelProjectPreview | null;
+  fases: ExcelFasePreview[];
+  pendientes_resumen: ExcelPendingSummary;
+  errores: ExcelValidationIssue[];
 }
 
 export async function uploadProjectExcelPreview(
@@ -92,14 +79,8 @@ export async function confirmProjectExcelImport(
   proyecto_id: string;
   fase_ids: string[];
   actividad_ids: string[];
-  resumen: {
-    proyecto: number;
-    fases: number;
-    actividades: number;
-  };
-  pendientes_resumen: {
-    total: number;
-  };
+  resumen: ExcelPreviewSummary;
+  pendientes_resumen: ExcelPendingSummary;
 }> {
   const response = await fetch(
     `${getApiBaseUrl()}/proyectos/${referenciaId}/excel/confirm`,
@@ -121,13 +102,7 @@ export async function confirmProjectExcelImport(
     proyecto_id: string;
     fase_ids: string[];
     actividad_ids: string[];
-    resumen: {
-      proyecto: number;
-      fases: number;
-      actividades: number;
-    };
-    pendientes_resumen: {
-      total: number;
-    };
+    resumen: ExcelPreviewSummary;
+    pendientes_resumen: ExcelPendingSummary;
   };
 }

@@ -202,8 +202,7 @@ def build_competencia(
     competencia.fecha_creacion = now
     competencia.fecha_actualizacion = now
     competencia.resultados = [
-        _resultado(competencia.id, f"Resultado {index}")
-        for index in range(resultados)
+        _resultado(competencia.id, f"Resultado {index}") for index in range(resultados)
     ]
     competencia.conocimientos = [
         _conocimiento(competencia.id, TipoConocimiento.SABER, f"Saber {index}")
@@ -375,7 +374,7 @@ async def test_validacion_pasa_con_estructura_completa_y_etapa_practica() -> Non
 
 @pytest.mark.anyio
 async def test_validacion_pasa_con_estructura_completa_y_etapa_productiva() -> None:
-    """A complete regular competence may coexist with empty practical stage named etapa productiva with standard code."""
+    """Check that complete competence may coexist with empty productiva stage."""
     programa = build_programa()
     programa.competencias = [
         build_competencia(programa.id),

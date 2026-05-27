@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+import uuid
+
+from pydantic import BaseModel, ConfigDict
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 
@@ -10,5 +12,7 @@ from src.application.dto.programa_documentos import StoredDocumentDTO
 class ProyectoPdfUploadResponse(BaseModel):
     """Response returned after storing a project PDF evidence."""
 
-    referencia_id: str
+    model_config = ConfigDict(from_attributes=True)
+
+    referencia_id: uuid.UUID
     documento: StoredDocumentDTO

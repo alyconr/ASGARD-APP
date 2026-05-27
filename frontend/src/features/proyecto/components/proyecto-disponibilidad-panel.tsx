@@ -7,12 +7,12 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import {
   ProyectoGateError,
   consultarDisponibilidadProyecto,
 } from "@/features/proyecto/proyecto-gate-api";
-import { ProyectoWizardShell } from "@/features/proyecto/components/proyecto-wizard-shell";
 import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
 import type { DraftStatus } from "@/features/drafts/types";
@@ -183,7 +183,13 @@ export function ProyectoDisponibilidadPanel({
 
       {!isBlocked ? (
         <div className="mt-4 border-t border-[var(--line)] pt-4">
-          <ProyectoWizardShell availability={availability} />
+          <Link
+            href={`/proyecto/${availability.referencia_id}`}
+            aria-label="Wizard base del proyecto formativo"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          >
+            Iniciar wizard del proyecto formativo
+          </Link>
         </div>
       ) : null}
     </section>
