@@ -182,14 +182,16 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
-              <ProgramaDocumentUpload
-                currentResult={programaPdfResult}
-                referenciaId={referenceId}
-                onUploaded={onProgramaPdfUploaded}
-                habilitado={docState?.documentos_habilitados ?? false}
-                carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
-                documentoExistente={docState?.programa_pdf}
-              />
+              {programaExcelResult?.confirmacion?.estado === "IMPORTADO" || docState?.programa_importado === true ? (
+                <ProgramaDocumentUpload
+                  currentResult={programaPdfResult}
+                  referenciaId={referenceId}
+                  onUploaded={onProgramaPdfUploaded}
+                  habilitado={docState?.documentos_habilitados ?? false}
+                  carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                  documentoExistente={docState?.programa_pdf}
+                />
+              ) : null}
               <ProgramaExcelImport
                 currentResult={programaExcelResult}
                 referenciaId={referenceId}

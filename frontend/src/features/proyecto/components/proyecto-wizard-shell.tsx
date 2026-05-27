@@ -176,15 +176,17 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "fuente-proyecto" && payload !== null ? (
             <div className="grid gap-4">
-              <ProyectoDocumentUpload
-                currentResult={payload.documental.proyecto_pdf}
-                onUploaded={onPdfUploaded}
-                referenciaId={payload.meta.referenciaId}
-                habilitado={docState?.documentos_habilitados ?? false}
-                carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
-                onHabilitarCarguePdf={onHabilitarCarguePdf}
-                documentoExistente={docState?.proyecto_pdf}
-              />
+              {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" || docState?.proyecto_importado === true ? (
+                <ProyectoDocumentUpload
+                  currentResult={payload.documental.proyecto_pdf}
+                  onUploaded={onPdfUploaded}
+                  referenciaId={payload.meta.referenciaId}
+                  habilitado={docState?.documentos_habilitados ?? false}
+                  carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                  onHabilitarCarguePdf={onHabilitarCarguePdf}
+                  documentoExistente={docState?.proyecto_pdf}
+                />
+              ) : null}
               <ProyectoExcelImport
                 currentResult={payload.documental.fuente_estructurada}
                 onPreview={onExcelPreview}
