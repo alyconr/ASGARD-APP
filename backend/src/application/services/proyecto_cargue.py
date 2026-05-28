@@ -169,7 +169,7 @@ class ProyectoCargueService:
             prefix_prog = build_programa_storage_prefix(
                 nombre=str(nombre_prog),
                 codigo=str(codigo_prog),
-                version=str(version_prog) if version_prog else "1"
+                version=str(version_prog) if version_prog else "1",
             )
             await self._storage_service.delete_by_prefix(prefix=f"{prefix_prog}/")
 
@@ -180,8 +180,7 @@ class ProyectoCargueService:
 
         if nombre_proj and codigo_proj:
             prefix_proj = build_proyecto_storage_prefix(
-                nombre=str(nombre_proj),
-                codigo=str(codigo_proj)
+                nombre=str(nombre_proj), codigo=str(codigo_proj)
             )
             await self._storage_service.delete_by_prefix(prefix=f"{prefix_proj}/")
 
@@ -220,3 +219,99 @@ class ProyectoCargueService:
             self._session.add(draft_proyecto)
 
         await self._session.flush()
+
+    async def eliminar_cargue_proyecto(self, referencia_id: uuid.UUID) -> None:
+        """Delete project formativo records and files, then reset project draft."""
+        # 1. Identify the source drafts
+        draft_proj = await self._session.execute(
+            select(BorradorSesion).where(
+                BorradorSesion.referencia_id == referencia_id,
+                BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROYECTO,
+            )
+        )
+        draft_proyecto = draft_proj.scalar_one_or_none()
+
+        programa_id = None
+        if draft_proyecto is not None:
+            payload = draft_proyecto.payload_json
+            if isinstance(payload, dict):
+                meta = payload.get("meta")
+                if isinstance(meta, dict):
+                    raw_id = meta.get("programaId")
+                    if raw_id:
+                        try:
+                            programa_id = uuid.UUID(str(raw_id))
+                        except ValueError:
+                            pass
+
+        nombre_proj = None
+        codigo_proj = None
+        if draft_proyecto is not None and isinstance(draft_proyecto.payload_json, dict):
+            proj_payload = draft_proyecto.payload_json.get("proyecto")
+            if isinstance(proj_payload, dict):
+                nombre_proj = proj_payload.get("nombre_proyecto")
+                codigo_proj = proj_payload.get("codigo_proyecto")
+
+        # 2. If we have programa_id, find the project in DB and delete it
+        if programa_id is not None:
+            proj_db_statement = select(ProyectoFormativo).where(
+                ProyectoFormativo.programa_id == programa_id
+            )
+            proj_db_result = await self._session.execute(proj_db_statement)
+            proyecto_db = proj_db_result.scalar_one_or_none()
+            if proyecto_db is not None:
+                nombre_proj = proyecto_db.nombre_proyecto
+                codigo_proj = proyecto_db.codigo_proyecto
+                await self._session.delete(proyecto_db)
+            await self._session.flush()
+
+        # 3. Clean project files from MinIO
+        if nombre_proj and codigo_proj:
+            prefix_proj = build_proyecto_storage_prefix(
+                nombre=str(nombre_proj), codigo=str(codigo_proj)
+            )
+            await self._storage_service.delete_by_prefix(prefix=f"{prefix_proj}/")
+
+        if referencia_id is not None:
+            await self._storage_service.delete_by_prefix(
+                prefix=f"proyectos-formativos/{referencia_id}/"
+            )
+
+        # 4. Reset project draft to initial state
+        now = datetime.now(UTC).isoformat()
+        if draft_proyecto is not None:
+            from typing import Any, cast
+
+            proj_payload = cast(dict[str, Any], draft_proyecto.payload_json)
+            draft_proyecto.paso_actual = "fuente-proyecto"
+            draft_proyecto.estado_borrador = EstadoBloque.BORRADOR
+            draft_proyecto.payload_json = {
+                "meta": {
+                    "referenciaId": str(referencia_id),
+                    "programaReferenciaId": proj_payload.get("meta", {}).get(
+                        "programaReferenciaId"
+                    ),
+                    "programaId": str(programa_id) if programa_id else None,
+                    "touchedSteps": ["fuente-proyecto"],
+                    "lastInteractionAt": now,
+                },
+                "wizard": {
+                    "notesByStep": {},
+                },
+                "proyecto": {
+                    "proyecto_formativo_id": None,
+                    "codigo_proyecto": "",
+                    "nombre_proyecto": "",
+                    "version_proyecto": "",
+                },
+                "documental": {
+                    "proyecto_pdf": None,
+                    "fuente_estructurada": None,
+                },
+                "estructura": {
+                    "fases": [],
+                    "actividades": [],
+                },
+            }
+            self._session.add(draft_proyecto)
+            await self._session.flush()

@@ -21,3 +21,4 @@ class ProyectoDisponibilidadDTO:
     motivo: str | None
     mensaje: str
     accion_sugerida: str
+    programa_referencia_id: uuid.UUID | None = None

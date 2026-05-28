@@ -67,46 +67,102 @@ class ProyectoGateService:
         referencia_id: uuid.UUID,
     ) -> ProyectoDisponibilidadDTO:
         """Return whether the project module is available for a program draft."""
-        draft = await self._get_program_draft(referencia_id)
-        programa_id = _extract_programa_id(draft.payload_json)
+        project_draft = None
+        draft = await self._draft_repository.get_by_block_reference(
+            TipoBloqueBorrador.PROGRAMA,
+            referencia_id,
+        )
+        if draft is None:
+            # Try to resolve via project draft
+            project_draft = await self._draft_repository.get_by_block_reference(
+                TipoBloqueBorrador.PROYECTO,
+                referencia_id,
+            )
+            if project_draft is not None:
+                meta = project_draft.payload_json.get("meta", {})
+                if isinstance(meta, dict):
+                    prog_ref_str = meta.get("programaReferenciaId")
+                    if prog_ref_str:
+                        try:
+                            prog_ref_id = uuid.UUID(str(prog_ref_str))
+                            draft = await self._draft_repository.get_by_block_reference(
+                                TipoBloqueBorrador.PROGRAMA,
+                                prog_ref_id,
+                            )
+                        except ValueError:
+                            pass
+
+        if draft is None and project_draft is None:
+            raise ProyectoGateDraftNotFoundError(
+                "No existe un borrador de programa para la referencia dada",
+            )
+
+        programa_id = None
+        if draft is not None:
+            programa_id = _extract_programa_id(draft.payload_json)
+        if programa_id is None and project_draft is not None:
+            programa_id = _extract_programa_id(project_draft.payload_json)
+
         programa = (
             await self._proyecto_repository.get_programa(programa_id)
             if programa_id is not None
             else None
         )
-        estado_programa = (
-            programa.estado if programa is not None else draft.estado_borrador
-        )
         programa_completo = (
-            programa is not None and programa.estado is EstadoBloque.COMPLETO
+            programa is not None and programa.estado == EstadoBloque.COMPLETO
+        ) or (draft is not None and draft.estado_borrador == EstadoBloque.COMPLETO)
+        pdf_cargado = False
+        if draft is not None:
+            doc_payload = draft.payload_json.get("documental")
+            if isinstance(doc_payload, dict):
+                programa_pdf = doc_payload.get("programa_pdf")
+                if isinstance(programa_pdf, dict):
+                    if programa_pdf.get("documento") is not None:
+                        pdf_cargado = True
+
+        proyecto_bloqueado = not (programa_completo or pdf_cargado)
+        estado_programa = (
+            EstadoBloque.COMPLETO
+            if programa_completo
+            else (
+                programa.estado
+                if programa is not None
+                else (
+                    draft.estado_borrador
+                    if draft is not None
+                    else EstadoBloque.BLOQUEADO
+                )
+            )
         )
-        proyecto_bloqueado = not programa_completo
         return ProyectoDisponibilidadDTO(
             referencia_id=referencia_id,
             programa_id=programa.id if programa is not None else programa_id,
             estado_programa=estado_programa,
-            programa_completo=programa_completo,
+            programa_completo=programa_completo or pdf_cargado,
             proyecto_bloqueado=proyecto_bloqueado,
             estado_proyecto=(
-                EstadoBloque.BORRADOR if programa_completo else EstadoBloque.BLOQUEADO
+                EstadoBloque.BORRADOR
+                if not proyecto_bloqueado
+                else EstadoBloque.BLOQUEADO
             ),
-            motivo=(None if programa_completo else "PROGRAMA_NO_COMPLETO"),
+            motivo=(None if not proyecto_bloqueado else "PROGRAMA_NO_COMPLETO"),
             mensaje=(
                 (
                     "El proyecto formativo esta habilitado porque el programa "
-                    "esta COMPLETO."
+                    "esta COMPLETO o cuenta con el PDF de evidencia cargado."
                 )
-                if programa_completo
+                if not proyecto_bloqueado
                 else (
                     "El modulo proyecto esta bloqueado hasta que el programa "
-                    "quede cerrado como COMPLETO."
+                    "quede cerrado como COMPLETO o se cargue su PDF de soporte."
                 )
             ),
             accion_sugerida=(
                 "iniciar_proyecto"
-                if programa_completo
+                if not proyecto_bloqueado
                 else "completar_y_cerrar_programa"
             ),
+            programa_referencia_id=draft.referencia_id if draft is not None else None,
         )
 
     async def validar_acceso(
@@ -132,10 +188,32 @@ class ProyectoGateService:
 
 
 def _extract_programa_id(payload: dict[str, object]) -> uuid.UUID | None:
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        parsed_programa_id = _parse_uuid(meta.get("programaId"))
+        if parsed_programa_id is not None:
+            return parsed_programa_id
+
     curricular = payload.get("curricular")
-    if not isinstance(curricular, dict):
+    if isinstance(curricular, dict):
+        parsed_programa_id = _parse_uuid(curricular.get("programa_formacion_id"))
+        if parsed_programa_id is not None:
+            return parsed_programa_id
+
+    documental = payload.get("documental")
+    if not isinstance(documental, dict):
         return None
-    raw_programa_id = curricular.get("programa_formacion_id")
+    programa_excel = documental.get("programa_excel")
+    if not isinstance(programa_excel, dict):
+        return None
+    confirmacion = programa_excel.get("confirmacion")
+    if not isinstance(confirmacion, dict):
+        return None
+    return _parse_uuid(confirmacion.get("programa_id"))
+
+
+def _parse_uuid(value: object) -> uuid.UUID | None:
+    raw_programa_id = value
     if not isinstance(raw_programa_id, str) or not raw_programa_id:
         return None
     try:

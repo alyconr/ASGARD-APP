@@ -22,6 +22,28 @@ export async function eliminarCargueCompleto(referenciaId: string): Promise<void
   }
 }
 
+export async function eliminarCargueProyecto(referenciaId: string): Promise<void> {
+  const response = await fetch(
+    `${getApiBaseUrl()}/proyectos/cargue-proyecto/${referenciaId}`,
+    {
+      method: "DELETE",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    let errorDetail = "No fue posible eliminar el cargue del proyecto.";
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        errorDetail = payload.detail;
+      }
+    } catch {}
+    throw new Error(errorDetail);
+  }
+}
+
+
 export async function getEstadoDocumental(
   referenciaId: string,
 ): Promise<EstadoDocumentalResponse> {

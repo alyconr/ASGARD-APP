@@ -225,7 +225,9 @@ def sanitize_directory_name(name: str) -> str:
     return clean.lower() or "sin-nombre"
 
 
-def build_programa_storage_prefix(*, nombre: str, codigo: str, version: str | None) -> str:
+def build_programa_storage_prefix(
+    *, nombre: str, codigo: str, version: str | None
+) -> str:
     """Build a business-legible path prefix for training programs."""
     nombre_san = sanitize_directory_name(nombre)
     codigo_san = sanitize_directory_name(codigo)

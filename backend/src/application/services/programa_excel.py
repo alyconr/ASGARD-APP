@@ -12,7 +12,6 @@ from typing import Protocol
 from openpyxl import load_workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
-from src.infrastructure.storage.document_storage import build_programa_storage_prefix
 from src.application.dto.programa_excel import (
     ExcelCompetenciaPreviewDTO,
     ExcelConocimientoPreviewDTO,
@@ -42,6 +41,7 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.storage.document_storage import build_programa_storage_prefix
 
 CANONICAL_SHEETS: dict[str, list[str]] = {
     "Programa": [

@@ -24,9 +24,20 @@ class MockDraftRepository:
         if drafts is None:
             self.drafts = {}
         elif isinstance(drafts, list):
-            self.drafts = {(d.tipo_bloque if hasattr(d, "tipo_bloque") else "PROYECTO", d.referencia_id if hasattr(d, "referencia_id") else None): d for d in drafts}
+            self.drafts = {
+                (
+                    d.tipo_bloque if hasattr(d, "tipo_bloque") else "PROYECTO",
+                    d.referencia_id if hasattr(d, "referencia_id") else None,
+                ): d
+                for d in drafts
+            }
         else:
-            self.drafts = {("PROYECTO", drafts.referencia_id if hasattr(drafts, "referencia_id") else None): drafts}
+            self.drafts = {
+                (
+                    "PROYECTO",
+                    drafts.referencia_id if hasattr(drafts, "referencia_id") else None,
+                ): drafts
+            }
         self.saved = False
 
     @property
@@ -105,11 +116,7 @@ def draft_factory():
                     "codigo_proyecto": "987654",
                 },
                 "documental": {
-                    "fuente_estructurada": {
-                        "confirmacion": {
-                            "estado": "IMPORTADO"
-                        }
-                    }
+                    "fuente_estructurada": {"confirmacion": {"estado": "IMPORTADO"}}
                 },
             },
             paso_actual="fuente-proyecto",
@@ -131,11 +138,7 @@ def program_draft_factory():
                     "referenciaId": str(referencia_id),
                 },
                 "documental": {
-                    "programa_excel": {
-                        "confirmacion": {
-                            "estado": "IMPORTADO"
-                        }
-                    }
+                    "programa_excel": {"confirmacion": {"estado": "IMPORTADO"}}
                 },
             },
             paso_actual="origen-documental",
@@ -289,12 +292,8 @@ class TestUploadAndStoreProjectPdf:
                     "codigo_proyecto": "987654",
                 },
                 "documental": {
-                    "fuente_estructurada": {
-                        "confirmacion": {
-                            "estado": "IMPORTADO"
-                        }
-                    }
-                }
+                    "fuente_estructurada": {"confirmacion": {"estado": "IMPORTADO"}}
+                },
             },
             paso_actual="fuente-proyecto",
             estado_borrador=EstadoBloque.BORRADOR,
@@ -306,12 +305,8 @@ class TestUploadAndStoreProjectPdf:
             payload_json={
                 "meta": {},
                 "documental": {
-                    "programa_excel": {
-                        "confirmacion": {
-                            "estado": "IMPORTADO"
-                        }
-                    }
-                }
+                    "programa_excel": {"confirmacion": {"estado": "IMPORTADO"}}
+                },
             },
             paso_actual="origen-documental",
             estado_borrador=EstadoBloque.BORRADOR,

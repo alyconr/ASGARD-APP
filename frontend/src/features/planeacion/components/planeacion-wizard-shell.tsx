@@ -97,6 +97,66 @@ export function PlaneacionWizardShell({
 
   const selectedCompetencia = selectedCompId ? competenciasMap.get(selectedCompId) : null;
 
+  // Select All toggles
+  const allResultadosIds = useMemo(() => selectedCompetencia?.resultados.map((r) => r.id) ?? [], [selectedCompetencia]);
+  const allSaberIds = useMemo(() => selectedCompetencia?.conocimientos_saber.map((k) => k.id) ?? [], [selectedCompetencia]);
+  const allProcesoIds = useMemo(() => selectedCompetencia?.conocimientos_proceso.map((k) => k.id) ?? [], [selectedCompetencia]);
+  const allConocimientosIds = useMemo(() => [...allSaberIds, ...allProcesoIds], [allSaberIds, allProcesoIds]);
+  const allCriteriosIds = useMemo(() => selectedCompetencia?.criterios.map((cr) => cr.id) ?? [], [selectedCompetencia]);
+
+  const totalSelectableCount = allResultadosIds.length + allConocimientosIds.length + allCriteriosIds.length;
+  const totalSelectedCount = selectedResultados.length + selectedConocimientos.length + selectedCriterios.length;
+
+  const isAllSelected = totalSelectableCount > 0 && totalSelectedCount === totalSelectableCount;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedResultados([]);
+      setSelectedConocimientos([]);
+      setSelectedCriterios([]);
+    } else {
+      setSelectedResultados(allResultadosIds);
+      setSelectedConocimientos(allConocimientosIds);
+      setSelectedCriterios(allCriteriosIds);
+    }
+  };
+
+  const isAllResultadosSelected = allResultadosIds.length > 0 && selectedResultados.length === allResultadosIds.length;
+  const handleToggleAllResultados = () => {
+    if (isAllResultadosSelected) {
+      setSelectedResultados([]);
+    } else {
+      setSelectedResultados(allResultadosIds);
+    }
+  };
+
+  const isAllSaberSelected = allSaberIds.length > 0 && allSaberIds.every((id) => selectedConocimientos.includes(id));
+  const handleToggleAllSaber = () => {
+    if (isAllSaberSelected) {
+      setSelectedConocimientos((prev) => prev.filter((id) => !allSaberIds.includes(id)));
+    } else {
+      setSelectedConocimientos((prev) => [...new Set([...prev, ...allSaberIds])]);
+    }
+  };
+
+  const isAllProcesoSelected = allProcesoIds.length > 0 && allProcesoIds.every((id) => selectedConocimientos.includes(id));
+  const handleToggleAllProceso = () => {
+    if (isAllProcesoSelected) {
+      setSelectedConocimientos((prev) => prev.filter((id) => !allProcesoIds.includes(id)));
+    } else {
+      setSelectedConocimientos((prev) => [...new Set([...prev, ...allProcesoIds])]);
+    }
+  };
+
+  const isAllCriteriosSelected = allCriteriosIds.length > 0 && selectedCriterios.length === allCriteriosIds.length;
+  const handleToggleAllCriterios = () => {
+    if (isAllCriteriosSelected) {
+      setSelectedCriterios([]);
+    } else {
+      setSelectedCriterios(allCriteriosIds);
+    }
+  };
+
   // Filtered activities based on selected phase
   const faseMap = useMemo(() => {
     const map = new Map<string, ContextoFase>();
@@ -498,9 +558,42 @@ export function PlaneacionWizardShell({
                     </div>
                   </div>
 
+                  {/* Select All Toggle Control Bar */}
+                  <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
+                        Contenido Curricular de la Competencia
+                      </h3>
+                      <p className="text-xs text-[var(--muted)] mt-0.5">
+                        Selecciona los resultados, conocimientos y criterios que se abordarán en esta planeación.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shadow-sm cursor-pointer",
+                        isAllSelected
+                          ? "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300"
+                          : "bg-[var(--accent-soft)] border-[color:var(--card-border)] text-[var(--accent-strong)] hover:bg-[var(--accent)] hover:text-white"
+                      )}
+                    >
+                      {isAllSelected ? "Deseleccionar Todo" : "Seleccionar Todo"}
+                    </button>
+                  </div>
+
                   {/* Resultados de Aprendizaje checklist */}
                   <div className="border-t border-[var(--line)] pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Resultados de Aprendizaje (RAP) asociados</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Resultados de Aprendizaje (RAP) asociados</h3>
+                      <button
+                        type="button"
+                        onClick={handleToggleAllResultados}
+                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
+                      >
+                        {isAllResultadosSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                      </button>
+                    </div>
                     <div className="grid gap-2">
                       {selectedCompetencia.resultados.map((r) => (
                         <label
@@ -528,7 +621,16 @@ export function PlaneacionWizardShell({
 
                   {/* Saberes Saber checklist */}
                   <div className="border-t border-[var(--line)] pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Saberes: Conceptos y Principios</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Saberes: Conceptos y Principios</h3>
+                      <button
+                        type="button"
+                        onClick={handleToggleAllSaber}
+                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
+                      >
+                        {isAllSaberSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                      </button>
+                    </div>
                     <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
                       {selectedCompetencia.conocimientos_saber.map((k) => (
                         <label
@@ -553,7 +655,16 @@ export function PlaneacionWizardShell({
 
                   {/* Saberes Proceso checklist */}
                   <div className="border-t border-[var(--line)] pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Saberes de Proceso</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Saberes de Proceso</h3>
+                      <button
+                        type="button"
+                        onClick={handleToggleAllProceso}
+                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
+                      >
+                        {isAllProcesoSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                      </button>
+                    </div>
                     <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
                       {selectedCompetencia.conocimientos_proceso.map((k) => (
                         <label
@@ -578,7 +689,16 @@ export function PlaneacionWizardShell({
 
                   {/* Criterios checklist */}
                   <div className="border-t border-[var(--line)] pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Criterios de Evaluación</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Criterios de Evaluación</h3>
+                      <button
+                        type="button"
+                        onClick={handleToggleAllCriterios}
+                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
+                      >
+                        {isAllCriteriosSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                      </button>
+                    </div>
                     <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
                       {selectedCompetencia.criterios.map((cr) => (
                         <label
@@ -882,6 +1002,140 @@ export function PlaneacionWizardShell({
                       </span>
                     </p>
                   </div>
+
+                  {/* Resumen Detallado de la Planeación */}
+                  {selectedCompetencia && confirmedPlanning && (
+                    <div className="mt-8 w-full max-w-3xl text-left border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                      <div className="bg-slate-50 border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                          Detalle de la Planeación Aprobada
+                        </h3>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          APROBADO
+                        </span>
+                      </div>
+
+                      <div className="p-6 grid gap-6">
+                        {/* Metadatos Generales */}
+                        <div className="grid gap-4 sm:grid-cols-2 text-sm border-b border-slate-100 pb-4">
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Competencia</span>
+                            <p className="mt-1 font-semibold text-slate-800">
+                              {selectedCompetencia.codigo_competencia} - {selectedCompetencia.nombre_competencia}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Instructor Responsable</span>
+                            <p className="mt-1 font-semibold text-slate-800">
+                              {(confirmedPlanning.datos_complementarios.instructor_responsable as string) || "No asignado"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Fase y Actividad del Proyecto</span>
+                            <p className="mt-1 font-semibold text-slate-800">
+                              {confirmedPlanning.fase_id ? faseMap.get(confirmedPlanning.fase_id)?.nombre_fase : "Sin fase"}
+                              {confirmedPlanning.actividad_id && confirmedPlanning.fase_id
+                                ? ` / ${
+                                    faseMap.get(confirmedPlanning.fase_id)?.actividades.find(
+                                      (a) => a.id === confirmedPlanning.actividad_id
+                                    )?.descripcion ?? ""
+                                  }`
+                                : ""}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Duración de Acompañamiento</span>
+                            <p className="mt-1 font-semibold text-slate-800">
+                              {confirmedPlanning.datos_complementarios.duracion_horas ? `${confirmedPlanning.datos_complementarios.duracion_horas} Horas` : "No asignado"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Resultados de Aprendizaje */}
+                        <div className="border-b border-slate-100 pb-4">
+                          <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Resultados de Aprendizaje Seleccionados ({confirmedPlanning.resultados_ids.length})
+                          </span>
+                          {confirmedPlanning.resultados_ids.length > 0 ? (
+                            <ul className="list-disc pl-5 text-sm text-slate-700 gap-1.5 grid">
+                              {selectedCompetencia.resultados
+                                .filter((r) => confirmedPlanning.resultados_ids.includes(r.id))
+                                .map((r) => (
+                                  <li key={r.id}>{r.descripcion}</li>
+                                ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-slate-400 italic">Ninguno seleccionado</p>
+                          )}
+                        </div>
+
+                        {/* Saberes */}
+                        <div className="grid gap-4 sm:grid-cols-2 border-b border-slate-100 pb-4">
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                              Saberes: Conceptos y Principios
+                            </span>
+                            <ul className="list-disc pl-5 text-sm text-slate-700 gap-1 grid">
+                              {selectedCompetencia.conocimientos_saber
+                                .filter((k) => confirmedPlanning.conocimientos_ids.includes(k.id))
+                                .map((k) => (
+                                  <li key={k.id}>{k.descripcion}</li>
+                                ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                              Saberes de Proceso
+                            </span>
+                            <ul className="list-disc pl-5 text-sm text-slate-700 gap-1 grid">
+                              {selectedCompetencia.conocimientos_proceso
+                                .filter((k) => confirmedPlanning.conocimientos_ids.includes(k.id))
+                                .map((k) => (
+                                  <li key={k.id}>{k.descripcion}</li>
+                                ))}
+                            </ul>
+                          </div>
+                        </div>
+
+                        {/* Criterios de Evaluación */}
+                        <div className="border-b border-slate-100 pb-4">
+                          <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Criterios de Evaluación Seleccionados ({confirmedPlanning.criterios_ids.length})
+                          </span>
+                          <ul className="list-disc pl-5 text-sm text-slate-700 gap-1 grid">
+                            {selectedCompetencia.criterios
+                              .filter((cr) => confirmedPlanning.criterios_ids.includes(cr.id))
+                              .map((cr) => (
+                                <li key={cr.id}>{cr.descripcion}</li>
+                              ))}
+                          </ul>
+                        </div>
+
+                        {/* Campos Complementarios */}
+                        <div className="grid gap-4 text-sm">
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Estrategias Didácticas Activas</span>
+                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              {(confirmedPlanning.datos_complementarios.estrategias_didacticas as string) || "No detallado"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Ambientes de Aprendizaje</span>
+                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              {(confirmedPlanning.datos_complementarios.ambientes_aprendizaje as string) || "No detallado"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Recursos Didácticos y Medios</span>
+                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              {(confirmedPlanning.datos_complementarios.recursos_didacticos as string) || "No detallado"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full justify-center">
                     <button

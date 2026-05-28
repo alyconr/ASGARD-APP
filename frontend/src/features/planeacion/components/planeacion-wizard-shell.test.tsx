@@ -208,6 +208,48 @@ describe("PlaneacionWizardShell", () => {
     });
   });
 
+  it("toggles all checkboxes when using the Select All button", async () => {
+    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
+
+    // Click to start planning
+    fireEvent.click(screen.getByText("Iniciar Planeación"));
+
+    await waitFor(() => {
+      expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
+    });
+
+    const selectAllBtn = screen.getByRole("button", { name: "Seleccionar Todo" });
+    const resultCheckbox = screen.getByLabelText("Resultado 1: Identificar requisitos técnicos");
+    const knowSaberCheckbox = screen.getByLabelText("Concepto 1: Fundamentos de bases de datos");
+    const knowProcCheckbox = screen.getByLabelText("Proceso 1: Aplicar diagramas UML");
+    const critCheckbox = screen.getByLabelText("Criterio 1: Elabora el modelo conceptual");
+
+    // Initially none are checked
+    expect(resultCheckbox).not.toBeChecked();
+    expect(knowSaberCheckbox).not.toBeChecked();
+    expect(knowProcCheckbox).not.toBeChecked();
+    expect(critCheckbox).not.toBeChecked();
+
+    // Click Select All
+    fireEvent.click(selectAllBtn);
+
+    // All should be checked
+    expect(resultCheckbox).toBeChecked();
+    expect(knowSaberCheckbox).toBeChecked();
+    expect(knowProcCheckbox).toBeChecked();
+    expect(critCheckbox).toBeChecked();
+
+    // Click Deselect All
+    const deselectAllBtn = screen.getByRole("button", { name: "Deseleccionar Todo" });
+    fireEvent.click(deselectAllBtn);
+
+    // None should be checked
+    expect(resultCheckbox).not.toBeChecked();
+    expect(knowSaberCheckbox).not.toBeChecked();
+    expect(knowProcCheckbox).not.toBeChecked();
+    expect(critCheckbox).not.toBeChecked();
+  });
+
   it("allows deleting an existing planning draft", async () => {
     vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue(mockPlanningsList);
     vi.spyOn(api, "deletePlaneacion").mockResolvedValue();
@@ -223,6 +265,47 @@ describe("PlaneacionWizardShell", () => {
 
     await waitFor(() => {
       expect(api.deletePlaneacion).toHaveBeenCalledWith("plan-1");
+    });
+  });
+
+  it("loads and displays approved planning details when planning is COMPLETO", async () => {
+    const mockCompletedPlanning: PlaneacionListResponse[] = [
+      {
+        ...mockPlanningsList[0],
+        estado: "COMPLETO",
+      },
+    ];
+    const mockCompletedDetail: PlaneacionResponse = {
+      ...mockPlanningDetail,
+      estado: "COMPLETO",
+      storage_key: "planeaciones-pedagogicas/prog-1/proj-1/comp-1/planeacion.json",
+      file_name: "planeacion.json",
+      fecha_generacion: "2026-05-27T12:00:00Z",
+    };
+
+    vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue(mockCompletedPlanning);
+    vi.spyOn(api, "fetchPlaneacionDetalle").mockResolvedValue(mockCompletedDetail);
+
+    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("COMPLETO")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Ver Planeación"));
+
+    await waitFor(() => {
+      expect(api.fetchPlaneacionDetalle).toHaveBeenCalledWith("plan-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("¡Planeación Pedagógica Completada!")).toBeInTheDocument();
+      expect(screen.getByText("Detalle de la Planeación Aprobada")).toBeInTheDocument();
+      expect(screen.getByText("Instructor Responsable")).toBeInTheDocument();
+      expect(screen.getByText("Juan Perez")).toBeInTheDocument();
+      expect(screen.getByText("Talleres prácticos")).toBeInTheDocument();
+      expect(screen.getByText("Laboratorio 305")).toBeInTheDocument();
+      expect(screen.getByText("Computadores, guías de aprendizaje")).toBeInTheDocument();
     });
   });
 });

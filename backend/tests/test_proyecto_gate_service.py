@@ -18,11 +18,11 @@ from src.infrastructure.db.models.drafts import BorradorSesion
 
 
 class FakeDraftRepository:
-    """In-memory program draft repository."""
+    """In-memory draft repository."""
 
-    def __init__(self, draft: BorradorSesion) -> None:
-        """Store a single draft."""
-        self.draft = draft
+    def __init__(self, *drafts: BorradorSesion) -> None:
+        """Store multiple drafts."""
+        self.drafts = list(drafts)
 
     async def get_by_block_reference(
         self,
@@ -30,11 +30,12 @@ class FakeDraftRepository:
         referencia_id: uuid.UUID,
     ) -> BorradorSesion | None:
         """Return the stored draft when the logical key matches."""
-        if (
-            tipo_bloque is TipoBloqueBorrador.PROGRAMA
-            and self.draft.referencia_id == referencia_id
-        ):
-            return self.draft
+        for draft in self.drafts:
+            if (
+                draft.tipo_bloque == tipo_bloque.value
+                and draft.referencia_id == referencia_id
+            ):
+                return draft
         return None
 
 
@@ -141,6 +142,31 @@ async def test_programa_completo_habilita_proyecto() -> None:
 
 
 @pytest.mark.anyio
+async def test_programa_completo_habilita_con_id_en_confirmacion_excel() -> None:
+    """A completed import should unlock even if the compact curricular id is stale."""
+    programa = build_programa(EstadoBloque.COMPLETO)
+    service, draft = build_service(programa, draft_estado=EstadoBloque.COMPLETO)
+    draft.payload_json = {
+        "meta": {"referenciaId": str(draft.referencia_id)},
+        "curricular": {"programa_formacion_id": None},
+        "documental": {
+            "programa_excel": {
+                "confirmacion": {
+                    "estado": "IMPORTADO",
+                    "programa_id": str(programa.id),
+                },
+            },
+        },
+    }
+
+    result = await service.consultar_disponibilidad(draft.referencia_id)
+
+    assert result.programa_completo is True
+    assert result.proyecto_bloqueado is False
+    assert result.programa_id == programa.id
+
+
+@pytest.mark.anyio
 async def test_acceso_indebido_rechaza_backend_si_programa_incompleto() -> None:
     """The backend guard should reject project access while blocked."""
     programa = build_programa(EstadoBloque.BORRADOR)
@@ -165,3 +191,61 @@ async def test_respuesta_estructurada_incluye_mensaje_de_bloqueo() -> None:
     assert result.estado_programa is EstadoBloque.BORRADOR
     assert result.mensaje
     assert result.accion_sugerida == "completar_y_cerrar_programa"
+
+
+@pytest.mark.anyio
+async def test_resolucion_por_proyecto_referencia_id() -> None:
+    """The gate should use the associated project draft reference."""
+    programa = build_programa(EstadoBloque.COMPLETO)
+    program_ref_id = uuid.uuid4()
+    program_draft = build_draft(program_ref_id, programa.id, EstadoBloque.COMPLETO)
+
+    project_ref_id = uuid.uuid4()
+    project_draft = BorradorSesion(
+        tipo_bloque=TipoBloqueBorrador.PROYECTO.value,
+        referencia_id=project_ref_id,
+        paso_actual="fuente-proyecto",
+        payload_json={
+            "meta": {
+                "referenciaId": str(project_ref_id),
+                "programaReferenciaId": str(program_ref_id),
+                "programaId": str(programa.id),
+            }
+        },
+        estado_borrador=EstadoBloque.BORRADOR,
+    )
+
+    service = ProyectoGateService(
+        draft_repository=FakeDraftRepository(program_draft, project_draft),
+        proyecto_repository=FakeProyectoGateRepository(programa),
+    )
+
+    result = await service.consultar_disponibilidad(project_ref_id)
+
+    assert result.referencia_id == project_ref_id
+    assert result.programa_completo is True
+    assert result.proyecto_bloqueado is False
+    assert result.estado_programa == EstadoBloque.COMPLETO
+    assert result.programa_referencia_id == program_ref_id
+
+
+@pytest.mark.anyio
+async def test_programa_completo_en_draft_pero_borrador_en_db_habilita_proyecto() -> (
+    None
+):
+    """Completed program drafts unlock even when the DB entity is BORRADOR."""
+    programa = build_programa(EstadoBloque.BORRADOR)
+    referencia_id = uuid.uuid4()
+    draft = build_draft(referencia_id, programa.id, EstadoBloque.COMPLETO)
+
+    service = ProyectoGateService(
+        draft_repository=FakeDraftRepository(draft),
+        proyecto_repository=FakeProyectoGateRepository(programa),
+    )
+
+    result = await service.consultar_disponibilidad(referencia_id)
+
+    assert result.programa_completo is True
+    assert result.proyecto_bloqueado is False
+    assert result.estado_proyecto is EstadoBloque.BORRADOR
+    assert result.estado_programa == EstadoBloque.COMPLETO

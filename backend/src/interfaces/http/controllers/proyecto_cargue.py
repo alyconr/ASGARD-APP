@@ -44,3 +44,25 @@ async def eliminar_cargue_completo(
         ) from error
 
     return {"message": "El cargue del programa y proyecto ha sido eliminado con exito."}
+
+
+@router.delete(
+    "/cargue-proyecto/{referencia_id}",
+    status_code=status.HTTP_200_OK,
+)
+async def eliminar_cargue_proyecto(
+    referencia_id: uuid.UUID,
+    service: ProyectoCargueService = Depends(get_proyecto_cargue_service),
+    session: AsyncSession = Depends(get_async_session),
+) -> dict[str, str]:
+    """Delete project formativo DB records and MinIO files, preserving program."""
+    try:
+        await service.eliminar_cargue_proyecto(referencia_id)
+        await session.commit()
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar el cargue del proyecto: {error}",
+        ) from error
+
+    return {"message": "El cargue del proyecto formativo ha sido eliminado con exito."}

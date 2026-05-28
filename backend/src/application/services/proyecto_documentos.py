@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import inspect
 import re
 import uuid
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Any, Protocol, cast
+
+from sqlalchemy import select
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
-from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 from src.application.dto.proyecto_documentos import ProjectPdfUploadResultDTO
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
+from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.proyecto import ProyectoFormativo
+from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 
 
 class ProjectDraftMissingError(Exception):
@@ -112,18 +117,68 @@ class ProjectDocumentService:
                 "No existe un borrador de proyecto para asociar el PDF",
             )
 
-        # Guard: check that both excels are imported
-        program_draft = await self._draft_repository.get_by_block_reference(
-            TipoBloqueBorrador.PROGRAMA,
-            referencia_id,
-        )
-        prog_imported = False
-        if program_draft is not None:
-            prog_excel = program_draft.payload_json.get("documental", {}).get("programa_excel") or {}
-            prog_imported = prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+        proj_payload = cast(dict[str, Any], draft.payload_json)
+        programa_id_str = proj_payload.get("meta", {}).get("programaId")
 
-        proj_excel = draft.payload_json.get("documental", {}).get("fuente_estructurada") or {}
-        proj_imported = proj_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+        prog_imported = False
+        proj_imported = False
+
+        # First, try to verify using database records for robustness
+        if programa_id_str and hasattr(self._session, "execute"):
+            try:
+                programa_id = uuid.UUID(str(programa_id_str))
+
+                # Check if ProgramaFormacion exists in DB
+                prog_stmt = select(ProgramaFormacion.id).where(
+                    ProgramaFormacion.id == programa_id
+                )
+                prog_res = self._session.execute(prog_stmt)
+                if inspect.isawaitable(prog_res):
+                    prog_res = await prog_res
+                if (
+                    hasattr(prog_res, "scalar_one_or_none")
+                    and prog_res.scalar_one_or_none() is not None
+                ):
+                    prog_imported = True
+
+                # Check if ProyectoFormativo exists in DB
+                proj_stmt = select(ProyectoFormativo.id).where(
+                    ProyectoFormativo.programa_id == programa_id
+                )
+                proj_res = self._session.execute(proj_stmt)
+                if inspect.isawaitable(proj_res):
+                    proj_res = await proj_res
+                if (
+                    hasattr(proj_res, "scalar_one_or_none")
+                    and proj_res.scalar_one_or_none() is not None
+                ):
+                    proj_imported = True
+            except ValueError:
+                pass
+
+        # Fallback: check program draft payload
+        if not prog_imported:
+            program_draft = await self._draft_repository.get_by_block_reference(
+                TipoBloqueBorrador.PROGRAMA,
+                referencia_id,
+            )
+            if program_draft is not None:
+                prog_payload = cast(dict[str, Any], program_draft.payload_json)
+                prog_excel = (
+                    prog_payload.get("documental", {}).get("programa_excel") or {}
+                )
+                prog_imported = (
+                    prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+                )
+
+        # Fallback: check project draft payload
+        if not proj_imported:
+            proj_excel = (
+                proj_payload.get("documental", {}).get("fuente_estructurada") or {}
+            )
+            proj_imported = (
+                proj_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+            )
 
         if not prog_imported or not proj_imported:
             raise InvalidProjectPdfUploadError(
@@ -131,7 +186,7 @@ class ProjectDocumentService:
                 "las matrices de programa y proyecto esten validadas e importadas."
             )
 
-        proyecto_data = draft.payload_json.get("proyecto") or {}
+        proyecto_data = proj_payload.get("proyecto") or {}
         nombre = str(proyecto_data.get("nombre_proyecto") or "").strip()
         codigo = str(proyecto_data.get("codigo_proyecto") or "").strip()
 

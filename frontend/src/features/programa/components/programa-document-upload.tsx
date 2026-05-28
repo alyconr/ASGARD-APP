@@ -75,12 +75,21 @@ function DiagnosticResult({
   const hasText = value.diagnostico.pages_with_text > 0;
 
   return (
-    <section className={cn("rounded-lg border p-4", hasText ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-950")}>
+    <section
+      className={cn(
+        "rounded-lg border p-4",
+        hasText
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : "border-amber-200 bg-amber-50 text-amber-950",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5" />
           <p className="text-sm font-semibold">
-            {hasText ? "PDF cargado como evidencia documental" : "PDF cargado como evidencia documental (sin texto detectado)"}
+            {hasText
+              ? "PDF cargado como evidencia documental"
+              : "PDF cargado como evidencia documental (sin texto detectado)"}
           </p>
         </div>
         <span className="text-xs font-semibold">
@@ -120,7 +129,7 @@ export function ProgramaDocumentUpload({
   onUploaded,
   referenciaId,
   habilitado = true,
-  carguePdfHabilitado = false,
+  carguePdfHabilitado = true,
   onHabilitarCarguePdf,
   documentoExistente,
 }: Readonly<{
@@ -162,7 +171,8 @@ export function ProgramaDocumentUpload({
       setState("success");
       setMessage("PDF cargado como evidencia documental.");
       notify.success("PDF cargado como evidencia documental", {
-        description: result.diagnostico.resumen || "Archivo almacenado en MinIO.",
+        description:
+          result.diagnostico.resumen || "Archivo almacenado en MinIO.",
       });
     } catch (error) {
       const errorMessage = getErrorMessage(error);
@@ -174,24 +184,28 @@ export function ProgramaDocumentUpload({
     }
   };
 
-  const simulatedResult: ProgramaPdfUploadResult | null = currentResult ?? (documentoExistente ? {
-    documento: {
-      original_filename: documentoExistente.original_filename,
-      storage_key: documentoExistente.storage_key,
-      size_bytes: documentoExistente.size_bytes,
-      content_type: documentoExistente.content_type,
-      checksum_sha256: documentoExistente.checksum_sha256,
-      etag: null,
-    },
-    diagnostico: {
-      pages_with_text: 1,
-      analyzed_pages: 1,
-      resumen: "Archivo cargado en MinIO (rehidratado desde storage).",
-      has_text_layer: true,
-      text_character_count: 1000,
-      almacenamiento_exitoso: true,
-    }
-  } : null);
+  const simulatedResult: ProgramaPdfUploadResult | null =
+    currentResult ??
+    (documentoExistente
+      ? {
+          documento: {
+            original_filename: documentoExistente.original_filename,
+            storage_key: documentoExistente.storage_key,
+            size_bytes: documentoExistente.size_bytes,
+            content_type: documentoExistente.content_type,
+            checksum_sha256: documentoExistente.checksum_sha256,
+            etag: null,
+          },
+          diagnostico: {
+            pages_with_text: 1,
+            analyzed_pages: 1,
+            resumen: "Archivo cargado en MinIO (rehidratado desde storage).",
+            has_text_layer: true,
+            text_character_count: 1000,
+            almacenamiento_exitoso: true,
+          },
+        }
+      : null);
 
   const isDisabled = !habilitado || !carguePdfHabilitado;
 
@@ -200,11 +214,15 @@ export function ProgramaDocumentUpload({
       {!habilitado ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-950">
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
             <div>
-              <p className="text-sm font-semibold">Cargue de PDF de evidencia bloqueado</p>
+              <p className="text-sm font-semibold">
+                Cargue de PDF de evidencia bloqueado
+              </p>
               <p className="mt-1 text-sm leading-6 text-rose-800">
-                El cargue de la evidencia documental PDF en MinIO se habilitará únicamente cuando se importen y confirmen las matrices de Excel canónicas tanto del programa de formación como del proyecto formativo.
+                El cargue de la evidencia documental PDF en MinIO se habilita
+                cuando se importe y confirme la matriz Excel canonica del
+                programa de formacion.
               </p>
             </div>
           </div>
@@ -213,13 +231,17 @@ export function ProgramaDocumentUpload({
 
       {habilitado && !carguePdfHabilitado ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
               <div>
-                <p className="text-sm font-semibold text-emerald-950">Estructuras Excel importadas con éxito</p>
+                <p className="text-sm font-semibold text-emerald-950">
+                  Excel del programa importado con exito
+                </p>
                 <p className="mt-1 text-sm leading-6 text-amber-900">
-                  Ambas matrices Excel (programa y proyecto) han sido confirmadas. Presione el botón a continuación para habilitar la carga del documento PDF como soporte de evidencia documental.
+                  La matriz Excel del programa ya fue confirmada. Presione el
+                  boton a continuacion para habilitar la carga del documento PDF
+                  como soporte de evidencia documental.
                 </p>
               </div>
             </div>
@@ -236,10 +258,12 @@ export function ProgramaDocumentUpload({
         </div>
       ) : null}
 
-      <div className={cn(
-        "rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4",
-        isDisabled && "opacity-50 pointer-events-none"
-      )}>
+      <div
+        className={cn(
+          "rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4",
+          isDisabled && "pointer-events-none opacity-50",
+        )}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-white text-[var(--accent-strong)]">

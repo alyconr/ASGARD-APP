@@ -138,7 +138,7 @@ describe("ProyectoWizardShell", () => {
 
     render(<ProyectoWizardShell availability={availability} />);
 
-    expect(screen.getByText("PDF del proyecto formativo")).toBeInTheDocument();
+    expect(screen.queryByText("PDF del proyecto formativo")).not.toBeInTheDocument();
     expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
     expect(screen.queryByText("Slot reservado")).not.toBeInTheDocument();
 
@@ -146,5 +146,115 @@ describe("ProyectoWizardShell", () => {
 
     expect(goToNextStep).toHaveBeenCalledOnce();
     expect(goToPreviousStep).not.toHaveBeenCalled();
+  });
+
+  it("renders the PDF upload component once the project matrix is imported", () => {
+    const goToNextStep = vi.fn();
+    const goToPreviousStep = vi.fn();
+    mockInactiveController({
+      activeReferenceId: projectReferenceId,
+      canMoveNext: true,
+      canMovePrevious: false,
+      goToNextStep,
+      goToPreviousStep,
+      isWizardActive: true,
+      lastSavedAt: "2026-05-16T10:00:00.000Z",
+      payload: {
+        meta: {
+          referenciaId: projectReferenceId,
+          programaReferenciaId: availability.referencia_id,
+          programaId: availability.programa_id,
+          touchedSteps: ["fuente-proyecto"],
+          startedAt: "2026-05-16T09:00:00.000Z",
+          lastInteractionAt: "2026-05-16T09:00:00.000Z",
+        },
+        wizard: { notesByStep: {} },
+        proyecto: {
+          proyecto_formativo_id: null,
+          codigo_proyecto: "",
+          nombre_proyecto: "",
+          version_proyecto: "",
+        },
+        documental: {
+          proyecto_pdf: null,
+          fuente_estructurada: {
+            documento: null,
+            preview: null,
+            confirmacion: {
+              estado: "IMPORTADO",
+              confirmed_at: "2026-05-16T09:30:00.000Z",
+              proyecto_id: "some-project-id",
+            },
+          },
+        },
+        estructura: { fases: [], actividades: [] },
+      },
+    });
+
+    render(<ProyectoWizardShell availability={availability} />);
+
+    expect(screen.getByText("PDF del proyecto formativo")).toBeInTheDocument();
+    expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
+  });
+
+  it("renders a link to the pedagogical planning wizard when the project matrix is confirmed", () => {
+    mockInactiveController({
+      activeReferenceId: projectReferenceId,
+      canMoveNext: false,
+      canMovePrevious: true,
+      currentStepId: "revision-proyecto",
+      currentStepIndex: 1,
+      isWizardActive: true,
+      payload: {
+        meta: {
+          referenciaId: projectReferenceId,
+          programaReferenciaId: availability.referencia_id,
+          programaId: availability.programa_id,
+          touchedSteps: ["fuente-proyecto", "revision-proyecto"],
+          startedAt: "2026-05-16T09:00:00.000Z",
+          lastInteractionAt: "2026-05-16T09:00:00.000Z",
+        },
+        wizard: { notesByStep: {} },
+        proyecto: {
+          proyecto_formativo_id: "some-project-id",
+          codigo_proyecto: "PR-1234",
+          nombre_proyecto: "Proyecto Test",
+          version_proyecto: "1",
+        },
+        documental: {
+          proyecto_pdf: null,
+          fuente_estructurada: {
+            documento: null,
+            preview: {
+              valid: true,
+              estado_validacion: "VALIDO",
+              resumen: { proyecto: 1, fases: 2, actividades: 4, resultados_especificos: 8 },
+              proyecto: { codigo_proyecto: "PR-1234", nombre_proyecto: "Proyecto Test", version_proyecto: "1" },
+              fases: [],
+              pendientes_resumen: { total: 0 },
+              errores: [],
+            },
+            confirmacion: {
+              estado: "IMPORTADO",
+              confirmed_at: "2026-05-16T09:30:00.000Z",
+              proyecto_id: "some-project-id",
+            },
+          },
+        },
+        estructura: { fases: [], actividades: [] },
+      },
+    });
+
+    render(<ProyectoWizardShell availability={availability} />);
+
+    // Assert that the Call to Action card is visible
+    expect(screen.getByText("Planeación Pedagógica Disponible")).toBeInTheDocument();
+
+    // Assert that the links point to the planeacion route using the program reference ID
+    const ctaLink = screen.getByRole("link", { name: /^Configurar Planeación Pedagógica$/i });
+    expect(ctaLink).toHaveAttribute("href", `/planeacion/${availability.referencia_id}`);
+
+    const bottomLink = screen.getByRole("link", { name: /^Configurar Planeación$/i });
+    expect(bottomLink).toHaveAttribute("href", `/planeacion/${availability.referencia_id}`);
   });
 });

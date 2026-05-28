@@ -18,11 +18,11 @@ from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.interfaces.http.schemas.drafts import (
+    DocumentoMetadataDTO,
     DraftResponse,
     DraftSaveRequest,
-    SaveDraftInput,
     EstadoDocumentalResponse,
-    DocumentoMetadataDTO,
+    SaveDraftInput,
 )
 
 router = APIRouter(prefix="/api/v1/drafts", tags=["drafts"])
@@ -107,8 +107,11 @@ async def get_estado_documental(
     proj_imported = False
     cargue_pdf_habilitado = False
 
+    from typing import Any, cast
+
     if prog_draft is not None:
-        doc_payload = prog_draft.payload_json.get("documental") or {}
+        payload_dict = cast(dict[str, Any], prog_draft.payload_json)
+        doc_payload = payload_dict.get("documental") or {}
         # Program Excel
         excel_data = doc_payload.get("programa_excel") or {}
         doc_info = excel_data.get("documento")
@@ -137,7 +140,8 @@ async def get_estado_documental(
             )
 
     if proj_draft is not None:
-        doc_payload = proj_draft.payload_json.get("documental") or {}
+        payload_dict = cast(dict[str, Any], proj_draft.payload_json)
+        doc_payload = payload_dict.get("documental") or {}
         # Project Excel
         excel_data = doc_payload.get("fuente_estructurada") or {}
         doc_info = excel_data.get("documento")

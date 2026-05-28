@@ -534,8 +534,9 @@ export function useProyectoWizard({
           },
         };
       });
+      void fetchDocState();
     },
-    [],
+    [fetchDocState],
   );
 
   const updateProyectoExcelPreview = useCallback(
@@ -607,12 +608,14 @@ export function useProyectoWizard({
           },
         };
       });
-      setCurrentStepId("revision-proyecto");
+      // Commented out to prevent automatic redirection to the review step so the user can upload the PDF in step 1.
+      // setCurrentStepId("revision-proyecto");
       if (activeReferenceId !== null) {
         void recoverDraftByReference(activeReferenceId, true);
       }
+      void fetchDocState();
     },
-    [activeReferenceId, recoverDraftByReference],
+    [activeReferenceId, recoverDraftByReference, fetchDocState],
   );
 
   const forgetKnownDraft = useCallback((referenceId: string): void => {

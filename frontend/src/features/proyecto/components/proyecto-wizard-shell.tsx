@@ -24,6 +24,7 @@ import type {
   ProyectoWizardStepDefinition,
   ProyectoWizardStepId,
 } from "@/features/proyecto/types";
+import Link from "next/link";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
 import { cn } from "@/lib/utils";
 import { EstadoDocumentalResponse } from "@/features/drafts/types";
@@ -176,13 +177,14 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "fuente-proyecto" && payload !== null ? (
             <div className="grid gap-4">
-              {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" || docState?.proyecto_importado === true ? (
+              {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" ||
+              docState?.proyecto_importado === true ? (
                 <ProyectoDocumentUpload
                   currentResult={payload.documental.proyecto_pdf}
                   onUploaded={onPdfUploaded}
                   referenciaId={payload.meta.referenciaId}
-                  habilitado={docState?.documentos_habilitados ?? false}
-                  carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                  habilitado={true}
+                  carguePdfHabilitado={true}
                   onHabilitarCarguePdf={onHabilitarCarguePdf}
                   documentoExistente={docState?.proyecto_pdf}
                 />
@@ -194,6 +196,7 @@ function StepWorkspace({
                 referenciaId={payload.meta.referenciaId}
               />
             </div>
+
           ) : payload !== null ? (
             <div className="grid gap-6">
               <div className="rounded-lg bg-[var(--paper-strong)] p-4 border border-[color:var(--card-border)]">
@@ -252,6 +255,28 @@ function StepWorkspace({
                 </div>
               </div>
 
+              {payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                <div className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="max-w-xl">
+                      <h4 className="text-base font-semibold text-[var(--accent-strong)]">
+                        Planeación Pedagógica Disponible
+                      </h4>
+                      <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
+                        La matriz del proyecto formativo ha sido cargada y validada con éxito. Ya puede proceder a configurar la planeación pedagógica estructurada.
+                      </p>
+                    </div>
+                    <Link
+                      href={`/planeacion/${payload.meta.programaReferenciaId}`}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] self-start sm:self-center"
+                    >
+                      <Route className="h-4 w-4" />
+                      Configurar Planeación Pedagógica
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
                 <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-2">
                   Trazabilidad de la Información
@@ -275,7 +300,7 @@ export function ProyectoWizardShell({
 }>): React.JSX.Element {
   const controller = useProyectoWizard({
     programaId: availability.programa_id,
-    programaReferenciaId: availability.referencia_id,
+    programaReferenciaId: availability.programa_referencia_id ?? availability.referencia_id,
   });
   const currentStep =
     PROYECTO_WIZARD_STEPS[controller.currentStepIndex] ??
@@ -498,13 +523,24 @@ export function ProyectoWizardShell({
                     <ArrowLeft className="h-4 w-4" />
                     Anterior
                   </ActionButton>
-                  <ActionButton
-                    disabled={!controller.canMoveNext}
-                    onClick={controller.goToNextStep}
-                  >
-                    Siguiente
-                    <ArrowRight className="h-4 w-4" />
-                  </ActionButton>
+                  {controller.currentStepId === "revision-proyecto" &&
+                  controller.payload?.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                    <Link
+                      href={`/planeacion/${controller.payload.meta.programaReferenciaId}`}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    >
+                      Configurar Planeación
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <ActionButton
+                      disabled={!controller.canMoveNext}
+                      onClick={controller.goToNextStep}
+                    >
+                      Siguiente
+                      <ArrowRight className="h-4 w-4" />
+                    </ActionButton>
+                  )}
                 </div>
               </div>
             </section>

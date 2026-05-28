@@ -152,4 +152,5 @@ export interface ProyectoDisponibilidadResponse {
   motivo: string | null;
   mensaje: string;
   accion_sugerida: "completar_y_cerrar_programa" | "iniciar_proyecto" | string;
+  programa_referencia_id?: string | null;
 }

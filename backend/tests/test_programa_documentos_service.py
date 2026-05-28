@@ -134,7 +134,12 @@ class FakeDiagnosticService:
         )
 
 
-def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
+def build_draft(
+    referencia_id: uuid.UUID,
+    *,
+    excel_estado: str = "IMPORTADO",
+    estado_borrador: EstadoBloque = EstadoBloque.BORRADOR,
+) -> BorradorSesion:
     """Create a program draft ORM object for tests."""
     draft = BorradorSesion(
         tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
@@ -152,14 +157,10 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
                 "version_programa": "1",
             },
             "documental": {
-                "programa_excel": {
-                    "confirmacion": {
-                        "estado": "IMPORTADO"
-                    }
-                }
-            }
+                "programa_excel": {"confirmacion": {"estado": excel_estado}}
+            },
         },
-        estado_borrador=EstadoBloque.BORRADOR,
+        estado_borrador=estado_borrador,
     )
     draft.id = uuid.uuid4()
     draft.ultima_edicion = datetime.now(UTC)
@@ -168,26 +169,10 @@ def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
 
 @pytest.mark.anyio
 async def test_upload_program_pdf_updates_existing_draft_payload() -> None:
-    """A valid PDF should be stored and associated to the same draft reference."""
+    """A valid PDF should be stored after the program Excel is imported."""
     referencia_id = uuid.uuid4()
     prog_draft = build_draft(referencia_id)
-    proj_draft = BorradorSesion(
-        tipo_bloque=TipoBloqueBorrador.PROYECTO.value,
-        referencia_id=referencia_id,
-        paso_actual="fuente-proyecto",
-        payload_json={
-            "meta": {"referenciaId": str(referencia_id)},
-            "documental": {
-                "fuente_estructurada": {
-                    "confirmacion": {
-                        "estado": "IMPORTADO"
-                    }
-                }
-            }
-        },
-        estado_borrador=EstadoBloque.BORRADOR,
-    )
-    draft_repository = FakeDraftRepository([prog_draft, proj_draft])
+    draft_repository = FakeDraftRepository([prog_draft])
     audit_repository = FakeAuditRepository()
     session = FakeSession()
     service = ProgramaDocumentService(
@@ -217,6 +202,34 @@ async def test_upload_program_pdf_updates_existing_draft_payload() -> None:
 
 
 @pytest.mark.anyio
+async def test_upload_program_pdf_keeps_completed_program_status() -> None:
+    """Uploading evidence after close must not reopen the program draft."""
+    referencia_id = uuid.uuid4()
+    prog_draft = build_draft(
+        referencia_id,
+        estado_borrador=EstadoBloque.COMPLETO,
+    )
+    draft_repository = FakeDraftRepository([prog_draft])
+    service = ProgramaDocumentService(
+        session=FakeSession(),
+        draft_repository=draft_repository,
+        audit_repository=FakeAuditRepository(),
+        storage_service=FakeStorageService(),
+        diagnostic_service=FakeDiagnosticService(),
+    )
+
+    await service.upload_and_diagnose_program_pdf(
+        referencia_id=referencia_id,
+        filename="programa.pdf",
+        content_type="application/pdf",
+        content=b"%PDF-1.4 fake test content",
+    )
+
+    assert draft_repository.draft is not None
+    assert draft_repository.draft.estado_borrador == EstadoBloque.COMPLETO
+
+
+@pytest.mark.anyio
 async def test_upload_program_pdf_rejects_missing_draft() -> None:
     """The service must not generate a new referencia_id or implicit draft."""
     service = ProgramaDocumentService(
@@ -230,6 +243,29 @@ async def test_upload_program_pdf_rejects_missing_draft() -> None:
     with pytest.raises(ProgramaDraftMissingError):
         await service.upload_and_diagnose_program_pdf(
             referencia_id=uuid.uuid4(),
+            filename="programa.pdf",
+            content_type="application/pdf",
+            content=b"%PDF-1.4 fake test content",
+        )
+
+
+@pytest.mark.anyio
+async def test_upload_program_pdf_rejects_unconfirmed_program_excel() -> None:
+    """The program PDF still requires a validated and imported program matrix."""
+    referencia_id = uuid.uuid4()
+    service = ProgramaDocumentService(
+        session=FakeSession(),
+        draft_repository=FakeDraftRepository(
+            [build_draft(referencia_id, excel_estado="PENDIENTE")]
+        ),
+        audit_repository=FakeAuditRepository(),
+        storage_service=FakeStorageService(),
+        diagnostic_service=FakeDiagnosticService(),
+    )
+
+    with pytest.raises(InvalidProgramPdfUploadError):
+        await service.upload_and_diagnose_program_pdf(
+            referencia_id=referencia_id,
             filename="programa.pdf",
             content_type="application/pdf",
             content=b"%PDF-1.4 fake test content",

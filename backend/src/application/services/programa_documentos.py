@@ -124,26 +124,22 @@ class ProgramaDocumentService:
                 "No existe un borrador de programa para asociar el PDF",
             )
 
-        # Guard: check that both excels are imported
-        prog_excel = draft.payload_json.get("documental", {}).get("programa_excel") or {}
-        prog_imported = prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+        from typing import Any, cast
+        prog_payload = cast(dict[str, Any], draft.payload_json)
 
-        project_draft = await self._draft_repository.get_by_block_reference(
-            TipoBloqueBorrador.PROYECTO,
-            referencia_id,
+        prog_excel = (
+            prog_payload.get("documental", {}).get("programa_excel") or {}
         )
-        proj_imported = False
-        if project_draft is not None:
-            proj_excel = project_draft.payload_json.get("documental", {}).get("fuente_estructurada") or {}
-            proj_imported = proj_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+        prog_imported = prog_excel.get("confirmacion", {}).get("estado") == "IMPORTADO"
+        programa_completo = draft.estado_borrador == EstadoBloque.COMPLETO
 
-        if not prog_imported or not proj_imported:
+        if not prog_imported and not programa_completo:
             raise InvalidProgramPdfUploadError(
-                "El cargue de PDF de evidencia solo se permite despues de que "
-                "las matrices de programa y proyecto esten validadas e importadas."
+                "El cargue de PDF de evidencia del programa solo se permite "
+                "despues de importar y confirmar la matriz Excel del programa."
             )
 
-        programa_data = draft.payload_json.get("programa") or {}
+        programa_data = prog_payload.get("programa") or {}
         nombre = str(programa_data.get("nombre_programa") or "").strip()
         codigo = str(programa_data.get("codigo_programa") or "").strip()
         version = str(programa_data.get("version_programa") or "").strip()
@@ -185,8 +181,9 @@ class ProgramaDocumentService:
             document=stored_document,
             diagnostic=diagnostic,
         )
-        draft.paso_actual = "origen-documental"
-        draft.estado_borrador = EstadoBloque.BORRADOR
+        if draft.estado_borrador != EstadoBloque.COMPLETO:
+            draft.paso_actual = "origen-documental"
+            draft.estado_borrador = EstadoBloque.BORRADOR
         await self._draft_repository.save(draft)
         await self._audit_repository.add_event(
             entidad="BorradorSesion",

@@ -110,7 +110,7 @@ export function ProyectoDocumentUpload({
   onUploaded,
   referenciaId,
   habilitado = true,
-  carguePdfHabilitado = false,
+  carguePdfHabilitado = true,
   onHabilitarCarguePdf,
   documentoExistente,
 }: Readonly<{

@@ -15,6 +15,7 @@ from src.application.services.proyecto_excel import (
     ProjectExcelValidationError,
     ProyectoExcelImportService,
 )
+from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
@@ -52,6 +53,7 @@ class ProjectRepository:
             codigo_proyecto=codigo_proyecto,
             nombre_proyecto=nombre_proyecto,
             version_proyecto=version_proyecto,
+            estado=EstadoBloque.BORRADOR,
         )
         self._session.add(proyecto)
         await self._session.flush()

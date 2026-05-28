@@ -152,7 +152,7 @@ export function normalizeProyectoPayload(
         meta?.programaReferenciaId,
         programaReferenciaId,
       ),
-      programaId: asNullableString(meta?.programaId) ?? programaId,
+      programaId: programaId ?? asNullableString(meta?.programaId),
       touchedSteps: normalizeTouchedSteps(meta?.touchedSteps),
       startedAt: asString(meta?.startedAt, base.meta.startedAt),
       lastInteractionAt: asString(

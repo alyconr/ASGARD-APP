@@ -23,11 +23,14 @@ pytestmark = pytest.mark.anyio
 
 
 class MockDraftRepository:
-    def __init__(self, draft=None):
+    def __init__(self, draft=None, program_draft=None):
         self.draft = draft
+        self.program_draft = program_draft
         self.saved = False
 
     async def get_by_block_reference(self, tipo_bloque, referencia_id):
+        if getattr(tipo_bloque, "value", tipo_bloque) == "PROGRAMA":
+            return self.program_draft
         return self.draft
 
     async def save(self, draft):
@@ -82,6 +85,7 @@ class MockProjectRepository:
         self.created_proyectos = []
         self.created_fases = []
         self.created_actividades = []
+        self.created_programa_ids = []
 
     async def create_proyecto(
         self,
@@ -93,6 +97,7 @@ class MockProjectRepository:
     ):
         p = MagicMock(id=uuid.uuid4())
         p.codigo_proyecto = codigo_proyecto
+        self.created_programa_ids.append(programa_id)
         self.created_proyectos.append(p)
         return p
 
@@ -504,12 +509,72 @@ class TestConfirmProjectExcelImport:
 
         assert len(result.actividad_ids) == 3
 
+    async def test_confirm_resolves_programa_id_from_program_draft(self):
+        programa_id = uuid.uuid4()
+        programa_referencia_id = uuid.uuid4()
+        proyecto_referencia_id = uuid.uuid4()
+        proyecto_draft = MagicMock(
+            id=uuid.uuid4(),
+            payload_json={
+                "meta": {
+                    "referenciaId": str(proyecto_referencia_id),
+                    "programaReferenciaId": str(programa_referencia_id),
+                    "touchedSteps": ["fuente-proyecto"],
+                    "lastInteractionAt": datetime.now(UTC).isoformat(),
+                },
+                "documental": {},
+            },
+            paso_actual="fuente-proyecto",
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        programa_draft = MagicMock(
+            payload_json={
+                "meta": {"referenciaId": str(programa_referencia_id)},
+                "curricular": {"programa_formacion_id": str(programa_id)},
+            },
+        )
+        session = MockSession()
+        draft_repository = MockDraftRepository(proyecto_draft, programa_draft)
+        audit_repository = MockAuditRepository()
+        storage_service = MockStorageService()
+        project_repository = MockProjectRepository()
+        service = ProyectoExcelImportService(
+            session=session,
+            draft_repository=draft_repository,
+            audit_repository=audit_repository,
+            project_repository=project_repository,
+            storage_service=storage_service,
+        )
+        wb = create_valid_workbook()
+        content = io.BytesIO()
+        wb.save(content)
+        content.seek(0)
+
+        await service.preview_project_excel(
+            referencia_id=proyecto_referencia_id,
+            filename="proyecto.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content=content.read(),
+        )
+
+        await service.confirm_project_excel_import(
+            referencia_id=proyecto_referencia_id,
+        )
+
+        assert project_repository.created_programa_ids == [programa_id]
+        assert proyecto_draft.payload_json["meta"]["programaId"] == str(programa_id)
+
     async def test_confirm_rejects_missing_preview(self):
         session = MockSession()
         draft_repository = MockDraftRepository(
             MagicMock(
                 id=uuid.uuid4(),
-                payload_json={"meta": {}, "documental": {}},
+                payload_json={
+                    "meta": {
+                        "programaId": "00000000-0000-0000-0000-000000000000",
+                    },
+                    "documental": {},
+                },
                 paso_actual="fuente-proyecto",
                 estado_borrador=EstadoBloque.BORRADOR,
             )
@@ -556,7 +621,12 @@ class TestConfirmProjectExcelImport:
         draft_repository = MockDraftRepository(
             MagicMock(
                 id=uuid.uuid4(),
-                payload_json={"meta": {}, "documental": {}},
+                payload_json={
+                    "meta": {
+                        "programaId": "00000000-0000-0000-0000-000000000000",
+                    },
+                    "documental": {},
+                },
                 paso_actual="fuente-proyecto",
                 estado_borrador=EstadoBloque.BORRADOR,
             )
@@ -589,3 +659,71 @@ class TestConfirmProjectExcelImport:
         )
 
         assert storage.document.storage_key.startswith("proyectos-formativos/")
+
+    async def test_confirm_heals_stale_programa_id(self):
+        stale_programa_id = uuid.uuid4()
+        correct_programa_id = uuid.uuid4()
+        programa_referencia_id = uuid.uuid4()
+        proyecto_referencia_id = uuid.uuid4()
+
+        proyecto_draft = MagicMock(
+            id=uuid.uuid4(),
+            payload_json={
+                "meta": {
+                    "referenciaId": str(proyecto_referencia_id),
+                    "programaReferenciaId": str(programa_referencia_id),
+                    "programaId": str(stale_programa_id),
+                    "touchedSteps": ["fuente-proyecto"],
+                    "lastInteractionAt": datetime.now(UTC).isoformat(),
+                },
+                "documental": {},
+            },
+            paso_actual="fuente-proyecto",
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        programa_draft = MagicMock(
+            payload_json={
+                "meta": {"referenciaId": str(programa_referencia_id)},
+                "curricular": {"programa_formacion_id": str(correct_programa_id)},
+            },
+        )
+
+        mock_execute_res = MagicMock()
+        mock_execute_res.scalar_one_or_none.return_value = None
+
+        session = MockSession()
+        session.execute = MagicMock(return_value=mock_execute_res)
+
+        draft_repository = MockDraftRepository(proyecto_draft, programa_draft)
+        audit_repository = MockAuditRepository()
+        storage_service = MockStorageService()
+        project_repository = MockProjectRepository()
+
+        service = ProyectoExcelImportService(
+            session=session,
+            draft_repository=draft_repository,
+            audit_repository=audit_repository,
+            project_repository=project_repository,
+            storage_service=storage_service,
+        )
+
+        wb = create_valid_workbook()
+        content = io.BytesIO()
+        wb.save(content)
+        content.seek(0)
+
+        await service.preview_project_excel(
+            referencia_id=proyecto_referencia_id,
+            filename="proyecto.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content=content.read(),
+        )
+
+        await service.confirm_project_excel_import(
+            referencia_id=proyecto_referencia_id,
+        )
+
+        assert project_repository.created_programa_ids == [correct_programa_id]
+        assert proyecto_draft.payload_json["meta"]["programaId"] == str(
+            correct_programa_id
+        )

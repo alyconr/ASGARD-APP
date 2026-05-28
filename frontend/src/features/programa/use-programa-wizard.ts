@@ -21,6 +21,7 @@ import { listProgramaCompetencias } from "@/features/programa/competencias-api";
 import { getEstadoDocumental } from "@/features/proyecto/cargue-api";
 import type {
   AutosaveState,
+  ProgramaCierreResponse,
   ProgramaCompetenciaListResponse,
   ProgramaDraftSnapshot,
   ProgramaEntryMode,
@@ -169,7 +170,7 @@ export interface ProgramaWizardController {
   updateProgramaExcelPreview: (result: ProgramaExcelPreviewResponse) => void;
   updateProgramaExcelImport: (result: ProgramaExcelImportResponse) => void;
   updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
-  markProgramaClosed: () => void;
+  markProgramaClosed: (result: ProgramaCierreResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
   forgetKnownDraft: (referenceId: string) => void;
   clearKnownDrafts: () => void;
@@ -200,7 +201,9 @@ export function useProgramaWizard(): ProgramaWizardController {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
 
-  const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(null);
+  const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(
+    null,
+  );
 
   const fetchDocState = useCallback(async (): Promise<void> => {
     if (activeReferenceId === null) {
@@ -229,7 +232,12 @@ export function useProgramaWizard(): ProgramaWizardController {
       return null;
     }
 
-    return buildSnapshot(activeReferenceId, currentStepId, payload, draftStatus);
+    return buildSnapshot(
+      activeReferenceId,
+      currentStepId,
+      payload,
+      draftStatus,
+    );
   }, [activeReferenceId, currentStepId, draftStatus, payload]);
 
   const persistSnapshot = useCallback(
@@ -407,7 +415,8 @@ export function useProgramaWizard(): ProgramaWizardController {
     };
   }, [isBootstrapping, isRecovering, persistSnapshot, snapshot]);
 
-  const startNewFlow = useCallback(async (entryMode: ProgramaEntryMode): Promise<void> => {
+  const startNewFlow = useCallback(
+    async (entryMode: ProgramaEntryMode): Promise<void> => {
       const nextReferenceId = crypto.randomUUID();
       const nextPayload = createEmptyProgramaPayload(nextReferenceId);
       const targetStepId = DEFAULT_PROGRAMA_STEP_ID;
@@ -456,10 +465,11 @@ export function useProgramaWizard(): ProgramaWizardController {
     if (payload === null) {
       return false;
     }
-    const hasPdf = payload.documental.programa_pdf !== null;
-    const hasExcelValid = payload.documental.programa_excel?.preview?.valid === true;
-    const hasExcelImported = payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO";
-    return hasPdf && hasExcelValid && hasExcelImported;
+    const hasExcelValid =
+      payload.documental.programa_excel?.preview?.valid === true;
+    const hasExcelImported =
+      payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO";
+    return hasExcelValid && hasExcelImported;
   }, [payload]);
 
   const disabledSteps = useMemo<ProgramaWizardStepId[]>(() => {
@@ -575,8 +585,9 @@ export function useProgramaWizard(): ProgramaWizardController {
           },
         };
       });
+      void fetchDocState();
     },
-    [],
+    [fetchDocState],
   );
 
   const updateProgramaExcelPreview = useCallback(
@@ -636,9 +647,15 @@ export function useProgramaWizard(): ProgramaWizardController {
           },
           programa: {
             ...currentPayload.programa,
-            codigo_programa: programa?.codigo_programa ?? currentPayload.programa.codigo_programa,
-            nombre_programa: programa?.nombre_programa ?? currentPayload.programa.nombre_programa,
-            version_programa: programa?.version_programa ?? currentPayload.programa.version_programa,
+            codigo_programa:
+              programa?.codigo_programa ??
+              currentPayload.programa.codigo_programa,
+            nombre_programa:
+              programa?.nombre_programa ??
+              currentPayload.programa.nombre_programa,
+            version_programa:
+              programa?.version_programa ??
+              currentPayload.programa.version_programa,
           },
           curricular: {
             ...currentPayload.curricular,
@@ -667,9 +684,11 @@ export function useProgramaWizard(): ProgramaWizardController {
           },
         };
       });
-      setCurrentStepId("revision-programa");
+      // Do not redirect automatically to revision-programa step so the user can upload the program PDF in step 1 immediately.
+      // setCurrentStepId("revision-programa");
+      void fetchDocState();
     },
-    [],
+    [fetchDocState],
   );
 
   const refreshCurriculum = useCallback(async (): Promise<void> => {
@@ -718,7 +737,9 @@ export function useProgramaWizard(): ProgramaWizardController {
               },
               curricular: {
                 ...current.curricular,
-                programa_formacion_id: response.programa_id || current.curricular.programa_formacion_id,
+                programa_formacion_id:
+                  response.programa_id ||
+                  current.curricular.programa_formacion_id,
                 competencias: response.competencias,
               },
             };
@@ -792,21 +813,61 @@ export function useProgramaWizard(): ProgramaWizardController {
     setKnownDrafts(listKnownProgramaDrafts());
   }, []);
 
-  const markProgramaClosed = useCallback((): void => {
-    setDraftStatus("COMPLETO");
-    setKnownDrafts((currentDrafts) => {
-      if (activeReferenceId === null || payload === null) {
-        return currentDrafts;
-      }
-      return rememberProgramaDraft({
-        referenciaId: activeReferenceId,
-        pasoActual: "revision-programa",
-        updatedAt: new Date().toISOString(),
-        estado: "COMPLETO",
-        label: buildDraftLabel(payload),
+  const markProgramaClosed = useCallback(
+    (result: ProgramaCierreResponse): void => {
+      const now = new Date().toISOString();
+      setDraftStatus("COMPLETO");
+      setCurrentStepId("revision-programa");
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "revision-programa",
+            ),
+            lastInteractionAt: now,
+          },
+          curricular: {
+            ...currentPayload.curricular,
+            programa_formacion_id: result.programa_id,
+          },
+          documental: {
+            ...currentPayload.documental,
+            programa_excel:
+              currentPayload.documental.programa_excel === null
+                ? null
+                : {
+                    ...currentPayload.documental.programa_excel,
+                    confirmacion: {
+                      ...currentPayload.documental.programa_excel.confirmacion,
+                      estado: "IMPORTADO",
+                      programa_id: result.programa_id,
+                    },
+                  },
+          },
+        };
       });
-    });
-  }, [activeReferenceId, payload]);
+      setKnownDrafts((currentDrafts) => {
+        if (activeReferenceId === null || payload === null) {
+          return currentDrafts;
+        }
+        return rememberProgramaDraft({
+          referenciaId: activeReferenceId,
+          pasoActual: "revision-programa",
+          updatedAt: now,
+          estado: "COMPLETO",
+          label: buildDraftLabel(payload),
+        });
+      });
+    },
+    [activeReferenceId, payload],
+  );
 
   const currentStepIndex = Math.max(0, getStepIndex(currentStepId));
 

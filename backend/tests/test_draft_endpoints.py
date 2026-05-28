@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
 
 from src.application.dto.drafts import DraftDTO, SaveDraftCommand
 from src.application.services.drafts import DraftNotFoundError
@@ -151,7 +151,7 @@ def test_get_estado_documental_empty() -> None:
 
 
 def test_get_estado_documental_with_data() -> None:
-    """The endpoint should parse and return metadata if program and project drafts are loaded."""
+    """The endpoint should parse metadata from loaded program and project drafts."""
     referencia_id = uuid.uuid4()
     draft_programa = BorradorSesion(
         tipo_bloque="PROGRAMA",
@@ -164,22 +164,27 @@ def test_get_estado_documental_with_data() -> None:
                         "original_filename": "programa.xlsx",
                         "storage_key": "programas/prog/excel/matriz-programa.xlsx",
                         "size_bytes": 1024,
-                        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "content_type": (
+                            "application/vnd.openxmlformats-officedocument."
+                            "spreadsheetml.sheet"
+                        ),
                         "checksum_sha256": "hash123",
                     },
                     "confirmacion": {"estado": "IMPORTADO"},
-                    "updated_at": "2026-05-27T20:13:00Z"
+                    "updated_at": "2026-05-27T20:13:00Z",
                 },
                 "programa_pdf": {
                     "documento": {
                         "original_filename": "programa.pdf",
-                        "storage_key": "programas/prog/documentos/programa-formacion.pdf",
+                        "storage_key": (
+                            "programas/prog/documentos/programa-formacion.pdf"
+                        ),
                         "size_bytes": 2048,
                         "content_type": "application/pdf",
                         "checksum_sha256": "pdfhash",
                     },
-                    "updated_at": "2026-05-27T20:14:00Z"
-                }
+                    "updated_at": "2026-05-27T20:14:00Z",
+                },
             }
         },
         estado_borrador=EstadoBloque.COMPLETO,
@@ -195,23 +200,28 @@ def test_get_estado_documental_with_data() -> None:
                         "original_filename": "proyecto.xlsx",
                         "storage_key": "proyectos/proj/excel/matriz-proyecto.xlsx",
                         "size_bytes": 4096,
-                        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "content_type": (
+                            "application/vnd.openxmlformats-officedocument."
+                            "spreadsheetml.sheet"
+                        ),
                         "checksum_sha256": "hash456",
                     },
                     "confirmacion": {"estado": "IMPORTADO"},
-                    "updated_at": "2026-05-27T20:15:00Z"
+                    "updated_at": "2026-05-27T20:15:00Z",
                 },
                 "proyecto_pdf": {
                     "documento": {
                         "original_filename": "proyecto.pdf",
-                        "storage_key": "proyectos/proj/documentos/proyecto-formativo.pdf",
+                        "storage_key": (
+                            "proyectos/proj/documentos/proyecto-formativo.pdf"
+                        ),
                         "size_bytes": 8192,
                         "content_type": "application/pdf",
                         "checksum_sha256": "pdfhash2",
                     },
-                    "updated_at": "2026-05-27T20:16:00Z"
+                    "updated_at": "2026-05-27T20:16:00Z",
                 },
-                "cargue_pdf_habilitado": True
+                "cargue_pdf_habilitado": True,
             }
         },
         estado_borrador=EstadoBloque.BORRADOR,

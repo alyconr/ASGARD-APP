@@ -17,15 +17,12 @@ import {
   confirmProjectExcelImport,
   uploadProjectExcelPreview,
 } from "@/features/proyecto/excel-import-api";
-import { eliminarCargueCompleto } from "@/features/proyecto/cargue-api";
+import { eliminarCargueProyecto } from "@/features/proyecto/cargue-api";
 import { notify } from "@/components/feedback/notifications";
 
 import type {
   ExcelFasePreview,
-  ExcelPreviewSummary,
-  ExcelValidationIssue,
   ProyectoExcelPreviewState,
-  ProyectoStoredDocument,
 } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
 
@@ -516,24 +513,24 @@ export function ProyectoExcelImport({
 
   const handleEliminarCargue = async (): Promise<void> => {
     const confirmed = window.confirm(
-      "¿Estás seguro de que deseas eliminar por completo el cargue del proyecto y del programa? Esta acción eliminará permanentemente todos los datos y archivos de la base de datos y de MinIO."
+      "¿Estás seguro de que deseas eliminar por completo el cargue del proyecto formativo? Esta acción eliminará permanentemente todos los datos y archivos del proyecto de la base de datos y de MinIO, preservando el programa de formación."
     );
     if (!confirmed) return;
 
     setIsDeleting(true);
     try {
-      await eliminarCargueCompleto(referenciaId);
+      await eliminarCargueProyecto(referenciaId);
       setSelectedFile(null);
       setLocalResult(null);
       setState("idle");
-      setMessage("El cargue ha sido eliminado con exito. Puedes subir un nuevo archivo Excel.");
-      notify.success("Cargue eliminado", {
-        description: "Los datos y archivos del programa y proyecto han sido borrados de la base de datos y MinIO.",
+      setMessage("El cargue del proyecto ha sido eliminado con exito. Puedes subir un nuevo archivo Excel para el proyecto.");
+      notify.success("Cargue del proyecto eliminado", {
+        description: "Los datos y archivos del proyecto formativo han sido borrados de la base de datos y MinIO.",
       });
       window.location.reload();
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Error al eliminar el cargue.";
-      notify.error("Error al eliminar cargue", {
+      const errMsg = error instanceof Error ? error.message : "Error al eliminar el cargue del proyecto.";
+      notify.error("Error al eliminar cargue del proyecto", {
         description: errMsg,
       });
     } finally {

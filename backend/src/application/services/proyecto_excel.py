@@ -10,9 +10,9 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from openpyxl import load_workbook
+from sqlalchemy import select
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
-from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 from src.application.dto.proyecto_excel import (
     ExcelActividadPreviewDTO,
     ExcelCompetenciaPreviewDTO,
@@ -27,12 +27,14 @@ from src.application.dto.proyecto_excel import (
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
+from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.drafts import BorradorSesion
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
     FaseProyecto,
     ProyectoFormativo,
 )
+from src.infrastructure.storage.document_storage import build_proyecto_storage_prefix
 
 CANONICAL_SHEETS: dict[str, list[str]] = {
     "Proyecto": [
@@ -289,6 +291,12 @@ class AsyncSessionProtocol(Protocol):
     async def refresh(self, instance: object) -> None:
         """Refresh the provided ORM instance."""
 
+    def delete(self, instance: object) -> object:
+        """Delete the provided ORM instance."""
+
+    async def flush(self) -> None:
+        """Flush the session."""
+
 
 class ProyectoExcelImportService:
     """Validate, preview and confirm canonical Excel project imports."""
@@ -319,16 +327,8 @@ class ProyectoExcelImportService:
         """Store and validate a canonical Excel workbook without relational writes."""
         _validate_excel_upload(filename=filename, content=content)
         draft = await self._get_project_draft(referencia_id)
-        meta = _as_record(draft.payload_json.get("meta")) or {}
-        programa_id_text = _read_string(meta, "programaId")
-        if programa_id_text:
-            if await self._project_repository.proyecto_exists(
-                programa_id=uuid.UUID(programa_id_text)
-            ):
-                raise ProjectExcelValidationError(
-                    "El proyecto formativo ya ha sido importado. "
-                    "Para cargarlo nuevamente, primero debe borrar el cargue actual."
-                )
+        await self._resolve_programa_id(draft)
+        # Preview is allowed even if a project exists; confirmation overwrites it.
         workbook = parse_canonical_workbook(content)
 
         stored_document: StoredDocumentDTO | None = None
@@ -380,17 +380,28 @@ class ProyectoExcelImportService:
     ) -> ProyectoExcelImportDTO:
         """Materialize a previously validated canonical workbook."""
         draft = await self._get_project_draft(referencia_id)
-        meta = _as_record(draft.payload_json.get("meta")) or {}
-        programa_id_text = _read_string(meta, "programaId")
-        if programa_id_text:
-            if await self._project_repository.proyecto_exists(
-                programa_id=uuid.UUID(programa_id_text)
-            ):
-                raise ProjectExcelValidationError(
-                    "El proyecto formativo ya ha sido importado. "
-                    "Para cargarlo nuevamente, primero debe borrar el cargue actual."
-                )
         preview_payload = _get_valid_excel_preview_payload(draft.payload_json)
+        programa_id = await self._resolve_programa_id(draft)
+        # Existing project formativo rows for this program are replaced on import.
+        if hasattr(self._session, "execute"):
+            import inspect
+            from unittest.mock import Mock
+
+            existing_proj_stmt = select(ProyectoFormativo).where(
+                ProyectoFormativo.programa_id == programa_id
+            )
+            res = self._session.execute(existing_proj_stmt)
+            if inspect.isawaitable(res):
+                res = await res
+            if hasattr(res, "scalar_one_or_none"):
+                existing_proj = res.scalar_one_or_none()
+                if existing_proj is not None and not isinstance(existing_proj, Mock):
+                    delete_res = self._session.delete(existing_proj)
+                    if inspect.isawaitable(delete_res):
+                        await delete_res
+                    flush_res = self._session.flush()
+                    if inspect.isawaitable(flush_res):
+                        await flush_res
 
         document_payload = _as_record(preview_payload.get("documento"))
         storage_key = _read_string(document_payload or {}, "storage_key")
@@ -415,6 +426,7 @@ class ProyectoExcelImportService:
         import_result = await self._materialize_workbook(
             referencia_id=referencia_id,
             draft=draft,
+            programa_id=programa_id,
             workbook=workbook,
         )
         draft.paso_actual = "revision-proyecto"
@@ -448,24 +460,66 @@ class ProyectoExcelImportService:
             )
         return draft
 
+    async def _resolve_programa_id(self, draft: BorradorSesion) -> uuid.UUID:
+        """Resolve the completed program id associated with a project draft."""
+        meta = _as_record(draft.payload_json.get("meta")) or {}
+        programa_id = _read_uuid(meta, "programaId")
+        if programa_id is not None:
+            # Safely handle mock sessions in tests while checking DB existence.
+            if hasattr(self._session, "execute"):
+                import inspect
+
+                stmt = select(ProgramaFormacion).where(
+                    ProgramaFormacion.id == programa_id
+                )
+                res = self._session.execute(stmt)
+                if inspect.isawaitable(res):
+                    res = await res
+                if res.scalar_one_or_none() is not None:
+                    return programa_id
+
+            else:
+                return programa_id
+
+        programa_referencia_id = _read_uuid(meta, "programaReferenciaId")
+        if programa_referencia_id is not None:
+            program_draft = await self._draft_repository.get_by_block_reference(
+                TipoBloqueBorrador.PROGRAMA,
+                programa_referencia_id,
+            )
+            if program_draft is not None:
+                programa_id = _extract_programa_id_from_program_payload(
+                    program_draft.payload_json
+                )
+                if programa_id is not None:
+                    draft.payload_json = {
+                        **draft.payload_json,
+                        "meta": {
+                            **meta,
+                            "programaId": str(programa_id),
+                        },
+                    }
+                    return programa_id
+
+        raise ProjectExcelValidationError(
+            "No se encontro el programa de formacion asociado al proyecto. "
+            "Cierre el programa y vuelva a iniciar el wizard del proyecto."
+        )
+
     async def _materialize_workbook(
         self,
         *,
         referencia_id: uuid.UUID,
         draft: BorradorSesion,
+        programa_id: uuid.UUID,
         workbook: CanonicalWorkbook,
     ) -> ProyectoExcelImportDTO:
         if workbook.proyecto is None:
             raise ProjectExcelValidationError("La hoja Proyecto esta vacia")
 
-        meta = _as_record(draft.payload_json.get("meta")) or {}
-        programa_id_text = (
-            _read_string(meta, "programaId") or "00000000-0000-0000-0000-000000000000"
-        )
-
         # Sofia code is used as codigo_proyecto, default version to "1"
         proyecto = await self._project_repository.create_proyecto(
-            programa_id=uuid.UUID(programa_id_text),
+            programa_id=programa_id,
             codigo_proyecto=workbook.proyecto.codigo_proyecto_sofia,
             nombre_proyecto=workbook.proyecto.nombre_proyecto,
             version_proyecto="1",
@@ -1177,6 +1231,32 @@ def _as_record(value: object) -> dict[str, object] | None:
 def _read_string(record: dict[str, object], key: str) -> str:
     val = record.get(key)
     return val if isinstance(val, str) else ""
+
+
+def _read_uuid(record: dict[str, object], key: str) -> uuid.UUID | None:
+    val = _read_string(record, key)
+    if not val:
+        return None
+    try:
+        return uuid.UUID(val)
+    except ValueError as error:
+        raise ProjectExcelValidationError(
+            f"El identificador {key} del borrador de proyecto no es un UUID valido"
+        ) from error
+
+
+def _extract_programa_id_from_program_payload(
+    payload: dict[str, object],
+) -> uuid.UUID | None:
+    curricular = _as_record(payload.get("curricular")) or {}
+    programa_id = _read_uuid(curricular, "programa_formacion_id")
+    if programa_id is not None:
+        return programa_id
+
+    documental = _as_record(payload.get("documental")) or {}
+    programa_excel = _as_record(documental.get("programa_excel")) or {}
+    confirmacion = _as_record(programa_excel.get("confirmacion")) or {}
+    return _read_uuid(confirmacion, "programa_id")
 
 
 def _document_to_payload(

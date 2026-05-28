@@ -136,9 +136,11 @@ class PlaneacionPedagogicaService:
             )
 
         if proyecto.estado == EstadoBloque.BLOQUEADO:
-            raise ValueError(
-                "El módulo de proyecto formativo está bloqueado o incompleto"
-            )
+            # Auto-heal: If the project was already imported in the database,
+            # it should not be blocked anymore. Set it to BORRADOR.
+            proyecto.estado = EstadoBloque.BORRADOR
+            self._session.add(proyecto)
+            await self._session.commit()
 
         # Format Fases & Actividades
         fase_dtos: list[ContextoFaseDTO] = []

@@ -5,6 +5,7 @@ import { useProgramaWizard } from "./use-programa-wizard";
 import { saveDraft } from "@/features/drafts/api";
 import type { DraftResponse, DraftSaveRequest } from "@/features/drafts/types";
 import type {
+  ProgramaCierreResponse,
   ProgramaExcelImportResponse,
   ProgramaExcelPreviewResponse,
   ProgramaPdfUploadResponse,
@@ -158,6 +159,29 @@ function buildExcelImport(): ProgramaExcelImportResponse {
   };
 }
 
+function buildProgramaCierre(): ProgramaCierreResponse {
+  return {
+    referencia_id: referenceId,
+    programa_id: "99999999-9999-4999-9999-999999999999",
+    estado: "COMPLETO",
+    mensaje: "Programa cerrado correctamente.",
+    completitud: {
+      referencia_id: referenceId,
+      programa_id: "99999999-9999-4999-9999-999999999999",
+      estado_actual: "COMPLETO",
+      cerrable: true,
+      resumen: {
+        competencias: 1,
+        resultados: 1,
+        conocimientos_saber: 1,
+        conocimientos_proceso: 1,
+        criterios: 1,
+      },
+      faltantes: [],
+    },
+  };
+}
+
 describe("useProgramaWizard TASK-08.5 Excel integration", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -198,14 +222,44 @@ describe("useProgramaWizard TASK-08.5 Excel integration", () => {
     expect(
       result.current.payload?.documental.programa_excel?.preview?.valid,
     ).toBe(true);
-    expect(result.current.payload?.documental.programa_excel?.confirmacion.estado).toBe(
-      "IMPORTADO",
-    );
+    expect(
+      result.current.payload?.documental.programa_excel?.confirmacion.estado,
+    ).toBe("IMPORTADO");
     expect(result.current.payload?.curricular.programa_formacion_id).toBe(
       "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
     );
 
     expect(result.current.activeReferenceId).toBe(referenceId);
     expect(result.current.payload?.meta.entryMode).toBe("EXCEL");
+  });
+
+  it("stores the closed program id before the autosave snapshot runs", async () => {
+    const { result } = renderHook(() => useProgramaWizard());
+
+    await waitFor(() => {
+      expect(result.current.isBootstrapping).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.startNewFlow("EXCEL");
+    });
+
+    act(() => {
+      result.current.updateProgramaExcelPreview(buildExcelPreview());
+    });
+
+    act(() => {
+      result.current.markProgramaClosed(buildProgramaCierre());
+    });
+
+    expect(result.current.draftStatus).toBe("COMPLETO");
+    expect(result.current.currentStepId).toBe("revision-programa");
+    expect(result.current.payload?.curricular.programa_formacion_id).toBe(
+      "99999999-9999-4999-9999-999999999999",
+    );
+    expect(
+      result.current.payload?.documental.programa_excel?.confirmacion
+        .programa_id,
+    ).toBe("99999999-9999-4999-9999-999999999999");
   });
 });

@@ -15,17 +15,18 @@ import {
 } from "@/features/proyecto/proyecto-gate-api";
 import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
-import type { DraftStatus } from "@/features/drafts/types";
+import type { DraftStatus, EstadoDocumentalResponse } from "@/features/drafts/types";
 import type { ProgramaWizardStepId } from "@/features/programa/types";
 
 function buildLocalAvailability(
   referenciaId: string,
   programaEstado: DraftStatus,
+  programaId: string | null,
 ): ProyectoDisponibilidadResponse {
   const isComplete = programaEstado === "COMPLETO";
   return {
     referencia_id: referenciaId,
-    programa_id: null,
+    programa_id: programaId,
     estado_programa: programaEstado,
     programa_completo: isComplete,
     proyecto_bloqueado: !isComplete,
@@ -43,17 +44,21 @@ function buildLocalAvailability(
 export function ProyectoDisponibilidadPanel({
   className,
   onNavigateToStep,
+  programaId = null,
   programaEstado,
   referenciaId,
+  docState = null,
 }: Readonly<{
   className?: string;
   onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
+  programaId?: string | null;
   programaEstado: DraftStatus;
   referenciaId: string;
+  docState?: EstadoDocumentalResponse | null;
 }>): React.JSX.Element {
   const fallbackAvailability = useMemo(
-    () => buildLocalAvailability(referenciaId, programaEstado),
-    [programaEstado, referenciaId],
+    () => buildLocalAvailability(referenciaId, programaEstado, programaId),
+    [programaEstado, programaId, referenciaId],
   );
   const [availability, setAvailability] =
     useState<ProyectoDisponibilidadResponse>(fallbackAvailability);
@@ -101,7 +106,7 @@ export function ProyectoDisponibilidadPanel({
     return () => {
       isActive = false;
     };
-  }, [fallbackAvailability, referenciaId]);
+  }, [fallbackAvailability, referenciaId, docState]);
 
   const isBlocked = availability.proyecto_bloqueado;
   const Icon = isBlocked ? LockKeyhole : CheckCircle2;

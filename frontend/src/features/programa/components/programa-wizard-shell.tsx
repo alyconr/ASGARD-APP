@@ -23,7 +23,7 @@ import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
-import { EstadoDocumentalResponse } from "@/features/drafts/types";
+import type { EstadoDocumentalResponse } from "@/features/drafts/types";
 import type {
   ProgramaCierreResponse,
   ProgramaCompetencia,
@@ -157,6 +157,10 @@ function StepWorkspace({
 }: StepWorkspaceProps): React.JSX.Element {
   const content = STEP_CONTENT[currentStep.id];
   const Icon = content.icon;
+  const programaExcelImportado =
+    programaExcelResult?.confirmacion?.estado === "IMPORTADO" ||
+    docState?.programa_importado === true ||
+    estadoBorrador === "COMPLETO";
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
@@ -182,13 +186,13 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
-              {programaExcelResult?.confirmacion?.estado === "IMPORTADO" || docState?.programa_importado === true ? (
+              {programaExcelImportado ? (
                 <ProgramaDocumentUpload
                   currentResult={programaPdfResult}
                   referenciaId={referenceId}
                   onUploaded={onProgramaPdfUploaded}
-                  habilitado={docState?.documentos_habilitados ?? false}
-                  carguePdfHabilitado={docState?.cargue_pdf_habilitado ?? false}
+                  habilitado={programaExcelImportado}
+                  carguePdfHabilitado
                   documentoExistente={docState?.programa_pdf}
                 />
               ) : null}
@@ -259,6 +263,10 @@ export function ProgramaWizardShell(): React.JSX.Element {
   const currentStep =
     PROGRAMA_WIZARD_STEPS[controller.currentStepIndex] ??
     PROGRAMA_WIZARD_STEPS[0];
+  const programaId =
+    controller.payload?.curricular.programa_formacion_id ??
+    controller.payload?.documental.programa_excel?.confirmacion.programa_id ??
+    null;
 
   if (controller.isBootstrapping) {
     return (
@@ -296,9 +304,9 @@ export function ProgramaWizardShell(): React.JSX.Element {
               Wizard base del programa de formación
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Flujo de importacion con borrador persistente, navegacion por pasos
-              y recuperacion por referencia estable. La fuente estructurada del
-              programa es la matriz Excel canonica.
+              Flujo de importacion con borrador persistente, navegacion por
+              pasos y recuperacion por referencia estable. La fuente
+              estructurada del programa es la matriz Excel canonica.
             </p>
           </div>
 
@@ -471,7 +479,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
 
       {controller.isWizardActive && controller.payload !== null ? (
         <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6 w-full h-fit">
+          <aside className="flex h-fit w-full flex-col gap-4 self-start lg:sticky lg:top-6">
             <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-4 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
               <WizardProgress
                 currentStepId={controller.currentStepId}
@@ -495,11 +503,13 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
           </aside>
 
-          <div className="min-w-0 flex flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-4">
             <div className="flex-1 overflow-y-auto rounded-lg">
               <StepWorkspace
                 currentStep={currentStep}
-                programaExcelResult={controller.payload.documental.programa_excel}
+                programaExcelResult={
+                  controller.payload.documental.programa_excel
+                }
                 programaPdfResult={controller.payload.documental.programa_pdf}
                 competencias={controller.payload.curricular.competencias}
                 referenceId={
@@ -526,8 +536,10 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 controller.activeReferenceId ??
                 controller.payload.meta.referenciaId
               }
+              programaId={programaId}
               programaEstado={controller.draftStatus}
               onNavigateToStep={controller.goToStep}
+              docState={controller.docState}
             />
 
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
