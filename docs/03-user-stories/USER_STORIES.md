@@ -17,6 +17,10 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 - La estructura curricular se trabaja por competencia seleccionada, con conocimientos y criterios elegidos progresivamente.
 - El proyecto usa prefijos MinIO `proyectos-formativos/{referencia_id}/documentos/...` y `proyectos-formativos/{referencia_id}/excel/...`.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El usuario entra por un dashboard maestro que permite seleccionar o continuar una referencia de programa, ver bloqueos reales y abrir solo los modulos habilitados. El dashboard no reemplaza la revision humana ni cambia la secuencia del wizard.
+
 ---
 
 # 1. Épica: Inicio y borradores
@@ -43,6 +47,21 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 - El sistema debe identificar borradores disponibles.
 - El usuario debe volver al mismo paso del wizard.
 - Los datos previos deben mantenerse intactos.
+
+---
+
+## HU-02A. Visualizar dashboard maestro del proceso
+**Como** usuario gestor pedagogico
+**Quiero** ver un panel maestro con programa, proyecto y planeacion
+**Para** entender el avance, bloqueos y acciones disponibles antes de abrir cada modulo.
+
+### Criterios de aceptacion
+- La ruta `/` debe mostrar el dashboard maestro ASGARD.
+- El usuario debe poder abrir `/programa` desde el panel.
+- El proyecto debe aparecer bloqueado hasta que el programa este `COMPLETO`.
+- La planeacion debe aparecer bloqueada hasta que programa y proyecto esten `COMPLETO`.
+- El panel debe mostrar metricas de programa, proyecto y planeacion.
+- El panel debe mostrar un mapa navegable con enlaces activos solo para modulos habilitados.
 
 ---
 

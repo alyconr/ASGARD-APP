@@ -39,6 +39,10 @@ from src.infrastructure.db.models.proyecto import FaseProyecto, ProyectoFormativ
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
 
 
+class PlaneacionAccessError(Exception):
+    """Raised when planning is requested before project completion."""
+
+
 class DocumentStorageProtocol(Protocol):
     """Storage protocol for saving pedagogical planning documents."""
 
@@ -117,6 +121,10 @@ class PlaneacionPedagogicaService:
             raise ValueError(
                 f"No se encontró el ProgramaFormacion {programa_id} en base de datos"
             )
+        if programa.estado != EstadoBloque.COMPLETO:
+            raise PlaneacionAccessError(
+                "La planeacion pedagogica requiere el programa en estado COMPLETO"
+            )
 
         # Check if project exists and is not blocked
         proj_stmt = (
@@ -135,12 +143,11 @@ class PlaneacionPedagogicaService:
                 "No se ha importado el proyecto formativo para este programa"
             )
 
-        if proyecto.estado == EstadoBloque.BLOQUEADO:
-            # Auto-heal: If the project was already imported in the database,
-            # it should not be blocked anymore. Set it to BORRADOR.
-            proyecto.estado = EstadoBloque.BORRADOR
-            self._session.add(proyecto)
-            await self._session.commit()
+        if proyecto.estado != EstadoBloque.COMPLETO:
+            raise PlaneacionAccessError(
+                "La planeacion pedagogica requiere el proyecto formativo "
+                "en estado COMPLETO"
+            )
 
         # Format Fases & Actividades
         fase_dtos: list[ContextoFaseDTO] = []
@@ -232,6 +239,7 @@ class PlaneacionPedagogicaService:
 
     async def guardar_borrador(self, dto: PlaneacionSaveDTO) -> PlaneacionResponseDTO:
         """Create or update a pedagogical planning draft in the database."""
+        await self._ensure_project_complete(dto.proyecto_id)
         resultado = await self._session.get(ResultadoAprendizaje, dto.resultado_id)
         if resultado is None:
             raise ValueError(
@@ -301,6 +309,7 @@ class PlaneacionPedagogicaService:
             raise ValueError(
                 f"No existe la planeación pedagógica con id {planeacion_id}"
             )
+        await self._ensure_project_complete(entity.proyecto_id)
 
         entity.estado = EstadoBloque.COMPLETO
         entity.fecha_generacion = datetime.now(UTC)
@@ -390,6 +399,16 @@ class PlaneacionPedagogicaService:
 
         # Delete database record
         await self._repository.delete(entity)
+
+    async def _ensure_project_complete(self, proyecto_id: uuid.UUID) -> None:
+        proyecto = await self._session.get(ProyectoFormativo, proyecto_id)
+        if proyecto is None:
+            raise ValueError(f"No existe el proyecto formativo {proyecto_id}")
+        if proyecto.estado != EstadoBloque.COMPLETO:
+            raise PlaneacionAccessError(
+                "La planeacion pedagogica solo puede iniciarse cuando "
+                "el proyecto esta COMPLETO"
+            )
 
     def _map_to_response_dto(
         self, entity: PlaneacionPedagogica

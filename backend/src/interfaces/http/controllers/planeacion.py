@@ -13,7 +13,10 @@ from src.application.dto.planeacion import (
     PlaneacionResponseDTO,
     PlaneacionSaveDTO,
 )
-from src.application.services.planeacion_service import PlaneacionPedagogicaService
+from src.application.services.planeacion_service import (
+    PlaneacionAccessError,
+    PlaneacionPedagogicaService,
+)
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
@@ -48,6 +51,11 @@ async def obtener_contexto(
     """Fetch active program and project tree structure for planning context."""
     try:
         return await service.obtener_contexto(referencia_id)
+    except PlaneacionAccessError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -102,6 +110,12 @@ async def guardar_borrador(
         res = await service.guardar_borrador(dto)
         await session.commit()
         return res
+    except PlaneacionAccessError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
     except ValueError as error:
         await session.rollback()
         raise HTTPException(
@@ -131,6 +145,12 @@ async def confirmar_y_generar(
         res = await service.confirmar_y_generar(planeacion_id)
         await session.commit()
         return res
+    except PlaneacionAccessError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
     except ValueError as error:
         await session.rollback()
         raise HTTPException(

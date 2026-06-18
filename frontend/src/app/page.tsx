@@ -1,6 +1,5 @@
-import { ProgramaWizardShell } from "@/features/programa/components/programa-wizard-shell";
+import { MasterDashboard } from "@/features/dashboard/master-dashboard";
 
 export default function HomePage(): React.JSX.Element {
-  return <ProgramaWizardShell />;
+  return <MasterDashboard />;
 }
-

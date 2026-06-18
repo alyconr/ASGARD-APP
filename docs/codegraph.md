@@ -19,6 +19,7 @@ Usar `codegraph_explore` como herramienta principal para exploración y comprens
    - dependencias
 4. Reservar el contexto del modelo para razonamiento sobre fragmentos ya recuperados, no para exploración manual repetitiva.
 5. Si CodeGraph no encuentra resultados suficientes, declarar esa limitación explícitamente antes de caer a escaneo convencional.
+6. Si el entorno no expone `codegraph_explore` en una sesion concreta, registrar la limitacion y usar las herramientas CodeGraph disponibles antes de recurrir a lectura convencional.
 
 ## Objetivo
 Reducir escaneo redundante de archivos, minimizar llamadas de herramientas y favorecer razonamiento guiado por el grafo semántico.

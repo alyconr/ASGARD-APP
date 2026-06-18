@@ -11,6 +11,7 @@ configure_asyncio_event_loop_policy()
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
 )
+from src.interfaces.http.controllers.dashboard import router as dashboard_router
 from src.interfaces.http.controllers.conocimientos_proceso import (
     router as conocimientos_proceso_router,
 )
@@ -72,6 +73,7 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(health_router)
+    application.include_router(dashboard_router)
     application.include_router(drafts_router)
     application.include_router(programa_documentos_router)
     application.include_router(programa_cierre_router)

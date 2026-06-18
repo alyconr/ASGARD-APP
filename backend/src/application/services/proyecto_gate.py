@@ -111,16 +111,8 @@ class ProyectoGateService:
         programa_completo = (
             programa is not None and programa.estado == EstadoBloque.COMPLETO
         ) or (draft is not None and draft.estado_borrador == EstadoBloque.COMPLETO)
-        pdf_cargado = False
-        if draft is not None:
-            doc_payload = draft.payload_json.get("documental")
-            if isinstance(doc_payload, dict):
-                programa_pdf = doc_payload.get("programa_pdf")
-                if isinstance(programa_pdf, dict):
-                    if programa_pdf.get("documento") is not None:
-                        pdf_cargado = True
 
-        proyecto_bloqueado = not (programa_completo or pdf_cargado)
+        proyecto_bloqueado = not programa_completo
         estado_programa = (
             EstadoBloque.COMPLETO
             if programa_completo
@@ -138,7 +130,7 @@ class ProyectoGateService:
             referencia_id=referencia_id,
             programa_id=programa.id if programa is not None else programa_id,
             estado_programa=estado_programa,
-            programa_completo=programa_completo or pdf_cargado,
+            programa_completo=programa_completo,
             proyecto_bloqueado=proyecto_bloqueado,
             estado_proyecto=(
                 EstadoBloque.BORRADOR
@@ -149,12 +141,12 @@ class ProyectoGateService:
             mensaje=(
                 (
                     "El proyecto formativo esta habilitado porque el programa "
-                    "esta COMPLETO o cuenta con el PDF de evidencia cargado."
+                    "esta COMPLETO."
                 )
                 if not proyecto_bloqueado
                 else (
                     "El modulo proyecto esta bloqueado hasta que el programa "
-                    "quede cerrado como COMPLETO o se cargue su PDF de soporte."
+                    "quede cerrado como COMPLETO."
                 )
             ),
             accion_sugerida=(

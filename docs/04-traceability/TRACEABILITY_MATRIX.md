@@ -18,6 +18,10 @@ La trazabilidad queda reinterpretada asi:
 - La gestion curricular se traza a selector/filtro de competencia y seleccion progresiva de conocimientos/criterios.
 - Proyecto usa MinIO `proyectos-formativos/{referencia_id}/documentos/...` para PDF evidencia y `proyectos-formativos/{referencia_id}/excel/...` para matriz Excel.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+Se agrega trazabilidad para el dashboard maestro como entrada central de la Fase 1. Este componente agrega estado, metricas y mapa navegable, pero respeta las reglas existentes de cierre humano y dependencia entre modulos.
+
 ---
 
 # 1. Propósito
@@ -56,6 +60,7 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-04 | El flujo principal debe ser tipo wizard | RF-01, RF-13, RF-21 | HU-01, HU-13, HU-22 | Wizard UI | Validar navegación paso a paso |
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
+| RN-DASHBOARD-ASGARD | La home debe centralizar acceso, bloqueos, metricas y mapa navegable sin saltar reglas de negocio | RF-DASHBOARD | HU-02A | Dashboard Service / Master Dashboard UI | Validar modulos habilitados, metricas y grafo navegable |
 | RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual ni pasos `datos-programa`/`datos-proyecto` | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
 | RN-FLUJO-COMPACTO | El origen documental del programa muestra resumen compacto tras importacion y abre modal paginada de competencias | RF-06, RF-13 | HU-05, HU-13 | Programa Wizard / Excel Import UI | Validar resumen compacto, apertura de modal y paginacion |
 | RN-CURRICULO-FOCALIZADO | La estructura curricular carga una competencia seleccionada y conocimientos/criterios se eligen progresivamente | RF-08, RF-09, RF-10, RF-11, RF-12 | HU-07, HU-08, HU-09, HU-10, HU-11 | Curriculum Module | Validar selector de competencia y render progresivo |

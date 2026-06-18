@@ -59,6 +59,21 @@ El proyecto formativo se habilita solo cuando el programa esta `COMPLETO`, usa P
 
 ---
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El dashboard maestro ASGARD es la entrada principal del sistema. Debe centralizar acceso, estado, bloqueos, acciones requeridas, metricas y mapa navegable de la Fase 1 sin crear flujos alternos al wizard.
+
+Reglas vigentes:
+
+- `/` muestra el dashboard maestro y `/programa` abre el wizard del programa;
+- el proyecto se habilita unicamente cuando el programa esta `COMPLETO`;
+- la planeacion pedagogica se habilita unicamente cuando programa y proyecto estan `COMPLETO`;
+- PDF evidencia, carga documental o importacion pendiente no equivalen a cierre humano ni habilitan modulos siguientes;
+- las metricas deben derivarse de datos persistidos: competencias, resultados, conocimientos, criterios, fases, actividades y planeaciones;
+- el mapa grafico debe representar la dependencia programa -> estructura curricular -> proyecto -> planeacion y respetar los bloqueos reales.
+
+---
+
 # 2. Contexto de negocio
 
 El equipo pedagógico del SENA requiere una aplicación web que permita estructurar la información necesaria para la futura construcción de guías de aprendizaje.

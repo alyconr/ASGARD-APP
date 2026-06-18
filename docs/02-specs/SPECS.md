@@ -24,6 +24,16 @@ Desde esta refactorizacion integral, el sistema opera con un unico carril:
 - El wizard del proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como paso manual.
 - Los documentos del proyecto se guardan en `proyectos-formativos/{referencia_id}/documentos/...` y los Excel en `proyectos-formativos/{referencia_id}/excel/...`.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+- La home `/` es el dashboard maestro ASGARD.
+- El wizard del programa se abre desde `/programa`.
+- El dashboard consume `GET /api/v1/dashboard/{referencia_id}` para estado agregado, reglas de habilitacion, metricas y mapa navegable.
+- El proyecto solo queda disponible si el programa esta `COMPLETO`.
+- La planeacion pedagogica solo queda disponible si programa y proyecto estan `COMPLETO`.
+- El dashboard muestra metricas de programa, proyecto y planeacion derivadas de persistencia, no de estado local.
+- El mapa navegable expone nodos de programa, estructura curricular, proyecto y planeacion con enlaces activos solo cuando el modulo esta habilitado.
+
 ---
 
 # 1. Resumen
@@ -40,6 +50,7 @@ La Fase 1 debe permitir:
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta completar el programa,
+- centralizar el acceso desde un dashboard maestro con metricas y mapa navegable,
 - y persistir toda la información de forma estructurada y trazable.
 
 La Fase 1 no genera aún la guía final; deja preparada la base funcional y de datos para fases posteriores.
@@ -76,6 +87,7 @@ Implementar un módulo web que permita registrar, extraer, revisar, editar y val
 - Permitir la carga del proyecto formativo desde fuente estructurada.
 - Permitir la gestión de fases y actividades del proyecto.
 - Validar la completitud del proyecto antes de cerrar la Fase 1.
+- Centralizar acceso, progreso y bloqueos en el dashboard maestro.
 - Mantener guardado automático del avance en todo momento.
 - Mantener trazabilidad básica de los cambios relevantes.
 

@@ -52,6 +52,12 @@ El modelo de borrador no debe conservar `datos-programa` ni `datos-proyecto` com
 
 La metadata del proyecto debe diferenciar PDF evidencia y Excel estructurado. Los objetos documentales del proyecto usan `proyectos-formativos/{referencia_id}/documentos/...`; los Excel usan `proyectos-formativos/{referencia_id}/excel/...`.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El dashboard maestro no introduce una tabla nueva. Su estado agregado se calcula desde `BorradorSesion`, `ProgramaFormacion`, `Competencia`, `ResultadoAprendizaje`, `Conocimiento`, `CriterioEvaluacion`, `ProyectoFormativo`, `FaseProyecto`, `ActividadProyecto` y `PlaneacionPedagogica`.
+
+El contrato de lectura debe exponer modulos, metricas y nodos de grafo sin duplicar persistencia ni convertir estado local del frontend en fuente de verdad.
+
 ---
 
 # 2. Alcance del modelo

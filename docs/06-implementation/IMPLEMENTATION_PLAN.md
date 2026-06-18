@@ -52,6 +52,14 @@ Desde esta refactorizacion integral:
 - El proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como carril manual.
 - El almacenamiento del proyecto usa `proyectos-formativos/{referencia_id}/documentos/...` para PDF y `proyectos-formativos/{referencia_id}/excel/...` para Excel/matriz.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+- La ruta `/` se implementa como dashboard maestro.
+- El wizard del programa se mueve a `/programa`.
+- Se agrega un servicio backend agregado para estado, metricas, gates y mapa navegable.
+- La regla de habilitacion queda centralizada: proyecto requiere programa `COMPLETO`; planeacion requiere programa y proyecto `COMPLETO`.
+- Las pruebas deben cubrir el agregado backend, el gate de proyecto, el acceso de planeacion y la UI del dashboard.
+
 ---
 
 # 3. Objetivo general de implementación
@@ -66,6 +74,7 @@ Construir la Fase 1 de una aplicación web que permita:
 - guardar siempre el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta que el programa esté completo,
+- mostrar acceso centralizado, metricas y mapa navegable desde el dashboard maestro,
 - y persistir toda la estructura de forma trazable.
 
 ---
@@ -88,6 +97,7 @@ Construir la Fase 1 de una aplicación web que permita:
 - Revisión consolidada editable
 - Validación de completitud
 - Bloqueo/desbloqueo del proyecto
+- Dashboard maestro ASGARD con metricas, gates y mapa navegable
 - Auditoría básica
 - Testing mínimo funcional
 

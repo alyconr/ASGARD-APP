@@ -75,6 +75,18 @@ A partir del refactor del flujo documental de programa y proyecto:
 - al confirmarse ambas matrices Excel, se habilita una acción "Habilitar cargue de documentos PDF" que guarda el flag `cargue_pdf_habilitado` en la sección `documental` del borrador del proyecto formativo, lo que desbloquea visual y operativamente la carga de PDFs;
 - todos los archivos subidos a MinIO se guardan en rutas legibles y normalizadas bajo los prefijos de negocio `programas/{nombre_programa_sanitizado}-{codigo_programa}-{version_programa}/` y `proyectos-formativos/{nombre_proyecto_sanitizado}-{codigo_proyecto_sofia}/`, removiendo carpetas con UUIDs aleatorios de la estructura de MinIO.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+A partir del refactor del panel maestro:
+
+- la ruta `/` es el dashboard maestro ASGARD y no debe abrir directamente un wizard especifico;
+- el wizard de programa vive en `/programa` y conserva la secuencia `origen-documental`, `estructura-curricular`, `revision-programa`;
+- el proyecto solo se habilita cuando el programa esta `COMPLETO`;
+- la planeacion pedagogica solo se habilita cuando el programa y el proyecto estan `COMPLETO`;
+- el PDF como evidencia documental nunca habilita por si mismo el proyecto ni la planeacion;
+- el dashboard debe mostrar estados, bloqueos, acciones requeridas, metricas de avance y un mapa grafico navegable de programa, estructura curricular, proyecto y planeacion;
+- el backend debe exponer el estado agregado desde persistencia y no delegar las reglas de habilitacion exclusivamente al frontend.
+
 ---
 
 # 1. Prioridad de instrucciones

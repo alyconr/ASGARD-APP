@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.application.dto.planeacion import PlaneacionSaveDTO
-from src.application.services.planeacion_service import PlaneacionPedagogicaService
+from src.application.services.planeacion_service import (
+    PlaneacionAccessError,
+    PlaneacionPedagogicaService,
+)
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque, TipoConocimiento
 from src.infrastructure.db.models.curriculum import (
@@ -46,6 +49,7 @@ async def test_obtener_contexto_success() -> None:
     programa = ProgramaFormacion(
         codigo_programa="228118",
         nombre_programa="Analisis de software",
+        estado=EstadoBloque.COMPLETO,
     )
     programa.id = programa_id
 
@@ -76,7 +80,7 @@ async def test_obtener_contexto_success() -> None:
         codigo_proyecto="PR-001",
         nombre_proyecto="Proyecto test",
         version_proyecto="1",
-        estado=EstadoBloque.BORRADOR,  # Not blocked
+        estado=EstadoBloque.COMPLETO,
     )
     proyecto.id = proyecto_id
     proyecto.fases = []
@@ -140,7 +144,14 @@ async def test_guardar_borrador_creates_new_record() -> None:
     resultado = ResultadoAprendizaje(descripcion="Resultado 1")
     resultado.id = resultado_id
     resultado.competencia_id = competencia_id
-    session.get.return_value = resultado
+    proyecto_completo = ProyectoFormativo(
+        codigo_proyecto="PR-01",
+        nombre_proyecto="Proyecto completo",
+        version_proyecto="1",
+        estado=EstadoBloque.COMPLETO,
+    )
+    proyecto_completo.id = proyecto_id
+    session.get.side_effect = [proyecto_completo, resultado]
 
     # Repo mocks
     repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
@@ -193,6 +204,41 @@ async def test_guardar_borrador_creates_new_record() -> None:
 
 
 @pytest.mark.anyio
+async def test_guardar_borrador_rechaza_proyecto_no_completo() -> None:
+    proyecto_id = uuid.uuid4()
+    competencia_id = uuid.uuid4()
+    resultado_id = uuid.uuid4()
+    session = AsyncMock()
+    proyecto = ProyectoFormativo(
+        codigo_proyecto="PR-01",
+        nombre_proyecto="Proyecto incompleto",
+        version_proyecto="1",
+        estado=EstadoBloque.BORRADOR,
+    )
+    proyecto.id = proyecto_id
+    session.get.return_value = proyecto
+    repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+    storage_service = AsyncMock()
+    service = PlaneacionPedagogicaService(
+        session=session,
+        repository=repository,
+        storage_service=storage_service,
+    )
+    dto = PlaneacionSaveDTO(
+        proyecto_id=proyecto_id,
+        competencia_id=competencia_id,
+        resultado_id=resultado_id,
+        resultados_ids=[resultado_id],
+    )
+
+    with pytest.raises(PlaneacionAccessError) as exc_info:
+        await service.guardar_borrador(dto)
+
+    assert "proyecto esta COMPLETO" in str(exc_info.value)
+    repository.save.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_confirmar_y_generar_uploads_to_storage() -> None:
     # Arrange
     planeacion_id = uuid.uuid4()
@@ -208,6 +254,7 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
         codigo_proyecto="PR-01",
         nombre_proyecto="Proyecto 1",
         version_proyecto="1",
+        estado=EstadoBloque.COMPLETO,
     )
     proyecto.id = proyecto_id
     proyecto.programa_id = programa_id
@@ -246,6 +293,7 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
         repository=repository,
         storage_service=storage_service,
     )
+    session.get.return_value = proyecto
 
     # Act
     res = await service.confirmar_y_generar(planeacion_id)

@@ -18,9 +18,9 @@ const bodyFont = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "SENA Guia Aprendizaje | Wizard del programa de formación",
+  title: "ASGARD | Dashboard maestro SENA",
   description:
-    "Wizard base del programa de formación con borradores persistentes para la Fase 1 de construccion de guias de aprendizaje SENA.",
+    "Panel maestro para gobernar programa, proyecto y planeacion pedagogica en la Fase 1 de guias de aprendizaje SENA.",
 };
 
 type RootLayoutProps = Readonly<{

@@ -33,6 +33,17 @@ resultados, conocimientos y criterios quedan bajo la competencia; `resultado_id`
 en conocimientos y criterios es opcional y secundario. Solo los elementos sin
 competencia confiable quedan pendientes de conciliacion.
 
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+Se incorpora un dashboard maestro ASGARD como entrada principal:
+
+- `/` muestra estado agregado, metricas, bloqueos y mapa navegable;
+- `/programa` contiene el wizard de programa;
+- proyecto requiere programa `COMPLETO`;
+- planeacion requiere programa y proyecto `COMPLETO`;
+- el backend expone el agregado por `GET /api/v1/dashboard/{referencia_id}`;
+- las pruebas deben cubrir servicio backend, gates y UI.
+
 ---
 
 # 2. Instrucción general para todas las tareas
@@ -59,6 +70,32 @@ Reglas generales:
 ---
 
 # 3. Tareas
+
+## TASK-DASHBOARD-MAESTRO-ASGARD. Centralizar acceso y progreso de Fase 1
+
+### Objetivo
+Convertir la home en un panel maestro que agregue programa, proyecto y planeacion sin saltar reglas de negocio.
+
+### Debe hacer
+- mover el wizard de programa a `/programa`,
+- crear endpoint agregado `GET /api/v1/dashboard/{referencia_id}`,
+- mostrar estados, acciones requeridas, metricas y mapa navegable,
+- bloquear proyecto hasta programa `COMPLETO`,
+- bloquear planeacion hasta programa y proyecto `COMPLETO`.
+
+### Debe entregar
+- servicio backend de dashboard,
+- contratos HTTP,
+- UI del dashboard maestro,
+- pruebas backend y frontend del flujo habilitado/bloqueado.
+
+### Aceptacion
+- `/` no abre directamente un wizard;
+- el proyecto no se habilita por PDF evidencia ni por programa incompleto;
+- la planeacion no permite guardar ni confirmar si el proyecto no esta `COMPLETO`;
+- el mapa navegable solo activa enlaces disponibles.
+
+---
 
 ## TASK-01. Crear la base del proyecto
 

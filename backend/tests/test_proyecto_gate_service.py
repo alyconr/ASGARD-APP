@@ -249,3 +249,22 @@ async def test_programa_completo_en_draft_pero_borrador_en_db_habilita_proyecto(
     assert result.proyecto_bloqueado is False
     assert result.estado_proyecto is EstadoBloque.BORRADOR
     assert result.estado_programa == EstadoBloque.COMPLETO
+
+
+@pytest.mark.anyio
+async def test_pdf_evidencia_no_habilita_proyecto_si_programa_incompleto() -> None:
+    """PDF evidence alone must not unlock the project module."""
+    programa = build_programa(EstadoBloque.EN_REVISION)
+    service, draft = build_service(programa, draft_estado=EstadoBloque.EN_REVISION)
+    draft.payload_json["documental"] = {
+        "programa_pdf": {
+            "estado": "CARGADO",
+            "storage_key": "programas/demo/evidencia.pdf",
+        },
+    }
+
+    result = await service.consultar_disponibilidad(draft.referencia_id)
+
+    assert result.programa_completo is False
+    assert result.proyecto_bloqueado is True
+    assert result.motivo == "PROGRAMA_NO_COMPLETO"

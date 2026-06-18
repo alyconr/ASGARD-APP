@@ -116,6 +116,18 @@ Tambien existe una prueba de integracion opt-in:
 $env:RUN_DATABASE_TESTS="1"; uv run pytest tests/test_database_connection.py
 ```
 
+## Ejecutar API local
+
+Desde `backend/`:
+
+```bash
+uv run python -m src.dev_server
+```
+
+En Windows usa este launcher y no `uvicorn src.main:app` directo. El launcher
+configura la politica de event loop compatible con SQLAlchemy async y psycopg
+antes de iniciar Uvicorn.
+
 ## Ejecutar Alembic
 
 Desde `backend/`:

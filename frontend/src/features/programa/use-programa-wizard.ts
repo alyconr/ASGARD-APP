@@ -204,6 +204,7 @@ export function useProgramaWizard(): ProgramaWizardController {
   const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(
     null,
   );
+  const autoStartedFromDashboardRef = useRef(false);
 
   const fetchDocState = useCallback(async (): Promise<void> => {
     if (activeReferenceId === null) {
@@ -456,6 +457,26 @@ export function useProgramaWizard(): ProgramaWizardController {
     },
     [persistSnapshot],
   );
+
+  useEffect(() => {
+    if (
+      autoStartedFromDashboardRef.current ||
+      isBootstrapping ||
+      activeReferenceId !== null ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("nuevo") !== "programa") {
+      return;
+    }
+
+    autoStartedFromDashboardRef.current = true;
+    void startNewFlow("EXCEL");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [activeReferenceId, isBootstrapping, startNewFlow]);
 
   const updateContinueReferenceInput = useCallback((value: string): void => {
     setContinueReferenceInput(value.trim());
