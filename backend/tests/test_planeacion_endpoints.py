@@ -40,6 +40,8 @@ class FakePlaneacionPedagogicaService:
                 id=p.id,
                 proyecto_id=p.proyecto_id,
                 competencia_id=p.competencia_id,
+                resultado_id=p.resultado_id,
+                resultado_descripcion=p.resultado_descripcion or "Resultado mock",
                 codigo_competencia="220501046",
                 nombre_competencia="Desarrollar software",
                 estado=p.estado,
@@ -62,6 +64,8 @@ class FakePlaneacionPedagogicaService:
             id=planning_id,
             proyecto_id=dto.proyecto_id,
             competencia_id=dto.competencia_id,
+            resultado_id=dto.resultado_id,
+            resultado_descripcion="Resultado mock",
             fase_id=dto.fase_id,
             actividad_id=dto.actividad_id,
             estado="BORRADOR",
@@ -102,6 +106,7 @@ def test_planeacion_endpoints_flow() -> None:
     referencia_id = uuid.uuid4()
     proyecto_id = uuid.uuid4()
     competencia_id = uuid.uuid4()
+    resultado_id = uuid.uuid4()
 
     fake_service.contexto_mock = PlaneacionContextoDTO(
         programa_id=uuid.uuid4(),
@@ -123,7 +128,8 @@ def test_planeacion_endpoints_flow() -> None:
     save_payload = {
         "proyecto_id": str(proyecto_id),
         "competencia_id": str(competencia_id),
-        "resultados_ids": [str(uuid.uuid4())],
+        "resultado_id": str(resultado_id),
+        "resultados_ids": [str(resultado_id)],
         "conocimientos_ids": [],
         "criterios_ids": [],
         "datos_complementarios": {"horas": 40},
@@ -132,6 +138,7 @@ def test_planeacion_endpoints_flow() -> None:
     assert save_res.status_code == 200
     planning_id = save_res.json()["id"]
     assert save_res.json()["estado"] == "BORRADOR"
+    assert save_res.json()["resultado_id"] == str(resultado_id)
 
     # 3. Test GET list
     list_res = client.get(f"/api/v1/planeaciones/proyecto/{proyecto_id}")

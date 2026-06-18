@@ -64,9 +64,9 @@ function ActionButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
         tone === "primary" &&
-          "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]",
+          "border border-transparent bg-[var(--accent)] !text-white hover:bg-[var(--accent-strong)]",
         tone === "secondary" &&
           "border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-white",
         tone === "quiet" &&
@@ -268,7 +268,7 @@ function StepWorkspace({
                     </div>
                     <Link
                       href={`/planeacion/${payload.meta.programaReferenciaId}`}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] self-start sm:self-center"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] self-start sm:self-center"
                     >
                       <Route className="h-4 w-4" />
                       Configurar Planeación Pedagógica
@@ -527,7 +527,7 @@ export function ProyectoWizardShell({
                   controller.payload?.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
                     <Link
                       href={`/planeacion/${controller.payload.meta.programaReferenciaId}`}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                     >
                       Configurar Planeación
                       <ArrowRight className="h-4 w-4" />

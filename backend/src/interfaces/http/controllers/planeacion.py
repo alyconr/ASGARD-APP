@@ -102,6 +102,12 @@ async def guardar_borrador(
         res = await service.guardar_borrador(dto)
         await session.commit()
         return res
+    except ValueError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
     except Exception as error:
         await session.rollback()
         raise HTTPException(

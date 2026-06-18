@@ -4,6 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.infrastructure.config.settings import get_settings
+from src.infrastructure.runtime import configure_asyncio_event_loop_policy
+
+configure_asyncio_event_loop_policy()
+
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
 )

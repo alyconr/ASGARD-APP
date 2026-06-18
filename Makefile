@@ -41,7 +41,7 @@ dev-frontend:
 	$(NPM) --workspace frontend run dev
 
 dev-backend:
-	cd backend && $(UV) run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && $(UV) run python -m src.dev_server
 
 start-frontend:
 	$(NPM) --workspace frontend run start

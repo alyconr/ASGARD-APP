@@ -84,7 +84,9 @@ describe("ProgramaWizardShell", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Iniciar proceso")).toBeInTheDocument();
     expect(screen.getByText("Continuar borrador")).toBeInTheDocument();
-    expect(screen.getByText("Excel canonico")).toBeInTheDocument();
+    expect(
+      screen.getByText("Matriz de Programa de formacion"),
+    ).toBeInTheDocument();
   });
 
   it("should allow removing local draft references without recovering them", () => {

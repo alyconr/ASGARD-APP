@@ -211,6 +211,8 @@ class PlaneacionPedagogicaService:
                 id=e.id,
                 proyecto_id=e.proyecto_id,
                 competencia_id=e.competencia_id,
+                resultado_id=e.resultado_id,
+                resultado_descripcion=e.resultado.descripcion,
                 codigo_competencia=e.competencia.codigo_competencia,
                 nombre_competencia=e.competencia.nombre_competencia,
                 estado=e.estado.value,
@@ -230,30 +232,36 @@ class PlaneacionPedagogicaService:
 
     async def guardar_borrador(self, dto: PlaneacionSaveDTO) -> PlaneacionResponseDTO:
         """Create or update a pedagogical planning draft in the database."""
-        entity = await self._repository.get_by_proyecto_and_competencia(
+        resultado = await self._session.get(ResultadoAprendizaje, dto.resultado_id)
+        if resultado is None:
+            raise ValueError(
+                f"No existe el resultado de aprendizaje {dto.resultado_id}"
+            )
+        if resultado.competencia_id != dto.competencia_id:
+            raise ValueError(
+                "El resultado seleccionado no pertenece a la competencia indicada"
+            )
+
+        entity = await self._repository.get_by_proyecto_and_resultado(
             dto.proyecto_id,
-            dto.competencia_id,
+            dto.resultado_id,
         )
         if entity is None:
             entity = PlaneacionPedagogica(
                 proyecto_id=dto.proyecto_id,
                 competencia_id=dto.competencia_id,
+                resultado_id=dto.resultado_id,
             )
+        else:
+            entity.competencia_id = dto.competencia_id
+            entity.resultado_id = dto.resultado_id
 
         entity.fase_id = dto.fase_id
         entity.actividad_id = dto.actividad_id
         entity.estado = EstadoBloque.BORRADOR
         entity.datos_complementarios = dto.datos_complementarios
 
-        # Fetch and link relations
-        if dto.resultados_ids:
-            res_stmt = select(ResultadoAprendizaje).where(
-                ResultadoAprendizaje.id.in_(dto.resultados_ids)
-            )
-            res_query = await self._session.execute(res_stmt)
-            entity.resultados = list(res_query.scalars().all())
-        else:
-            entity.resultados = []
+        entity.resultados = [resultado]
 
         if dto.conocimientos_ids:
             k_stmt = select(Conocimiento).where(
@@ -307,6 +315,10 @@ class PlaneacionPedagogicaService:
                 "codigo": entity.competencia.codigo_competencia,
                 "nombre": entity.competencia.nombre_competencia,
             },
+            "resultado_principal": {
+                "id": str(entity.resultado_id),
+                "descripcion": entity.resultado.descripcion,
+            },
             "fase": {
                 "id": str(entity.fase_id) if entity.fase_id else None,
                 "nombre": entity.fase.nombre_fase if entity.fase else None,
@@ -345,9 +357,13 @@ class PlaneacionPedagogicaService:
             f"{entity.proyecto.programa_id}/"
             f"{entity.proyecto_id}/"
             f"{entity.competencia_id}/"
+            f"{entity.resultado_id}/"
             f"planeacion.json"
         )
-        file_name = f"planeacion_{entity.competencia.codigo_competencia}.json"
+        file_name = (
+            f"planeacion_{entity.competencia.codigo_competencia}_"
+            f"{str(entity.resultado_id)[:8]}.json"
+        )
 
         # Save to storage (MinIO)
         await self._storage_service.save_pdf(
@@ -383,6 +399,10 @@ class PlaneacionPedagogicaService:
             id=entity.id,
             proyecto_id=entity.proyecto_id,
             competencia_id=entity.competencia_id,
+            resultado_id=entity.resultado_id,
+            resultado_descripcion=entity.resultado.descripcion
+            if entity.resultado
+            else None,
             fase_id=entity.fase_id,
             actividad_id=entity.actividad_id,
             estado=entity.estado.value,

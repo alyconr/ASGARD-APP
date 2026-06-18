@@ -50,6 +50,7 @@ export interface PlaneacionContextoResponse {
 export interface PlaneacionSaveRequest {
   proyecto_id: string;
   competencia_id: string;
+  resultado_id: string;
   fase_id?: string | null;
   actividad_id?: string | null;
   resultados_ids: string[];
@@ -62,6 +63,8 @@ export interface PlaneacionResponse {
   id: string;
   proyecto_id: string;
   competencia_id: string;
+  resultado_id: string;
+  resultado_descripcion: string | null;
   fase_id: string | null;
   actividad_id: string | null;
   estado: string;
@@ -81,6 +84,8 @@ export interface PlaneacionListResponse {
   id: string;
   proyecto_id: string;
   competencia_id: string;
+  resultado_id: string;
+  resultado_descripcion: string;
   codigo_competencia: string;
   nombre_competencia: string;
   estado: string;

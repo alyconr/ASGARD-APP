@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProyectoDisponibilidadPanel } from "./proyecto-disponibilidad-panel";
@@ -49,7 +49,6 @@ describe("ProyectoDisponibilidadPanel", () => {
       <ProyectoDisponibilidadPanel
         referenciaId={referenciaId}
         programaEstado="BORRADOR"
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -65,24 +64,20 @@ describe("ProyectoDisponibilidadPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("navigates to program close corrections from blocked panel", async () => {
+  it("does not render the old complete program action", async () => {
     mockFetchJson(buildAvailability());
-    const onNavigate = vi.fn();
 
     render(
       <ProyectoDisponibilidadPanel
         referenciaId={referenciaId}
         programaEstado="BORRADOR"
-        onNavigateToStep={onNavigate}
       />,
     );
 
     await screen.findByText("Modulo proyecto bloqueado");
-    fireEvent.click(
-      screen.getByRole("button", { name: /completar programa/i }),
-    );
-
-    expect(onNavigate).toHaveBeenCalledWith("revision-programa");
+    expect(
+      screen.queryByRole("button", { name: /completar programa/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders enabled state when the program is complete", async () => {
@@ -103,7 +98,6 @@ describe("ProyectoDisponibilidadPanel", () => {
       <ProyectoDisponibilidadPanel
         referenciaId={referenciaId}
         programaEstado="COMPLETO"
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -112,8 +106,8 @@ describe("ProyectoDisponibilidadPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("LISTO PARA INICIAR")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /completar programa/i }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /completar programa/i }),
+    ).not.toBeInTheDocument();
     expect(
       await screen.findByLabelText("Wizard base del proyecto formativo"),
     ).toBeInTheDocument();
@@ -148,7 +142,6 @@ describe("ProyectoDisponibilidadPanel", () => {
       <ProyectoDisponibilidadPanel
         referenciaId={referenciaId}
         programaEstado="BORRADOR"
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -158,7 +151,6 @@ describe("ProyectoDisponibilidadPanel", () => {
       <ProyectoDisponibilidadPanel
         referenciaId={referenciaId}
         programaEstado="COMPLETO"
-        onNavigateToStep={vi.fn()}
       />,
     );
 

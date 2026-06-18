@@ -90,6 +90,7 @@ class PlaneacionSaveDTO(BaseModel):
 
     proyecto_id: uuid.UUID
     competencia_id: uuid.UUID
+    resultado_id: uuid.UUID
     fase_id: uuid.UUID | None = None
     actividad_id: uuid.UUID | None = None
     resultados_ids: list[uuid.UUID] = Field(default_factory=list)
@@ -105,6 +106,8 @@ class PlaneacionResponseDTO(BaseModel):
     id: uuid.UUID
     proyecto_id: uuid.UUID
     competencia_id: uuid.UUID
+    resultado_id: uuid.UUID
+    resultado_descripcion: str | None = None
     fase_id: uuid.UUID | None = None
     actividad_id: uuid.UUID | None = None
     estado: str
@@ -128,6 +131,8 @@ class PlaneacionListDTO(BaseModel):
     id: uuid.UUID
     proyecto_id: uuid.UUID
     competencia_id: uuid.UUID
+    resultado_id: uuid.UUID
+    resultado_descripcion: str
     codigo_competencia: str
     nombre_competencia: str
     estado: str

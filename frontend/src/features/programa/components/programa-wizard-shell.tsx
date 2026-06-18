@@ -47,7 +47,8 @@ const STEP_CONTENT: Record<
   "origen-documental": {
     label: "Origen de informacion",
     description:
-      "PDF como evidencia documental y Excel canonico como fuente curricular.",
+      "PDF como evidencia documental y Matriz de Programa de formacion " +
+      "como fuente curricular.",
     icon: FileSpreadsheet,
   },
   "revision-programa": {
@@ -245,7 +246,7 @@ function DraftSummary({
       <div>
         <dt className="text-[var(--muted)]">Fuente</dt>
         <dd className="mt-1 font-semibold text-[var(--foreground)]">
-          Excel canonico
+          Matriz de Programa de formacion
         </dd>
       </div>
       <div>
@@ -306,7 +307,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
               Flujo de importacion con borrador persistente, navegacion por
               pasos y recuperacion por referencia estable. La fuente
-              estructurada del programa es la matriz Excel canonica.
+              estructurada del programa es la Matriz de Programa de formacion.
             </p>
           </div>
 
@@ -350,11 +351,12 @@ export function ProgramaWizardShell(): React.JSX.Element {
                   <FileSpreadsheet className="h-5 w-5" />
                 </span>
                 <span className="text-base font-semibold text-[var(--foreground)]">
-                  Excel canonico
+                  Matriz de Programa de formacion
                 </span>
                 <span className="text-sm leading-6 text-[var(--muted)]">
-                  Workbook canonico para preview e importacion curricular
-                  estructurada.
+                  Carga la matriz oficial en formato .xlsx. Debe incluir las
+                  hojas Programa, Competencias, Resultados, Conocimientos y
+                  Criterios; luego valida el preview y confirma la importacion.
                 </span>
               </button>
             </div>
@@ -362,7 +364,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
             <div className="mt-5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--muted)]">
               El proceso inicia en estado BORRADOR y conserva el mismo
               referencia_id durante todo el wizard. La fuente estructurada del
-              programa es la matriz Excel canonica.
+              programa es la Matriz de Programa de formacion.
             </div>
           </section>
 
@@ -538,7 +540,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
               }
               programaId={programaId}
               programaEstado={controller.draftStatus}
-              onNavigateToStep={controller.goToStep}
               docState={controller.docState}
             />
 

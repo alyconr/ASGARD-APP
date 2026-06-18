@@ -130,33 +130,32 @@ async def test_guardar_borrador_creates_new_record() -> None:
     dto = PlaneacionSaveDTO(
         proyecto_id=proyecto_id,
         competencia_id=competencia_id,
+        resultado_id=resultado_id,
         resultados_ids=[resultado_id],
         conocimientos_ids=[],
         criterios_ids=[],
         datos_complementarios={"estrategias_didacticas": "Estrategia de prueba"},
     )
 
-    # Mock DB relations query
-    mock_res_query = MagicMock()
-    mock_res_query.scalars.return_value.all.return_value = [
-        ResultadoAprendizaje(descripcion="Resultado 1"),
-    ]
-    session.execute.return_value = mock_res_query
+    resultado = ResultadoAprendizaje(descripcion="Resultado 1")
+    resultado.id = resultado_id
+    resultado.competencia_id = competencia_id
+    session.get.return_value = resultado
 
     # Repo mocks
     repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
-    repository.get_by_proyecto_and_competencia.return_value = None
+    repository.get_by_proyecto_and_resultado.return_value = None
 
     # Re-fetch mock after save
     created_planning = PlaneacionPedagogica(
         proyecto_id=proyecto_id,
         competencia_id=competencia_id,
+        resultado_id=resultado_id,
     )
     created_planning.id = uuid.uuid4()
 
-    res_obj = ResultadoAprendizaje(descripcion="Resultado 1")
-    res_obj.id = resultado_id
-    created_planning.resultados = [res_obj]
+    created_planning.resultado = resultado
+    created_planning.resultados = [resultado]
 
     created_planning.conocimientos = []
     created_planning.criterios = []
@@ -186,6 +185,7 @@ async def test_guardar_borrador_creates_new_record() -> None:
     # Assert
     assert res.proyecto_id == proyecto_id
     assert res.competencia_id == competencia_id
+    assert res.resultado_id == resultado_id
     assert res.estado == "BORRADOR"
     assert res.datos_complementarios["estrategias_didacticas"] == "Estrategia de prueba"
     assert len(res.resultados_ids) == 1
@@ -199,6 +199,7 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
     proyecto_id = uuid.uuid4()
     programa_id = uuid.uuid4()
     competencia_id = uuid.uuid4()
+    resultado_id = uuid.uuid4()
 
     session = AsyncMock()
 
@@ -216,15 +217,20 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
         nombre_competencia="Desarrollar software",
     )
     competencia.id = competencia_id
+    resultado = ResultadoAprendizaje(descripcion="Resultado 1")
+    resultado.id = resultado_id
+    resultado.competencia_id = competencia_id
 
     planning = PlaneacionPedagogica(
         proyecto_id=proyecto_id,
         competencia_id=competencia_id,
+        resultado_id=resultado_id,
     )
     planning.id = planeacion_id
     planning.proyecto = proyecto
     planning.competencia = competencia
-    planning.resultados = []
+    planning.resultado = resultado
+    planning.resultados = [resultado]
     planning.conocimientos = []
     planning.criterios = []
     planning.datos_complementarios = {"horas": 40}
@@ -248,7 +254,9 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
     assert res.estado == "COMPLETO"
     assert res.storage_key is not None
     assert "planeaciones-pedagogicas/" in res.storage_key
-    assert res.file_name == f"planeacion_{competencia.codigo_competencia}.json"
+    assert res.file_name == (
+        f"planeacion_{competencia.codigo_competencia}_{str(resultado_id)[:8]}.json"
+    )
 
     # Verify MinIO upload call
     storage_service.save_pdf.assert_called_once()

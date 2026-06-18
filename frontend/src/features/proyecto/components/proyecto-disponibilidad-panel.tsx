@@ -16,7 +16,6 @@ import {
 import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
 import { cn } from "@/lib/utils";
 import type { DraftStatus, EstadoDocumentalResponse } from "@/features/drafts/types";
-import type { ProgramaWizardStepId } from "@/features/programa/types";
 
 function buildLocalAvailability(
   referenciaId: string,
@@ -43,14 +42,12 @@ function buildLocalAvailability(
 
 export function ProyectoDisponibilidadPanel({
   className,
-  onNavigateToStep,
   programaId = null,
   programaEstado,
   referenciaId,
   docState = null,
 }: Readonly<{
   className?: string;
-  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   programaId?: string | null;
   programaEstado: DraftStatus;
   referenciaId: string;
@@ -170,14 +167,6 @@ export function ProyectoDisponibilidadPanel({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--line)] pt-4">
-        <button
-          type="button"
-          disabled={!isBlocked}
-          onClick={() => onNavigateToStep("revision-programa")}
-          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Completar programa
-        </button>
         <p className="text-sm leading-6 text-[var(--muted)]">
           Estado programa:{" "}
           <span className="font-semibold text-[var(--foreground)]">
@@ -191,7 +180,7 @@ export function ProyectoDisponibilidadPanel({
           <Link
             href={`/proyecto/${availability.referencia_id}`}
             aria-label="Wizard base del proyecto formativo"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
             Iniciar wizard del proyecto formativo
           </Link>

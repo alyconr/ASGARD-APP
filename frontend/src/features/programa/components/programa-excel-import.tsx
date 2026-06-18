@@ -487,11 +487,12 @@ export function ProgramaExcelImport({
             </span>
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">
-                Excel canonico curricular
+                Matriz de Programa de formacion
               </p>
               <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
-                Este archivo es la fuente estructurada para poblar programa,
-                competencias, resultados, conocimientos y criterios.
+                Sube el archivo .xlsx oficial del programa. Debe contener las
+                hojas Programa, Competencias, Resultados, Conocimientos y
+                Criterios; despues valida el preview y confirma la importacion.
               </p>
             </div>
           </div>
@@ -528,7 +529,7 @@ export function ProgramaExcelImport({
             </p>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {selectedFile === null
-                ? "Workbook .xlsx canonico"
+                ? "Archivo .xlsx de la matriz del programa"
                 : formatFileSize(selectedFile.size)}
             </p>
           </div>

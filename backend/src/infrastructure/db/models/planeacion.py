@@ -100,11 +100,12 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint(
             "proyecto_id",
-            "competencia_id",
-            name="uq_planeacion_proyecto_competencia",
+            "resultado_id",
+            name="uq_planeacion_proyecto_resultado",
         ),
         Index("ix_planeaciones_pedagogicas_proyecto_id", "proyecto_id"),
         Index("ix_planeaciones_pedagogicas_competencia_id", "competencia_id"),
+        Index("ix_planeaciones_pedagogicas_resultado_id", "resultado_id"),
     )
 
     proyecto_id: Mapped[uuid.UUID] = mapped_column(
@@ -115,6 +116,11 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     competencia_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("competencias.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    resultado_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
         nullable=False,
     )
     fase_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -153,6 +159,9 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Relationships
     proyecto: Mapped[ProyectoFormativo] = relationship()
     competencia: Mapped[Competencia] = relationship()
+    resultado: Mapped[ResultadoAprendizaje] = relationship(
+        foreign_keys=[resultado_id],
+    )
     fase: Mapped[FaseProyecto | None] = relationship()
     actividad: Mapped[ActividadProyecto | None] = relationship()
 

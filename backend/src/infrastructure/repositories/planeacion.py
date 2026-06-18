@@ -28,6 +28,7 @@ class PlaneacionPedagogicaRepository:
                 selectinload(PlaneacionPedagogica.conocimientos),
                 selectinload(PlaneacionPedagogica.criterios),
                 selectinload(PlaneacionPedagogica.competencia),
+                selectinload(PlaneacionPedagogica.resultado),
                 selectinload(PlaneacionPedagogica.proyecto),
                 selectinload(PlaneacionPedagogica.fase),
                 selectinload(PlaneacionPedagogica.actividad),
@@ -36,21 +37,22 @@ class PlaneacionPedagogicaRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_by_proyecto_and_competencia(
+    async def get_by_proyecto_and_resultado(
         self,
         proyecto_id: uuid.UUID,
-        competencia_id: uuid.UUID,
+        resultado_id: uuid.UUID,
     ) -> PlaneacionPedagogica | None:
-        """Retrieve a pedagogical planning by project and competence logical key."""
+        """Retrieve a pedagogical planning by project and learning result key."""
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
-            .where(PlaneacionPedagogica.competencia_id == competencia_id)
+            .where(PlaneacionPedagogica.resultado_id == resultado_id)
             .options(
                 selectinload(PlaneacionPedagogica.resultados),
                 selectinload(PlaneacionPedagogica.conocimientos),
                 selectinload(PlaneacionPedagogica.criterios),
                 selectinload(PlaneacionPedagogica.competencia),
+                selectinload(PlaneacionPedagogica.resultado),
                 selectinload(PlaneacionPedagogica.fase),
                 selectinload(PlaneacionPedagogica.actividad),
             )
@@ -68,6 +70,7 @@ class PlaneacionPedagogicaRepository:
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
             .options(
                 selectinload(PlaneacionPedagogica.competencia),
+                selectinload(PlaneacionPedagogica.resultado),
             )
             .order_by(PlaneacionPedagogica.fecha_actualizacion.desc())
         )

@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   ChevronRight,
   Download,
+  Lock,
   RefreshCcw,
   Save,
   Trash2,
   Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,9 +39,9 @@ interface StepDefinition {
 }
 
 const WIZARD_STEPS: StepDefinition[] = [
-  { id: "curricular", label: "Estructura Curricular", description: "Vincular fases, actividades y componentes curriculares" },
+  { id: "curricular", label: "Estructura Curricular", description: "Vincular fase, actividad y componentes curriculares del RAP" },
   { id: "complementario", label: "Campos Complementarios", description: "Definir estrategias didácticas y recursos de apoyo" },
-  { id: "preview", label: "Vista Previa", description: "Revisar la planeación pedagógica de la competencia" },
+  { id: "preview", label: "Vista Previa", description: "Revisar la planeación pedagógica del resultado" },
   { id: "confirmacion", label: "Finalizado", description: "Descargar planeación aprobada" },
 ];
 
@@ -53,6 +55,8 @@ export function PlaneacionWizardShell({
   const [activeStep, setActiveStep] = useState<StepId>("dashboard");
   const [planningsList, setPlanningsList] = useState<PlaneacionListResponse[]>([]);
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
+  const [resultModalCompetenciaId, setResultModalCompetenciaId] = useState<string | null>(null);
   const [activePlanningId, setActivePlanningId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -60,7 +64,6 @@ export function PlaneacionWizardShell({
   // Form State
   const [faseId, setFaseId] = useState<string>("");
   const [actividadId, setActividadId] = useState<string>("");
-  const [selectedResultados, setSelectedResultados] = useState<string[]>([]);
   const [selectedConocimientos, setSelectedConocimientos] = useState<string[]>([]);
   const [selectedCriterios, setSelectedCriterios] = useState<string[]>([]);
   
@@ -96,37 +99,46 @@ export function PlaneacionWizardShell({
   }, [contexto.competencias]);
 
   const selectedCompetencia = selectedCompId ? competenciasMap.get(selectedCompId) : null;
+  const modalCompetencia = resultModalCompetenciaId ? competenciasMap.get(resultModalCompetenciaId) : null;
+  const selectedResultado = useMemo(
+    () => selectedCompetencia?.resultados.find((resultado) => resultado.id === selectedResultId) ?? null,
+    [selectedCompetencia, selectedResultId],
+  );
+
+  const planningsByResultado = useMemo(() => {
+    const map = new Map<string, PlaneacionListResponse>();
+    planningsList.forEach((planning) => map.set(planning.resultado_id, planning));
+    return map;
+  }, [planningsList]);
+
+  const planningsByCompetencia = useMemo(() => {
+    const map = new Map<string, PlaneacionListResponse[]>();
+    planningsList.forEach((planning) => {
+      const current = map.get(planning.competencia_id) ?? [];
+      current.push(planning);
+      map.set(planning.competencia_id, current);
+    });
+    return map;
+  }, [planningsList]);
 
   // Select All toggles
-  const allResultadosIds = useMemo(() => selectedCompetencia?.resultados.map((r) => r.id) ?? [], [selectedCompetencia]);
   const allSaberIds = useMemo(() => selectedCompetencia?.conocimientos_saber.map((k) => k.id) ?? [], [selectedCompetencia]);
   const allProcesoIds = useMemo(() => selectedCompetencia?.conocimientos_proceso.map((k) => k.id) ?? [], [selectedCompetencia]);
   const allConocimientosIds = useMemo(() => [...allSaberIds, ...allProcesoIds], [allSaberIds, allProcesoIds]);
   const allCriteriosIds = useMemo(() => selectedCompetencia?.criterios.map((cr) => cr.id) ?? [], [selectedCompetencia]);
 
-  const totalSelectableCount = allResultadosIds.length + allConocimientosIds.length + allCriteriosIds.length;
-  const totalSelectedCount = selectedResultados.length + selectedConocimientos.length + selectedCriterios.length;
+  const totalSelectableCount = allConocimientosIds.length + allCriteriosIds.length;
+  const totalSelectedCount = selectedConocimientos.length + selectedCriterios.length;
 
   const isAllSelected = totalSelectableCount > 0 && totalSelectedCount === totalSelectableCount;
 
   const handleToggleSelectAll = () => {
     if (isAllSelected) {
-      setSelectedResultados([]);
       setSelectedConocimientos([]);
       setSelectedCriterios([]);
     } else {
-      setSelectedResultados(allResultadosIds);
       setSelectedConocimientos(allConocimientosIds);
       setSelectedCriterios(allCriteriosIds);
-    }
-  };
-
-  const isAllResultadosSelected = allResultadosIds.length > 0 && selectedResultados.length === allResultadosIds.length;
-  const handleToggleAllResultados = () => {
-    if (isAllResultadosSelected) {
-      setSelectedResultados([]);
-    } else {
-      setSelectedResultados(allResultadosIds);
     }
   };
 
@@ -173,7 +185,7 @@ export function PlaneacionWizardShell({
   const resetForm = () => {
     setFaseId("");
     setActividadId("");
-    setSelectedResultados([]);
+    setSelectedResultId(null);
     setSelectedConocimientos([]);
     setSelectedCriterios([]);
     setEstrategias("");
@@ -185,59 +197,84 @@ export function PlaneacionWizardShell({
     setConfirmedPlanning(null);
   };
 
-  // Start or resume planning for a competence
-  const handleStartPlanning = async (competenciaId: string) => {
+  const loadPlanningDetails = async (
+    planning: PlaneacionListResponse,
+    fallbackResultadoId: string,
+  ) => {
+    setIsLoadingDetails(true);
+    try {
+      const details = await fetchPlaneacionDetalle(planning.id);
+      const resultId = details.resultado_id ?? details.resultados_ids[0] ?? fallbackResultadoId;
+      setActivePlanningId(details.id);
+      setSelectedResultId(resultId);
+      setFaseId(details.fase_id ?? "");
+      setActividadId(details.actividad_id ?? "");
+      setSelectedConocimientos(details.conocimientos_ids);
+      setSelectedCriterios(details.criterios_ids);
+
+      const c = details.datos_complementarios;
+      setEstrategias((c.estrategias_didacticas as string) ?? "");
+      setAmbientes((c.ambientes_aprendizaje as string) ?? "");
+      setRecursos((c.recursos_didacticos as string) ?? "");
+      setDuracionHoras((c.duracion_horas as number) ?? 0);
+      setInstructor((c.instructor_responsable as string) ?? "");
+
+      if (details.estado === "COMPLETO") {
+        setConfirmedPlanning(details);
+        setActiveStep("confirmacion");
+      } else {
+        setActiveStep("curricular");
+      }
+    } catch {
+      toast.error("Error al cargar los detalles del borrador");
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  const handleOpenResultadoModal = (competenciaId: string) => {
     resetForm();
     setSelectedCompId(competenciaId);
-    
-    const existing = planningsList.find((p) => p.competencia_id === competenciaId);
-    
-    if (existing) {
-      setIsLoadingDetails(true);
-      try {
-        const details = await fetchPlaneacionDetalle(existing.id);
-        setActivePlanningId(details.id);
-        setFaseId(details.fase_id ?? "");
-        setActividadId(details.actividad_id ?? "");
-        setSelectedResultados(details.resultados_ids);
-        setSelectedConocimientos(details.conocimientos_ids);
-        setSelectedCriterios(details.criterios_ids);
-        
-        // complementarios
-        const c = details.datos_complementarios;
-        setEstrategias((c.estrategias_didacticas as string) ?? "");
-        setAmbientes((c.ambientes_aprendizaje as string) ?? "");
-        setRecursos((c.recursos_didacticos as string) ?? "");
-        setDuracionHoras((c.duracion_horas as number) ?? 0);
-        setInstructor((c.instructor_responsable as string) ?? "");
-        
-        if (details.estado === "COMPLETO") {
-          setConfirmedPlanning(details);
-          setActiveStep("confirmacion");
-        } else {
-          setActiveStep("curricular");
-        }
-      } catch {
-        toast.error("Error al cargar los detalles del borrador");
-      } finally {
-        setIsLoadingDetails(false);
-      }
-    } else {
-      setActiveStep("curricular");
+    setResultModalCompetenciaId(competenciaId);
+  };
+
+  const handleSelectResultado = async (resultadoId: string) => {
+    if (!selectedCompId) return;
+
+    const existing = planningsByResultado.get(resultadoId);
+    if (existing?.estado === "COMPLETO") {
+      toast.info("Este resultado ya tiene una planeacion completa.");
+      return;
     }
+
+    resetForm();
+    setSelectedCompId(selectedCompId);
+    setSelectedResultId(resultadoId);
+    setResultModalCompetenciaId(null);
+
+    if (existing) {
+      await loadPlanningDetails(existing, resultadoId);
+      return;
+    }
+
+    setActiveStep("curricular");
   };
 
   // Save current step to DB as a draft
   const handleSaveDraft = async (silent = false): Promise<string | null> => {
-    if (!selectedCompId) return null;
+    if (!selectedCompId || !selectedResultId) {
+      toast.error("Selecciona un resultado de aprendizaje antes de guardar.");
+      return null;
+    }
     
     setIsSaving(true);
     const payload: PlaneacionSaveRequest = {
       proyecto_id: contexto.proyecto_id,
       competencia_id: selectedCompId,
+      resultado_id: selectedResultId,
       fase_id: faseId || null,
       actividad_id: actividadId || null,
-      resultados_ids: selectedResultados,
+      resultados_ids: [selectedResultId],
       conocimientos_ids: selectedConocimientos,
       criterios_ids: selectedCriterios,
       datos_complementarios: {
@@ -331,7 +368,7 @@ export function PlaneacionWizardShell({
       <header className="flex flex-col gap-2 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-[0_14px_32px_rgba(23,53,47,0.06)]">
         <div className="flex items-center gap-2 text-[var(--accent-strong)]">
           <BookOpen className="h-5 w-5" />
-          <span className="text-xs font-bold uppercase tracking-wider">Planeación Pedagógica por Competencia</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Planeación Pedagógica por Resultado</span>
         </div>
         <h1 className="mt-1 text-2xl font-semibold text-[var(--foreground)] sm:text-3xl">
           {contexto.nombre_proyecto}
@@ -355,7 +392,7 @@ export function PlaneacionWizardShell({
           <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4">
             <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-1">Listado de Competencias del Programa</h3>
             <p className="text-xs text-[var(--muted)] leading-relaxed">
-              Selecciona una competencia para construir, editar o visualizar su planeación pedagógica. Las planeaciones completadas quedan guardadas de forma segura sin interferir con las otras competencias.
+              Selecciona una competencia para elegir el resultado de aprendizaje que tendrá planeación. Los resultados completados quedan desactivados para evitar duplicidad.
             </p>
           </div>
 
@@ -369,14 +406,17 @@ export function PlaneacionWizardShell({
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {contexto.competencias.map((comp) => {
-                const planning = planningsList.find((p) => p.competencia_id === comp.id);
-                const isComplete = planning?.estado === "COMPLETO";
-                const isDraft = planning?.estado === "BORRADOR";
+                const plannings = planningsByCompetencia.get(comp.id) ?? [];
+                const completedCount = plannings.filter((p) => p.estado === "COMPLETO").length;
+                const draftCount = plannings.filter((p) => p.estado === "BORRADOR").length;
+                const totalResultados = comp.resultados.length;
+                const isComplete = totalResultados > 0 && completedCount === totalResultados;
+                const isDraft = draftCount > 0;
 
                 return (
                   <article
                     key={comp.id}
-                    onClick={() => void handleStartPlanning(comp.id)}
+                    onClick={() => handleOpenResultadoModal(comp.id)}
                     className={cn(
                       "flex flex-col justify-between rounded-lg border p-5 bg-white hover:border-[var(--accent)] hover:shadow-md transition cursor-pointer relative overflow-hidden",
                       isComplete ? "border-emerald-100" : isDraft ? "border-amber-100" : "border-[color:var(--card-border)]"
@@ -398,26 +438,28 @@ export function PlaneacionWizardShell({
                           )}
                         >
                           <span className={cn("h-1.5 w-1.5 rounded-full", isComplete ? "bg-emerald-500" : isDraft ? "bg-amber-500" : "bg-slate-400")} />
-                          {isComplete ? "COMPLETO" : isDraft ? "BORRADOR" : "SIN PLANIFICAR"}
+                          {isComplete ? "COMPLETA" : isDraft ? "CON BORRADOR" : "SIN PLANIFICAR"}
                         </span>
                       </div>
                       <h4 className="text-sm font-semibold text-[var(--foreground)] leading-relaxed">
                         {comp.nombre_competencia}
                       </h4>
+                      <div className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                        <span className="rounded-lg bg-slate-50 px-2.5 py-2 font-semibold">
+                          {totalResultados} RAP
+                        </span>
+                        <span className="rounded-lg bg-emerald-50 px-2.5 py-2 font-semibold text-emerald-700">
+                          {completedCount} completos
+                        </span>
+                        <span className="rounded-lg bg-amber-50 px-2.5 py-2 font-semibold text-amber-700">
+                          {draftCount} borradores
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mt-5 flex items-center justify-between border-t border-[var(--line)] pt-3">
-                      <div className="flex items-center gap-2">
-                        {planning && (
-                          <button
-                            type="button"
-                            onClick={(e) => void handleDeletePlanning(planning.id, e)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-700 transition"
-                            title="Eliminar planeación"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                      <div className="text-xs font-medium text-[var(--muted)]">
+                        {completedCount}/{totalResultados} resultados planeados
                       </div>
                       <button
                         type="button"
@@ -430,7 +472,7 @@ export function PlaneacionWizardShell({
                             : "bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-[var(--accent)] hover:text-white"
                         )}
                       >
-                        {isComplete ? "Ver Planeación" : isDraft ? "Editar Borrador" : "Iniciar Planeación"}
+                        Elegir Resultado
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -440,6 +482,109 @@ export function PlaneacionWizardShell({
             </div>
           )}
         </section>
+      )}
+
+      {modalCompetencia && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="resultado-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6"
+        >
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-[var(--accent-strong)]">
+                  {modalCompetencia.codigo_competencia}
+                </p>
+                <h2 id="resultado-modal-title" className="mt-1 text-lg font-semibold text-slate-900">
+                  Elegir resultado de aprendizaje
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                  Cada resultado permite una sola planeacion completa. Los resultados finalizados quedan bloqueados.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResultModalCompetenciaId(null)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                title="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-3 p-5">
+              {modalCompetencia.resultados.map((resultado, index) => {
+                const planning = planningsByResultado.get(resultado.id);
+                const isComplete = planning?.estado === "COMPLETO";
+                const isDraft = planning?.estado === "BORRADOR";
+
+                return (
+                  <div
+                    key={resultado.id}
+                    className={cn(
+                      "grid gap-3 rounded-lg border p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start",
+                      isComplete
+                        ? "border-emerald-100 bg-emerald-50/60"
+                        : isDraft
+                        ? "border-amber-100 bg-amber-50/50"
+                        : "border-slate-200 bg-white",
+                    )}
+                  >
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+                      RAP {index + 1}
+                    </span>
+                    <div>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                            isComplete
+                              ? "bg-emerald-100 text-emerald-800"
+                              : isDraft
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-600",
+                          )}
+                        >
+                          {isComplete && <Lock className="h-3 w-3" />}
+                          {isComplete ? "COMPLETO" : isDraft ? "BORRADOR" : "DISPONIBLE"}
+                        </span>
+                        {planning && !isComplete && (
+                          <button
+                            type="button"
+                            onClick={(event) => void handleDeletePlanning(planning.id, event)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-700"
+                            title="Eliminar borrador"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-sm leading-6 text-slate-800">{resultado.descripcion}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isComplete || isLoadingDetails}
+                      onClick={() => void handleSelectResultado(resultado.id)}
+                      className={cn(
+                        "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                        isComplete
+                          ? "bg-slate-100 text-slate-500"
+                          : isDraft
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          : "bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)]",
+                      )}
+                    >
+                      {isComplete ? "Bloqueado" : isDraft ? "Editar" : "Iniciar"}
+                      {!isComplete && <ChevronRight className="h-4 w-4" />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* WIZARD FLOW */}
@@ -491,6 +636,12 @@ export function PlaneacionWizardShell({
               <p className="font-semibold text-[var(--foreground)] uppercase tracking-wider mb-2">Competencia Seleccionada</p>
               <p className="font-mono text-slate-800 font-bold mb-1">{selectedCompetencia.codigo_competencia}</p>
               <p className="text-[var(--muted)] leading-relaxed">{selectedCompetencia.nombre_competencia}</p>
+              {selectedResultado && (
+                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <p className="mb-1 font-semibold uppercase tracking-wider text-slate-600">Resultado activo</p>
+                  <p className="text-slate-800">{selectedResultado.descripcion}</p>
+                </div>
+              )}
             </div>
 
             <button
@@ -562,10 +713,10 @@ export function PlaneacionWizardShell({
                   <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
-                        Contenido Curricular de la Competencia
+                        Contenido Curricular de la Planeacion
                       </h3>
                       <p className="text-xs text-[var(--muted)] mt-0.5">
-                        Selecciona los resultados, conocimientos y criterios que se abordarán en esta planeación.
+                        El resultado de aprendizaje ya fue elegido. Agrega los conocimientos y criterios que se abordaran en esta planeacion.
                       </p>
                     </div>
                     <button
@@ -582,40 +733,12 @@ export function PlaneacionWizardShell({
                     </button>
                   </div>
 
-                  {/* Resultados de Aprendizaje checklist */}
                   <div className="border-t border-[var(--line)] pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Resultados de Aprendizaje (RAP) asociados</h3>
-                      <button
-                        type="button"
-                        onClick={handleToggleAllResultados}
-                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
-                      >
-                        {isAllResultadosSelected ? "Deseleccionar todos" : "Seleccionar todos"}
-                      </button>
-                    </div>
-                    <div className="grid gap-2">
-                      {selectedCompetencia.resultados.map((r) => (
-                        <label
-                          key={r.id}
-                          className={cn(
-                            "flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-slate-50 transition",
-                            selectedResultados.includes(r.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]/20" : "border-slate-200"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedResultados.includes(r.id)}
-                            onChange={() => {
-                              setSelectedResultados((prev) =>
-                                prev.includes(r.id) ? prev.filter((id) => id !== r.id) : [...prev, r.id]
-                              );
-                            }}
-                            className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
-                          />
-                          <span className="text-sm leading-6 text-slate-800">{r.descripcion}</span>
-                        </label>
-                      ))}
+                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Resultado de Aprendizaje activo</h3>
+                    <div className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)]/20 p-4">
+                      <p className="text-sm leading-6 text-slate-800">
+                        {selectedResultado?.descripcion ?? "Resultado no seleccionado"}
+                      </p>
                     </div>
                   </div>
 
@@ -889,18 +1012,10 @@ export function PlaneacionWizardShell({
                   </div>
 
                   <div className="border-t pt-4">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Resultados de Aprendizaje Seleccionados ({selectedResultados.length})</h4>
-                    {selectedResultados.length > 0 ? (
-                      <ul className="list-disc pl-5 text-sm text-slate-700 gap-1.5 grid">
-                        {selectedCompetencia.resultados
-                          .filter((r) => selectedResultados.includes(r.id))
-                          .map((r) => (
-                            <li key={r.id}>{r.descripcion}</li>
-                          ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-rose-600 font-medium">⚠️ Ningún resultado seleccionado</p>
-                    )}
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Resultado de Aprendizaje</h4>
+                    <p className="text-sm leading-6 text-slate-700">
+                      {selectedResultado?.descripcion ?? "Resultado no seleccionado"}
+                    </p>
                   </div>
 
                   <div className="border-t pt-4">
@@ -981,7 +1096,7 @@ export function PlaneacionWizardShell({
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">¡Planeación Pedagógica Completada!</h2>
                   <p className="mt-2 text-sm text-[var(--muted)] max-w-md">
-                    Los datos curriculares y de planeación de la competencia han sido validados, aprobados e integrados. El archivo JSON definitivo se ha guardado en el Object Storage MinIO.
+                    Los datos curriculares y de planeación del resultado de aprendizaje han sido validados, aprobados e integrados. El archivo JSON definitivo se ha guardado en el Object Storage MinIO.
                   </p>
 
                   <div className="mt-6 w-full max-w-md border rounded-lg bg-slate-50 p-4 text-left text-sm text-slate-700 grid gap-2">
@@ -1055,19 +1170,13 @@ export function PlaneacionWizardShell({
                         {/* Resultados de Aprendizaje */}
                         <div className="border-b border-slate-100 pb-4">
                           <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            Resultados de Aprendizaje Seleccionados ({confirmedPlanning.resultados_ids.length})
+                            Resultado de Aprendizaje Planeado
                           </span>
-                          {confirmedPlanning.resultados_ids.length > 0 ? (
-                            <ul className="list-disc pl-5 text-sm text-slate-700 gap-1.5 grid">
-                              {selectedCompetencia.resultados
-                                .filter((r) => confirmedPlanning.resultados_ids.includes(r.id))
-                                .map((r) => (
-                                  <li key={r.id}>{r.descripcion}</li>
-                                ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-slate-400 italic">Ninguno seleccionado</p>
-                          )}
+                          <p className="text-sm leading-6 text-slate-700">
+                            {selectedCompetencia.resultados.find((r) => r.id === confirmedPlanning.resultado_id)?.descripcion ??
+                              confirmedPlanning.resultado_descripcion ??
+                              "Resultado no disponible"}
+                          </p>
                         </div>
 
                         {/* Saberes */}
@@ -1155,7 +1264,7 @@ export function PlaneacionWizardShell({
                       }}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-6 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-slate-50 transition"
                     >
-                      Planificar Otra Competencia
+                      Planificar Otro Resultado
                     </button>
                   </div>
                 </div>

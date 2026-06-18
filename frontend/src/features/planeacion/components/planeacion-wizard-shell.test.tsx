@@ -75,6 +75,8 @@ const mockPlanningsList: PlaneacionListResponse[] = [
     id: "plan-1",
     proyecto_id: "proj-1",
     competencia_id: "comp-1",
+    resultado_id: "rap-1",
+    resultado_descripcion: "Resultado 1: Identificar requisitos técnicos",
     codigo_competencia: "220501001",
     nombre_competencia: "Diseñar la arquitectura del software",
     estado: "BORRADOR",
@@ -86,6 +88,8 @@ const mockPlanningDetail: PlaneacionResponse = {
   id: "plan-1",
   proyecto_id: "proj-1",
   competencia_id: "comp-1",
+  resultado_id: "rap-1",
+  resultado_descripcion: "Resultado 1: Identificar requisitos técnicos",
   fase_id: "fase-1",
   actividad_id: "act-1",
   estado: "BORRADOR",
@@ -121,20 +125,26 @@ describe("PlaneacionWizardShell", () => {
     expect(screen.getByText("Diseñar la arquitectura del software")).toBeInTheDocument();
     expect(screen.getByText("220501001")).toBeInTheDocument();
     expect(screen.getByText("SIN PLANIFICAR")).toBeInTheDocument();
+    expect(screen.getByText("1 RAP")).toBeInTheDocument();
   });
 
   it("navigates to curricular wizard step when starting a new planning", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    // Click on the competency item to start planning
-    fireEvent.click(screen.getByText("Iniciar Planeación"));
+    fireEvent.click(screen.getByText("Elegir Resultado"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Elegir resultado de aprendizaje")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Iniciar/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
 
-    // Check that we display results and criteria checkboxes
-    expect(screen.getByText("Resultado 1: Identificar requisitos técnicos")).toBeInTheDocument();
+    // Check that the active result is fixed and the user can select related items.
+    expect(screen.getAllByText("Resultado 1: Identificar requisitos técnicos").length).toBeGreaterThan(0);
     expect(screen.getByText("Concepto 1: Fundamentos de bases de datos")).toBeInTheDocument();
     expect(screen.getByText("Proceso 1: Aplicar diagramas UML")).toBeInTheDocument();
     expect(screen.getByText("Criterio 1: Elabora el modelo conceptual")).toBeInTheDocument();
@@ -147,10 +157,16 @@ describe("PlaneacionWizardShell", () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
     await waitFor(() => {
+      expect(screen.getByText("CON BORRADOR")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Elegir Resultado"));
+
+    await waitFor(() => {
       expect(screen.getByText("BORRADOR")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Editar Borrador"));
+    fireEvent.click(screen.getByRole("button", { name: /Editar/i }));
 
     await waitFor(() => {
       expect(api.fetchPlaneacionDetalle).toHaveBeenCalledWith("plan-1");
@@ -172,8 +188,8 @@ describe("PlaneacionWizardShell", () => {
 
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    // Click to start planning
-    fireEvent.click(screen.getByText("Iniciar Planeación"));
+    fireEvent.click(screen.getByText("Elegir Resultado"));
+    fireEvent.click(await screen.findByRole("button", { name: /Iniciar/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
@@ -187,10 +203,6 @@ describe("PlaneacionWizardShell", () => {
     const selectActividad = screen.getByLabelText("Actividad del Proyecto");
     fireEvent.change(selectActividad, { target: { value: "act-1" } });
 
-    // Click Resultado checkbox
-    const resultCheckbox = screen.getByLabelText("Resultado 1: Identificar requisitos técnicos");
-    fireEvent.click(resultCheckbox);
-
     // Save draft
     const saveBtn = screen.getByText("Guardar Borrador");
     fireEvent.click(saveBtn);
@@ -198,6 +210,12 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(api.savePlaneacionBorrador).toHaveBeenCalled();
     });
+    expect(api.savePlaneacionBorrador).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resultado_id: "rap-1",
+        resultados_ids: ["rap-1"],
+      }),
+    );
 
     // Click next step
     const nextBtn = screen.getByText("Siguiente");
@@ -211,21 +229,19 @@ describe("PlaneacionWizardShell", () => {
   it("toggles all checkboxes when using the Select All button", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    // Click to start planning
-    fireEvent.click(screen.getByText("Iniciar Planeación"));
+    fireEvent.click(screen.getByText("Elegir Resultado"));
+    fireEvent.click(await screen.findByRole("button", { name: /Iniciar/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
 
     const selectAllBtn = screen.getByRole("button", { name: "Seleccionar Todo" });
-    const resultCheckbox = screen.getByLabelText("Resultado 1: Identificar requisitos técnicos");
     const knowSaberCheckbox = screen.getByLabelText("Concepto 1: Fundamentos de bases de datos");
     const knowProcCheckbox = screen.getByLabelText("Proceso 1: Aplicar diagramas UML");
     const critCheckbox = screen.getByLabelText("Criterio 1: Elabora el modelo conceptual");
 
     // Initially none are checked
-    expect(resultCheckbox).not.toBeChecked();
     expect(knowSaberCheckbox).not.toBeChecked();
     expect(knowProcCheckbox).not.toBeChecked();
     expect(critCheckbox).not.toBeChecked();
@@ -234,7 +250,6 @@ describe("PlaneacionWizardShell", () => {
     fireEvent.click(selectAllBtn);
 
     // All should be checked
-    expect(resultCheckbox).toBeChecked();
     expect(knowSaberCheckbox).toBeChecked();
     expect(knowProcCheckbox).toBeChecked();
     expect(critCheckbox).toBeChecked();
@@ -244,7 +259,6 @@ describe("PlaneacionWizardShell", () => {
     fireEvent.click(deselectAllBtn);
 
     // None should be checked
-    expect(resultCheckbox).not.toBeChecked();
     expect(knowSaberCheckbox).not.toBeChecked();
     expect(knowProcCheckbox).not.toBeChecked();
     expect(critCheckbox).not.toBeChecked();
@@ -257,10 +271,12 @@ describe("PlaneacionWizardShell", () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
     await waitFor(() => {
-      expect(screen.getByText("BORRADOR")).toBeInTheDocument();
+      expect(screen.getByText("CON BORRADOR")).toBeInTheDocument();
     });
 
-    const deleteBtn = screen.getByTitle("Eliminar planeación");
+    fireEvent.click(screen.getByText("Elegir Resultado"));
+
+    const deleteBtn = await screen.findByTitle("Eliminar borrador");
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
@@ -268,7 +284,7 @@ describe("PlaneacionWizardShell", () => {
     });
   });
 
-  it("loads and displays approved planning details when planning is COMPLETO", async () => {
+  it("disables a completed result to avoid duplicate planning", async () => {
     const mockCompletedPlanning: PlaneacionListResponse[] = [
       {
         ...mockPlanningsList[0],
@@ -289,23 +305,13 @@ describe("PlaneacionWizardShell", () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
     await waitFor(() => {
-      expect(screen.getByText("COMPLETO")).toBeInTheDocument();
+      expect(screen.getByText("COMPLETA")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Ver Planeación"));
+    fireEvent.click(screen.getByText("Elegir Resultado"));
 
-    await waitFor(() => {
-      expect(api.fetchPlaneacionDetalle).toHaveBeenCalledWith("plan-1");
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("¡Planeación Pedagógica Completada!")).toBeInTheDocument();
-      expect(screen.getByText("Detalle de la Planeación Aprobada")).toBeInTheDocument();
-      expect(screen.getByText("Instructor Responsable")).toBeInTheDocument();
-      expect(screen.getByText("Juan Perez")).toBeInTheDocument();
-      expect(screen.getByText("Talleres prácticos")).toBeInTheDocument();
-      expect(screen.getByText("Laboratorio 305")).toBeInTheDocument();
-      expect(screen.getByText("Computadores, guías de aprendizaje")).toBeInTheDocument();
-    });
+    const blockedButton = await screen.findByRole("button", { name: /Bloqueado/i });
+    expect(blockedButton).toBeDisabled();
+    expect(api.fetchPlaneacionDetalle).not.toHaveBeenCalled();
   });
 });
