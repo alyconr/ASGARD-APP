@@ -12,7 +12,15 @@ import {
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import type { DraftResponse, DraftStatus, EstadoDocumentalResponse } from "@/features/drafts/types";
-import { getEstadoDocumental } from "@/features/proyecto/cargue-api";
+import {
+  eliminarCargueProyecto,
+  getEstadoDocumental,
+} from "@/features/proyecto/cargue-api";
+import {
+  cerrarProyecto,
+  ProyectoCierreError,
+  validarCompletitudProyecto,
+} from "@/features/proyecto/proyecto-cierre-api";
 import {
   clearActiveProyectoDraftReference,
   clearKnownProyectoDrafts,
@@ -126,13 +134,14 @@ export interface ProyectoWizardController {
   draftStatus: DraftStatus;
   errorMessage: string | null;
   isBootstrapping: boolean;
+  isClosing: boolean;
   isRecovering: boolean;
   isWizardActive: boolean;
   knownDrafts: KnownDraftSummary[];
   lastSavedAt: string | null;
   payload: ProyectoWizardPayload | null;
   clearKnownDrafts: () => void;
-  forgetKnownDraft: (referenceId: string) => void;
+  forgetKnownDraft: (referenceId: string) => Promise<void>;
   goToNextStep: () => void;
   goToPreviousStep: () => void;
   goToStep: (stepId: ProyectoWizardStepId) => void;
@@ -147,6 +156,7 @@ export interface ProyectoWizardController {
   docState: EstadoDocumentalResponse | null;
   fetchDocState: () => Promise<void>;
   habilitarCarguePdf: () => Promise<void>;
+  closeProject: () => Promise<void>;
 }
 
 export function useProyectoWizard({
@@ -173,6 +183,7 @@ export function useProyectoWizard({
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isClosing, setIsClosing] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
 
   const [docState, setDocState] = useState<EstadoDocumentalResponse | null>(null);
@@ -618,12 +629,94 @@ export function useProyectoWizard({
     [activeReferenceId, recoverDraftByReference, fetchDocState],
   );
 
-  const forgetKnownDraft = useCallback((referenceId: string): void => {
-    setKnownDrafts(forgetProyectoDraft(referenceId));
-    notify.info("Referencia local retirada", {
-      description: "El borrador del servidor no fue eliminado.",
-    });
-  }, []);
+  const closeProject = useCallback(async (): Promise<void> => {
+    if (activeReferenceId === null) {
+      setErrorMessage("No hay un borrador de proyecto activo para cerrar.");
+      return;
+    }
+
+    setIsClosing(true);
+    setErrorMessage(null);
+    try {
+      const validation = await validarCompletitudProyecto(activeReferenceId);
+      if (!validation.cerrable) {
+        const firstMissing = validation.faltantes[0]?.mensaje;
+        setErrorMessage(
+          firstMissing ??
+            "El proyecto no cumple la estructura minima de cierre.",
+        );
+        return;
+      }
+
+      const confirmed = window.confirm(
+        "Confirma que revisaste el consolidado y quieres cerrar el proyecto formativo como COMPLETO.",
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const result = await cerrarProyecto(activeReferenceId);
+      setDraftStatus(result.estado);
+      setPayload((currentPayload) => {
+        if (currentPayload === null) {
+          return currentPayload;
+        }
+        return {
+          ...currentPayload,
+          meta: {
+            ...currentPayload.meta,
+            touchedSteps: addTouchedStep(
+              currentPayload.meta.touchedSteps,
+              "revision-proyecto",
+            ),
+            lastInteractionAt: new Date().toISOString(),
+          },
+          proyecto: {
+            ...currentPayload.proyecto,
+            proyecto_formativo_id: result.proyecto_id,
+          },
+        };
+      });
+      notify.success("Proyecto cerrado correctamente", {
+        description: "La planeacion pedagogica ya puede habilitarse.",
+      });
+      await recoverDraftByReference(activeReferenceId, true);
+      await fetchDocState();
+    } catch (error) {
+      if (error instanceof ProyectoCierreError) {
+        const firstMissing = error.completitud?.faltantes[0]?.mensaje;
+        setErrorMessage(firstMissing ?? error.detail);
+      } else {
+        setErrorMessage("No fue posible cerrar el proyecto formativo.");
+      }
+    } finally {
+      setIsClosing(false);
+    }
+  }, [activeReferenceId, fetchDocState, recoverDraftByReference]);
+
+  const forgetKnownDraft = useCallback(async (referenceId: string): Promise<void> => {
+    setErrorMessage(null);
+    try {
+      await eliminarCargueProyecto(referenceId);
+      setKnownDrafts(forgetProyectoDraft(referenceId));
+      if (activeReferenceId === referenceId) {
+        clearActiveProyectoDraftReference();
+      }
+      notify.success("Cargue del proyecto eliminado", {
+        description:
+          "Se borraron los datos del proyecto y sus archivos asociados en MinIO.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No fue posible eliminar el cargue del proyecto.";
+      setErrorMessage(message);
+      notify.error("No fue posible eliminar el cargue del proyecto", {
+        description: message,
+      });
+    }
+  }, [activeReferenceId]);
 
   const clearKnownDrafts = useCallback((): void => {
     setKnownDrafts(clearKnownProyectoDrafts());
@@ -666,6 +759,7 @@ export function useProyectoWizard({
     goToPreviousStep,
     goToStep,
     isBootstrapping,
+    isClosing,
     isRecovering,
     isWizardActive: activeReferenceId !== null && payload !== null,
     knownDrafts,
@@ -682,5 +776,6 @@ export function useProyectoWizard({
     docState,
     fetchDocState,
     habilitarCarguePdf,
+    closeProject,
   };
 }

@@ -35,11 +35,13 @@ function mockInactiveController(overrides = {}) {
     currentStepIndex: 0,
     draftStatus: "BORRADOR",
     errorMessage: null,
+    closeProject: vi.fn(),
     forgetKnownDraft: vi.fn(),
     goToNextStep: vi.fn(),
     goToPreviousStep: vi.fn(),
     goToStep: vi.fn(),
     isBootstrapping: false,
+    isClosing: false,
     isRecovering: false,
     isWizardActive: false,
     knownDrafts: [],
@@ -102,6 +104,31 @@ describe("ProyectoWizardShell", () => {
 
     expect(recoverDraftByReference).toHaveBeenCalledWith(projectReferenceId);
     expect(updateContinueReferenceInput).toHaveBeenCalledWith(nextInputValue);
+  });
+
+  it("deletes an existing project cargue after confirmation", () => {
+    const forgetKnownDraft = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockInactiveController({
+      forgetKnownDraft,
+      knownDrafts: [
+        {
+          referenciaId: projectReferenceId,
+          pasoActual: "fuente-proyecto",
+          updatedAt: "2026-05-16T10:00:00.000Z",
+          estado: "BORRADOR",
+          label: "Borrador de proyecto",
+        },
+      ],
+    });
+
+    render(<ProyectoWizardShell availability={availability} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /eliminar cargue borrador/i }),
+    );
+
+    expect(forgetKnownDraft).toHaveBeenCalledWith(projectReferenceId);
   });
 
   it("starts the enabled project wizard in the document source step", () => {
@@ -197,9 +224,11 @@ describe("ProyectoWizardShell", () => {
     expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
   });
 
-  it("renders a link to the pedagogical planning wizard when the project matrix is confirmed", () => {
+  it("renders the project close action when the project matrix is confirmed", () => {
+    const closeProject = vi.fn();
     mockInactiveController({
       activeReferenceId: projectReferenceId,
+      closeProject,
       canMoveNext: false,
       canMovePrevious: true,
       currentStepId: "revision-proyecto",
@@ -247,12 +276,69 @@ describe("ProyectoWizardShell", () => {
 
     render(<ProyectoWizardShell availability={availability} />);
 
-    // Assert that the Call to Action card is visible
-    expect(screen.getByText("Planeación Pedagógica Disponible")).toBeInTheDocument();
+    expect(screen.getByText("Proyecto listo para cierre")).toBeInTheDocument();
+    const closeButton = screen.getByRole("button", {
+      name: /confirmar y cerrar proyecto/i,
+    });
 
-    // Assert that the links point to the planeacion route using the program reference ID
-    const ctaLink = screen.getByRole("link", { name: /^Configurar Planeación Pedagógica$/i });
-    expect(ctaLink).toHaveAttribute("href", `/planeacion/${availability.referencia_id}`);
+    fireEvent.click(closeButton);
+
+    expect(closeProject).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("link", { name: /^Configurar Planeación$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a link to the pedagogical planning wizard when the project is complete", () => {
+    mockInactiveController({
+      activeReferenceId: projectReferenceId,
+      canMoveNext: false,
+      canMovePrevious: true,
+      currentStepId: "revision-proyecto",
+      currentStepIndex: 1,
+      draftStatus: "COMPLETO",
+      isWizardActive: true,
+      payload: {
+        meta: {
+          referenciaId: projectReferenceId,
+          programaReferenciaId: availability.referencia_id,
+          programaId: availability.programa_id,
+          touchedSteps: ["fuente-proyecto", "revision-proyecto"],
+          startedAt: "2026-05-16T09:00:00.000Z",
+          lastInteractionAt: "2026-05-16T09:00:00.000Z",
+        },
+        wizard: { notesByStep: {} },
+        proyecto: {
+          proyecto_formativo_id: "some-project-id",
+          codigo_proyecto: "PR-1234",
+          nombre_proyecto: "Proyecto Test",
+          version_proyecto: "1",
+        },
+        documental: {
+          proyecto_pdf: null,
+          fuente_estructurada: {
+            documento: null,
+            preview: {
+              valid: true,
+              estado_validacion: "VALIDO",
+              resumen: { proyecto: 1, fases: 2, actividades: 4, resultados_especificos: 8 },
+              proyecto: { codigo_proyecto: "PR-1234", nombre_proyecto: "Proyecto Test", version_proyecto: "1" },
+              fases: [],
+              pendientes_resumen: { total: 0 },
+              errores: [],
+            },
+            confirmacion: {
+              estado: "IMPORTADO",
+              confirmed_at: "2026-05-16T09:30:00.000Z",
+              proyecto_id: "some-project-id",
+            },
+          },
+        },
+        estructura: { fases: [], actividades: [] },
+      },
+    });
+
+    render(<ProyectoWizardShell availability={availability} />);
 
     const bottomLink = screen.getByRole("link", { name: /^Configurar Planeación$/i });
     expect(bottomLink).toHaveAttribute("href", `/planeacion/${availability.referencia_id}`);

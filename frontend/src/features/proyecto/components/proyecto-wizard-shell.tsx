@@ -260,19 +260,12 @@ function StepWorkspace({
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="max-w-xl">
                       <h4 className="text-base font-semibold text-[var(--accent-strong)]">
-                        Planeación Pedagógica Disponible
+                        Proyecto listo para cierre
                       </h4>
                       <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
-                        La matriz del proyecto formativo ha sido cargada y validada con éxito. Ya puede proceder a configurar la planeación pedagógica estructurada.
+                        La matriz del proyecto formativo fue cargada y validada. Revisa el consolidado y cierra el proyecto como COMPLETO para habilitar la planeacion pedagogica.
                       </p>
                     </div>
-                    <Link
-                      href={`/planeacion/${payload.meta.programaReferenciaId}`}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] self-start sm:self-center"
-                    >
-                      <Route className="h-4 w-4" />
-                      Configurar Planeación Pedagógica
-                    </Link>
                   </div>
                 </div>
               ) : null}
@@ -445,9 +438,17 @@ export function ProyectoWizardShell({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Quitar ${draft.label} de la lista local`}
-                      title="Quitar de esta lista local"
-                      onClick={() => controller.forgetKnownDraft(draft.referenciaId)}
+                      aria-label={`Eliminar cargue ${draft.label}`}
+                      title="Eliminar cargue del proyecto y archivos en MinIO"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Esto eliminara el cargue del proyecto en el servidor y sus archivos asociados en MinIO. Tambien se quitara de esta lista.",
+                          )
+                        ) {
+                          void controller.forgetKnownDraft(draft.referenciaId);
+                        }
+                      }}
                       className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -524,7 +525,7 @@ export function ProyectoWizardShell({
                     Anterior
                   </ActionButton>
                   {controller.currentStepId === "revision-proyecto" &&
-                  controller.payload?.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                  controller.draftStatus === "COMPLETO" ? (
                     <Link
                       href={`/planeacion/${controller.payload.meta.programaReferenciaId}`}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
@@ -532,6 +533,19 @@ export function ProyectoWizardShell({
                       Configurar Planeación
                       <ArrowRight className="h-4 w-4" />
                     </Link>
+                  ) : controller.currentStepId === "revision-proyecto" &&
+                    controller.payload?.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                    <ActionButton
+                      disabled={controller.isClosing}
+                      onClick={() => void controller.closeProject()}
+                    >
+                      {controller.isClosing ? (
+                        <RefreshCcw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      Confirmar y cerrar proyecto
+                    </ActionButton>
                   ) : (
                     <ActionButton
                       disabled={!controller.canMoveNext}

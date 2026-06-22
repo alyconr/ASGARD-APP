@@ -18,7 +18,10 @@ import {
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import { listProgramaCompetencias } from "@/features/programa/competencias-api";
-import { getEstadoDocumental } from "@/features/proyecto/cargue-api";
+import {
+  eliminarCargueCompleto,
+  getEstadoDocumental,
+} from "@/features/proyecto/cargue-api";
 import type {
   AutosaveState,
   ProgramaCierreResponse,
@@ -172,7 +175,7 @@ export interface ProgramaWizardController {
   updateProgramaCompetencias: (result: ProgramaCompetenciaListResponse) => void;
   markProgramaClosed: (result: ProgramaCierreResponse) => void;
   updateContinueReferenceInput: (value: string) => void;
-  forgetKnownDraft: (referenceId: string) => void;
+  forgetKnownDraft: (referenceId: string) => Promise<void>;
   clearKnownDrafts: () => void;
   resetFlow: () => void;
   refreshCurriculum: () => Promise<void>;
@@ -804,12 +807,29 @@ export function useProgramaWizard(): ProgramaWizardController {
     [],
   );
 
-  const forgetKnownDraft = useCallback((referenceId: string): void => {
-    setKnownDrafts(forgetProgramaDraft(referenceId));
-    notify.info("Referencia local retirada", {
-      description: "El borrador del servidor no fue eliminado.",
-    });
-  }, []);
+  const forgetKnownDraft = useCallback(async (referenceId: string): Promise<void> => {
+    setErrorMessage(null);
+    try {
+      await eliminarCargueCompleto(referenceId);
+      setKnownDrafts(forgetProgramaDraft(referenceId));
+      if (activeReferenceId === referenceId) {
+        clearActiveProgramaDraftReference();
+      }
+      notify.success("Cargue eliminado", {
+        description:
+          "Se borraron los datos del programa, proyecto y archivos asociados en MinIO.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No fue posible eliminar el cargue del programa.";
+      setErrorMessage(message);
+      notify.error("No fue posible eliminar el cargue", {
+        description: message,
+      });
+    }
+  }, [activeReferenceId]);
 
   const clearKnownDrafts = useCallback((): void => {
     setKnownDrafts(clearKnownProgramaDrafts());

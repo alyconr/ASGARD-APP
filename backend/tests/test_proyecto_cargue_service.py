@@ -20,6 +20,12 @@ async def test_eliminar_cargue_completo_resets_drafts_and_deletes_records() -> N
     # Arrange
     referencia_id = uuid.uuid4()
     programa_id = uuid.uuid4()
+    programa_pdf_key = (
+        "programas/analisis-228118-1/documentos/programa-formacion.pdf"
+    )
+    proyecto_excel_key = (
+        "proyectos-formativos/proyecto-test-pr-001/excel/matriz.xlsx"
+    )
 
     # Mock session
     session = AsyncMock()
@@ -30,14 +36,28 @@ async def test_eliminar_cargue_completo_resets_drafts_and_deletes_records() -> N
         tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
         referencia_id=referencia_id,
         paso_actual="revision-programa",
-        payload_json={"curricular": {"programa_formacion_id": str(programa_id)}},
+        payload_json={
+            "curricular": {"programa_formacion_id": str(programa_id)},
+            "documental": {
+                "programa_pdf": {
+                    "documento": {"storage_key": programa_pdf_key}
+                }
+            },
+        },
         estado_borrador=EstadoBloque.COMPLETO,
     )
     draft_proyecto = BorradorSesion(
         tipo_bloque=TipoBloqueBorrador.PROYECTO.value,
         referencia_id=referencia_id,
         paso_actual="revision-proyecto",
-        payload_json={"meta": {"programaId": str(programa_id)}},
+        payload_json={
+            "meta": {"programaId": str(programa_id)},
+            "documental": {
+                "fuente_estructurada": {
+                    "documento": {"storage_key": proyecto_excel_key}
+                }
+            },
+        },
         estado_borrador=EstadoBloque.COMPLETO,
     )
 
@@ -97,6 +117,12 @@ async def test_eliminar_cargue_completo_resets_drafts_and_deletes_records() -> N
 
     # Verify MinIO deletions
     storage_service.delete_by_prefix.assert_any_call(
+        prefix=programa_pdf_key
+    )
+    storage_service.delete_by_prefix.assert_any_call(
+        prefix=proyecto_excel_key
+    )
+    storage_service.delete_by_prefix.assert_any_call(
         prefix=f"programas/{referencia_id}/"
     )
     storage_service.delete_by_prefix.assert_any_call(
@@ -109,6 +135,9 @@ async def test_eliminar_cargue_proyecto_preserves_program() -> None:
     # Arrange
     referencia_id = uuid.uuid4()
     programa_id = uuid.uuid4()
+    proyecto_pdf_key = (
+        "proyectos-formativos/proyecto-test-pr-001/documentos/proyecto-formativo.pdf"
+    )
 
     # Mock session
     session = AsyncMock()
@@ -129,6 +158,11 @@ async def test_eliminar_cargue_proyecto_preserves_program() -> None:
                 "proyecto_formativo_id": str(uuid.uuid4()),
                 "codigo_proyecto": "PR-001",
                 "nombre_proyecto": "Proyecto test",
+            },
+            "documental": {
+                "proyecto_pdf": {
+                    "documento": {"storage_key": proyecto_pdf_key}
+                }
             },
         },
         estado_borrador=EstadoBloque.BORRADOR,
@@ -174,6 +208,9 @@ async def test_eliminar_cargue_proyecto_preserves_program() -> None:
     assert draft_proyecto.payload_json["documental"]["proyecto_pdf"] is None
 
     # Verify MinIO project deletions only
+    storage_service.delete_by_prefix.assert_any_call(
+        prefix=proyecto_pdf_key
+    )
     storage_service.delete_by_prefix.assert_any_call(
         prefix=f"proyectos-formativos/{referencia_id}/"
     )

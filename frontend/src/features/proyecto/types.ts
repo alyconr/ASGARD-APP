@@ -154,3 +154,33 @@ export interface ProyectoDisponibilidadResponse {
   accion_sugerida: "completar_y_cerrar_programa" | "iniciar_proyecto" | string;
   programa_referencia_id?: string | null;
 }
+
+export interface ProyectoCompletitudFaltanteResponse {
+  codigo: string;
+  campo: string;
+  mensaje: string;
+  fase_id: string | null;
+  fase_nombre: string | null;
+}
+
+export interface ProyectoCompletitudResumenResponse {
+  fases: number;
+  actividades: number;
+}
+
+export interface ProyectoCompletitudResponse {
+  referencia_id: string;
+  proyecto_id: string | null;
+  estado_actual: DraftStatus | null;
+  cerrable: boolean;
+  resumen: ProyectoCompletitudResumenResponse;
+  faltantes: ProyectoCompletitudFaltanteResponse[];
+}
+
+export interface ProyectoCierreResponse {
+  referencia_id: string;
+  proyecto_id: string;
+  estado: DraftStatus;
+  mensaje: string;
+  completitud: ProyectoCompletitudResponse;
+}

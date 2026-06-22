@@ -450,15 +450,15 @@ export function ProgramaWizardShell(): React.JSX.Element {
                       </button>
                       <button
                         type="button"
-                        aria-label={`Quitar ${draft.label} de la lista local`}
-                        title="Quitar de esta lista local"
+                        aria-label={`Eliminar cargue ${draft.label}`}
+                        title="Eliminar cargue y archivos en MinIO"
                         onClick={() => {
                           if (
                             window.confirm(
-                              "Esto solo quitara esta referencia local. El borrador del servidor no se elimina.",
+                              "Esto eliminara el cargue del servidor y sus archivos asociados en MinIO. Tambien se quitara de esta lista.",
                             )
                           ) {
-                            controller.forgetKnownDraft(draft.referenciaId);
+                            void controller.forgetKnownDraft(draft.referenciaId);
                           }
                         }}
                         className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"

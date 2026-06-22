@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -165,6 +166,12 @@ class ProyectoCargueService:
                                 break
 
         # 3. Clean files from MinIO
+        for storage_key in _collect_storage_keys_from_drafts(
+            draft_programa,
+            draft_proyecto,
+        ):
+            await self._storage_service.delete_by_prefix(prefix=storage_key)
+
         if nombre_prog and codigo_prog:
             prefix_prog = build_programa_storage_prefix(
                 nombre=str(nombre_prog),
@@ -266,6 +273,9 @@ class ProyectoCargueService:
             await self._session.flush()
 
         # 3. Clean project files from MinIO
+        for storage_key in _collect_storage_keys_from_drafts(draft_proyecto):
+            await self._storage_service.delete_by_prefix(prefix=storage_key)
+
         if nombre_proj and codigo_proj:
             prefix_proj = build_proyecto_storage_prefix(
                 nombre=str(nombre_proj), codigo=str(codigo_proj)
@@ -315,3 +325,28 @@ class ProyectoCargueService:
             }
             self._session.add(draft_proyecto)
             await self._session.flush()
+
+
+def _collect_storage_keys_from_drafts(
+    *drafts: BorradorSesion | None,
+) -> list[str]:
+    """Collect exact MinIO object keys stored in draft payload metadata."""
+    storage_keys: set[str] = set()
+    for draft in drafts:
+        if draft is not None:
+            _collect_storage_keys(draft.payload_json, storage_keys)
+    return sorted(storage_keys)
+
+
+def _collect_storage_keys(value: object, storage_keys: set[str]) -> None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if key == "storage_key" and isinstance(child, str) and child.strip():
+                storage_keys.add(child.strip())
+                continue
+            _collect_storage_keys(child, storage_keys)
+        return
+
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        for child in value:
+            _collect_storage_keys(child, storage_keys)

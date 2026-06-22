@@ -89,7 +89,7 @@ describe("ProgramaWizardShell", () => {
     ).toBeInTheDocument();
   });
 
-  it("should allow removing local draft references without recovering them", () => {
+  it("should allow deleting draft cargues without recovering them", () => {
     const forgetKnownDraft = vi.fn();
     const recoverDraftByReference = vi.fn();
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -122,7 +122,9 @@ describe("ProgramaWizardShell", () => {
 
     render(<ProgramaWizardShell />);
 
-    fireEvent.click(screen.getByRole("button", { name: /quitar borrador/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /eliminar cargue borrador/i }),
+    );
 
     expect(forgetKnownDraft).toHaveBeenCalledWith(
       "12345678-1234-4234-9234-123456789abc",

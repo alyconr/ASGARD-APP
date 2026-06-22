@@ -24,6 +24,7 @@ ALLOWED_DRAFT_STATES: dict[TipoBloqueBorrador, set[EstadoBloque]] = {
         EstadoBloque.BLOQUEADO,
         EstadoBloque.BORRADOR,
         EstadoBloque.EN_REVISION,
+        EstadoBloque.COMPLETO,
     },
 }
 
