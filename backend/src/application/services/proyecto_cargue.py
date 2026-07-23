@@ -115,11 +115,10 @@ class ProyectoCargueService:
                 ProyectoFormativo.programa_id == programa_id
             )
             proj_db_result = await self._session.execute(proj_db_statement)
-            proyecto_db = proj_db_result.scalar_one_or_none()
-            if proyecto_db is not None:
+            proyectos_db = proj_db_result.scalars().all()
+            for proyecto_db in proyectos_db:
                 nombre_proj = proyecto_db.nombre_proyecto
                 codigo_proj = proyecto_db.codigo_proyecto
-                # Delete pedagogical plannings from MinIO first
                 await self._storage_service.delete_by_prefix(
                     prefix=f"planeaciones-pedagogicas/{programa_id}/{proyecto_db.id}/"
                 )

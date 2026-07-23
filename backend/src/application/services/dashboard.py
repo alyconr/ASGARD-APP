@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,13 @@ class DashboardDraftNotFoundError(Exception):
     """Raised when the dashboard cannot resolve the program reference."""
 
 
+class ProgramaCleanupProtocol(Protocol):
+    """Port for deleting the complete persisted program aggregate."""
+
+    async def eliminar_cargue_completo(self, referencia_id: uuid.UUID) -> None:
+        """Delete relational data and stored documents for a program."""
+
+
 @dataclass(frozen=True)
 class DashboardPlaneacionRow:
     """Minimal planning row required for dashboard metrics."""
@@ -44,9 +52,14 @@ class DashboardPlaneacionRow:
 class DashboardService:
     """Build the master panel from persisted program, project and planning data."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        cleanup_service: ProgramaCleanupProtocol | None = None,
+    ) -> None:
         """Initialize the service with the active database session."""
         self._session = session
+        self._cleanup_service = cleanup_service
 
     async def consultar(self, referencia_id: uuid.UUID) -> DashboardDTO:
         """Return the full dashboard state for a program draft reference."""
@@ -122,7 +135,6 @@ class DashboardService:
         statement = (
             select(BorradorSesion)
             .where(BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value)
-            .where(BorradorSesion.estado_borrador != EstadoBloque.COMPLETO)
             .order_by(BorradorSesion.ultima_edicion.desc())
         )
         result = await self._session.execute(statement)
@@ -155,18 +167,21 @@ class DashboardService:
         return flows
 
     async def eliminar_flujo_programa(self, referencia_id: uuid.UUID) -> None:
-        """Delete an open program flow draft and sibling project draft, if present."""
+        """Permanently delete a program aggregate, drafts, and stored documents."""
         program_statement = select(BorradorSesion).where(
             BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
             BorradorSesion.referencia_id == referencia_id,
-            BorradorSesion.estado_borrador != EstadoBloque.COMPLETO,
         )
         program_result = await self._session.execute(program_statement)
         program_draft = program_result.scalar_one_or_none()
         if program_draft is None:
             raise DashboardDraftNotFoundError(
-                "No existe un flujo abierto de programa para eliminar"
+                "No existe un programa para eliminar"
             )
+
+        if self._cleanup_service is None:
+            raise RuntimeError("El servicio de eliminación no está configurado")
+        await self._cleanup_service.eliminar_cargue_completo(referencia_id)
 
         drafts_statement = select(BorradorSesion).where(
             BorradorSesion.referencia_id == referencia_id,

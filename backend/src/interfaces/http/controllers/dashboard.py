@@ -12,6 +12,9 @@ from src.application.services.dashboard import (
     DashboardService,
 )
 from src.infrastructure.db.session import get_async_session
+from src.infrastructure.config.settings import Settings, get_settings
+from src.infrastructure.storage.document_storage import MinioDocumentStorageService
+from src.application.services.proyecto_cargue import ProyectoCargueService
 from src.interfaces.http.schemas.dashboard import (
     DashboardProgramFlowResponse,
     DashboardResponse,
@@ -22,9 +25,17 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
 def get_dashboard_service(
     session: AsyncSession = Depends(get_async_session),
+    settings: Settings = Depends(get_settings),
 ) -> DashboardService:
     """Build request-scoped dashboard service."""
-    return DashboardService(session)
+    storage_service = MinioDocumentStorageService(settings)
+    return DashboardService(
+        session,
+        cleanup_service=ProyectoCargueService(
+            session=session,
+            storage_service=storage_service,
+        ),
+    )
 
 
 @router.get(
@@ -35,7 +46,7 @@ def get_dashboard_service(
 async def listar_flujos_programa(
     service: DashboardService = Depends(get_dashboard_service),
 ) -> list[DashboardProgramFlowResponse]:
-    """Return open program flows available from the master dashboard."""
+    """Return program flows available from the master dashboard."""
     flows = await service.listar_flujos_programa()
     return [DashboardProgramFlowResponse.model_validate(flow) for flow in flows]
 
@@ -48,7 +59,7 @@ async def eliminar_flujo_programa(
     referencia_id: uuid.UUID,
     service: DashboardService = Depends(get_dashboard_service),
 ) -> None:
-    """Delete the selected open program flow from the dashboard."""
+    """Permanently delete the selected program and all dependent data."""
     try:
         await service.eliminar_flujo_programa(referencia_id)
     except DashboardDraftNotFoundError as error:

@@ -244,9 +244,14 @@ async def test_dashboard_elimina_flujo_abierto_de_programa() -> None:
         _scalar_result(program_draft),
         _scalars_result([program_draft, project_draft]),
     ]
+    cleanup_service = AsyncMock()
 
-    await DashboardService(session).eliminar_flujo_programa(referencia_id)
+    await DashboardService(
+        session,
+        cleanup_service=cleanup_service,
+    ).eliminar_flujo_programa(referencia_id)
 
+    cleanup_service.eliminar_cargue_completo.assert_awaited_once_with(referencia_id)
     assert session.delete.await_count == 2
     session.delete.assert_any_await(program_draft)
     session.delete.assert_any_await(project_draft)

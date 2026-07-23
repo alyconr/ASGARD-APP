@@ -312,7 +312,7 @@ describe("MasterDashboard", () => {
       expect(screen.queryByText("Analisis de software / 228118")).not.toBeInTheDocument(),
     );
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining("Vas a eliminar el flujo abierto"),
+      expect.stringContaining("Esta acción no se puede deshacer"),
     );
   });
 });

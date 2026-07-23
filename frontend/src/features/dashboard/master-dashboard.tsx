@@ -495,10 +495,26 @@ export function MasterDashboard(): React.JSX.Element {
       (flow) => flow.referencia_id === referenceId,
     );
     const flowLabel = selectedFlow?.titulo ?? formatReferenceId(referenceId);
+    const confirmationValue =
+      selectedFlow?.codigo_programa ??
+      selectedFlow?.nombre_programa ??
+      referenceId;
     const confirmed = await confirm({
-      title: "Eliminar flujo de programa",
-      message: `Vas a eliminar el flujo abierto "${flowLabel}". Esta acción quitará el borrador del panel y borrará permanentemente todos los datos de la base de datos y archivos en MinIO. ¿Deseas continuar?`,
+      title: "Eliminar programa definitivamente",
+      message: `Vas a eliminar "${flowLabel}" junto con su estructura curricular, proyecto, planeaciones, borradores y archivos. Esta acción no se puede deshacer.`,
       isDestructive: true,
+      confirmLabel: "Eliminar definitivamente",
+      details: [
+        {
+          label: "Nombre del programa",
+          value: selectedFlow?.nombre_programa ?? "Sin nombre importado",
+        },
+        {
+          label: "Código del programa",
+          value: selectedFlow?.codigo_programa ?? "Sin código importado",
+        },
+      ],
+      requiredConfirmationText: confirmationValue,
     });
     if (!confirmed) return;
 
