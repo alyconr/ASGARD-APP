@@ -60,6 +60,14 @@ Desde esta refactorizacion integral:
 - La regla de habilitacion queda centralizada: proyecto requiere programa `COMPLETO`; planeacion requiere programa y proyecto `COMPLETO`.
 - Las pruebas deben cubrir el agregado backend, el gate de proyecto, el acceso de planeacion y la UI del dashboard.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+- Se agrega un componente visual compartido para guiar programa, proyecto y planeacion.
+- Se agrega un motor de guia que traduce estados reales en severidad, mensaje, checklist y CTA.
+- El componente se integra sin alterar la secuencia de los wizards ni sus validaciones.
+- La experiencia persiste preferencias ligeras en `localStorage`.
+- Las pruebas deben cubrir motor, render, persistencia y mensajes de bloqueo entre wizards.
+
 ---
 
 # 3. Objetivo general de implementación

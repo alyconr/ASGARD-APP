@@ -118,6 +118,22 @@ class ProgramaCierreService:
         )
 
         faltantes: list[ProgramaCompletitudFaltanteDTO] = []
+        if programa is not None:
+            documental = draft.payload_json.get("documental") or {}
+            programa_pdf = documental.get("programa_pdf")
+            has_pdf = (
+                isinstance(programa_pdf, dict)
+                and programa_pdf.get("documento") is not None
+            )
+            if not has_pdf:
+                faltantes.append(
+                    _missing(
+                        codigo="programa.documental.programa_pdf",
+                        campo="programa_pdf",
+                        mensaje="El PDF de evidencia del programa es obligatorio.",
+                    )
+                )
+
         if not codigo:
             faltantes.append(
                 _missing(

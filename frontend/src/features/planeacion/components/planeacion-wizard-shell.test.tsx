@@ -46,6 +46,8 @@ const mockContexto: PlaneacionContextoResponse = {
         {
           id: "rap-1",
           descripcion: "Resultado 1: Identificar requisitos técnicos",
+          fase_id: "fase-1",
+          actividad_id: "act-1",
         },
       ],
       conocimientos_saber: [
@@ -175,8 +177,8 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
       // Check that options are selected
-      const selectFase = screen.getByLabelText("Fase del Proyecto Formativo");
-      expect(selectFase).toHaveValue("fase-1");
+      expect(screen.getByText("Fase 1: Análisis")).toBeInTheDocument();
+      expect(screen.getByText("Actividad 1: Levantar requerimientos")).toBeInTheDocument();
     });
   });
 
@@ -195,13 +197,12 @@ describe("PlaneacionWizardShell", () => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
 
-    // Select Phase
-    const selectFase = screen.getByLabelText("Fase del Proyecto Formativo");
-    fireEvent.change(selectFase, { target: { value: "fase-1" } });
-
-    // Select Activity
-    const selectActividad = screen.getByLabelText("Actividad del Proyecto");
-    fireEvent.change(selectActividad, { target: { value: "act-1" } });
+    fireEvent.change(screen.getByLabelText("Temáticas adicionales de conceptos y principios"), {
+      target: { value: "Arquitectura limpia" },
+    });
+    fireEvent.change(screen.getByLabelText("Temáticas adicionales de proceso"), {
+      target: { value: "Modelado colaborativo" },
+    });
 
     // Save draft
     const saveBtn = screen.getByText("Guardar Borrador");
@@ -214,6 +215,12 @@ describe("PlaneacionWizardShell", () => {
       expect.objectContaining({
         resultado_id: "rap-1",
         resultados_ids: ["rap-1"],
+        fase_id: "fase-1",
+        actividad_id: "act-1",
+        datos_complementarios: expect.objectContaining({
+          tematicas_saber: "Arquitectura limpia",
+          tematicas_proceso: "Modelado colaborativo",
+        }),
       }),
     );
 

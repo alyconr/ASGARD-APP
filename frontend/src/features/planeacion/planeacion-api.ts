@@ -3,6 +3,8 @@ import { getApiBaseUrl } from "@/lib/api";
 export interface ContextoResultado {
   id: string;
   descripcion: string;
+  fase_id?: string | null;
+  actividad_id?: string | null;
 }
 
 export interface ContextoConocimiento {

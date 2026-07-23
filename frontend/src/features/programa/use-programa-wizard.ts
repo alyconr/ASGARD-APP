@@ -492,9 +492,16 @@ export function useProgramaWizard(): ProgramaWizardController {
     const hasExcelValid =
       payload.documental.programa_excel?.preview?.valid === true;
     const hasExcelImported =
-      payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO";
-    return hasExcelValid && hasExcelImported;
-  }, [payload]);
+      payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO" ||
+      docState?.programa_importado === true;
+    const hasPdfLoaded =
+      (payload.documental.programa_pdf !== null &&
+       payload.documental.programa_pdf !== undefined &&
+       payload.documental.programa_pdf.documento !== null &&
+       payload.documental.programa_pdf.documento !== undefined) ||
+      (docState?.programa_pdf !== null && docState?.programa_pdf !== undefined);
+    return hasExcelValid && hasExcelImported && hasPdfLoaded;
+  }, [payload, docState]);
 
   const disabledSteps = useMemo<ProgramaWizardStepId[]>(() => {
     return isRevisionStepEnabled ? [] : ["revision-programa"];

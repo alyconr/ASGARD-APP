@@ -74,6 +74,22 @@ Reglas vigentes:
 
 ---
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Los wizards de programa, proyecto y planeacion pedagogica cuentan con un asistente visual transversal que explica el paso actual, muestra faltantes, advierte bloqueos y recomienda la siguiente accion.
+
+Reglas vigentes:
+
+- la guia deriva sus mensajes del estado real del wizard y de gates/backend disponibles;
+- las severidades minimas son `info`, `warning`, `blocked` y `success`;
+- el checklist distingue requisitos completos, pendientes y requisito actual;
+- el asistente no reemplaza validaciones funcionales ni habilita modulos por si solo;
+- el proyecto sigue dependiendo de programa `COMPLETO`;
+- la planeacion sigue dependiendo de programa y proyecto `COMPLETO`;
+- la experiencia puede recordar preferencias ligeras como panel colapsado o ayuda inicial vista.
+
+---
+
 # 2. Contexto de negocio
 
 El equipo pedagógico del SENA requiere una aplicación web que permita estructurar la información necesaria para la futura construcción de guías de aprendizaje.

@@ -14,6 +14,8 @@ class ContextoResultadoDTO(BaseModel):
 
     id: uuid.UUID
     descripcion: str
+    fase_id: uuid.UUID | None = None
+    actividad_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 

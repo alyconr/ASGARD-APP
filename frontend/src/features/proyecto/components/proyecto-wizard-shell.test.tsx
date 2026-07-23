@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProyectoWizardShell } from "./proyecto-wizard-shell";
@@ -106,7 +106,7 @@ describe("ProyectoWizardShell", () => {
     expect(updateContinueReferenceInput).toHaveBeenCalledWith(nextInputValue);
   });
 
-  it("deletes an existing project cargue after confirmation", () => {
+  it("deletes an existing project cargue after confirmation", async () => {
     const forgetKnownDraft = vi.fn();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     mockInactiveController({
@@ -128,7 +128,9 @@ describe("ProyectoWizardShell", () => {
       screen.getByRole("button", { name: /eliminar cargue borrador/i }),
     );
 
-    expect(forgetKnownDraft).toHaveBeenCalledWith(projectReferenceId);
+    await waitFor(() => {
+      expect(forgetKnownDraft).toHaveBeenCalledWith(projectReferenceId);
+    });
   });
 
   it("starts the enabled project wizard in the document source step", () => {

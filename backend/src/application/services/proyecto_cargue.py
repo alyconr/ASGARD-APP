@@ -119,6 +119,10 @@ class ProyectoCargueService:
             if proyecto_db is not None:
                 nombre_proj = proyecto_db.nombre_proyecto
                 codigo_proj = proyecto_db.codigo_proyecto
+                # Delete pedagogical plannings from MinIO first
+                await self._storage_service.delete_by_prefix(
+                    prefix=f"planeaciones-pedagogicas/{programa_id}/{proyecto_db.id}/"
+                )
                 await self._session.delete(proyecto_db)
 
             # Delete relational program
@@ -269,6 +273,10 @@ class ProyectoCargueService:
             if proyecto_db is not None:
                 nombre_proj = proyecto_db.nombre_proyecto
                 codigo_proj = proyecto_db.codigo_proyecto
+                # Delete pedagogical plannings from MinIO first
+                await self._storage_service.delete_by_prefix(
+                    prefix=f"planeaciones-pedagogicas/{programa_id}/{proyecto_db.id}/"
+                )
                 await self._session.delete(proyecto_db)
             await self._session.flush()
 

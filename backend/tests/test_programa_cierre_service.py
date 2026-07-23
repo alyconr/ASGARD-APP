@@ -127,8 +127,22 @@ def build_draft(
     *,
     codigo_programa: str = "228118",
     nombre_programa: str = "Analisis y desarrollo de software",
+    with_pdf: bool = True,
 ) -> BorradorSesion:
     """Create a program draft tied to a stable reference."""
+    programa_pdf_payload = None
+    if with_pdf:
+        programa_pdf_payload = {
+            "documento": {
+                "original_filename": "programa.pdf",
+                "storage_key": "programas/some-key.pdf",
+                "size_bytes": 1024,
+                "content_type": "application/pdf",
+                "checksum_sha256": "some-sha",
+                "etag": "some-etag",
+            }
+        }
+
     draft = BorradorSesion(
         tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
         referencia_id=referencia_id,
@@ -144,7 +158,10 @@ def build_draft(
                 "nombre_programa": nombre_programa,
                 "version_programa": "",
             },
-            "documental": {"programa_pdf": None, "programa_excel": None},
+            "documental": {
+                "programa_pdf": programa_pdf_payload,
+                "programa_excel": None,
+            },
             "curricular": {
                 "programa_formacion_id": str(programa_id) if programa_id else None,
                 "competencias": [],
@@ -261,6 +278,7 @@ def build_service(
     *,
     codigo_programa: str = "228118",
     nombre_programa: str = "Analisis y desarrollo de software",
+    with_pdf: bool = True,
 ) -> tuple[
     ProgramaCierreService,
     FakeSession,
@@ -275,6 +293,7 @@ def build_service(
         programa.id if programa is not None else None,
         codigo_programa=codigo_programa,
         nombre_programa=nombre_programa,
+        with_pdf=with_pdf,
     )
     session = FakeSession()
     drafts = FakeDraftRepository(draft)
@@ -429,3 +448,16 @@ async def test_cierre_cambia_estado_a_completo() -> None:
     assert drafts.draft.paso_actual == "revision-programa"
     assert audit.events[0]["accion"] == "PROGRAMA_CERRADO"
     assert session.commits == 1
+
+
+@pytest.mark.anyio
+async def test_validacion_falla_sin_programa_pdf() -> None:
+    """If the program PDF evidence is missing, the program is not closable."""
+    programa = build_programa()
+    programa.competencias = [build_competencia(programa.id)]
+    service, _, drafts, _, _ = build_service(programa, with_pdf=False)
+
+    result = await service.validar_completitud(drafts.draft.referencia_id)
+
+    assert result.cerrable is False
+    assert any(f.campo == "programa_pdf" for f in result.faltantes)

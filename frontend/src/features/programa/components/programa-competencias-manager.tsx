@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { notify } from "@/components/feedback/notifications";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import {
   createProgramaCompetencia,
   deleteProgramaCompetencia,
@@ -275,6 +276,7 @@ function ProgramaConocimientosPanel({
   ) => void;
   referenciaId: string;
 }>): React.JSX.Element {
+  const confirm = useConfirm();
   const [saberes, setSaberes] = useState<ConocimientoCurricular[]>(
     conocimientos.filter((item) => item.tipo === "SABER"),
   );
@@ -438,9 +440,11 @@ function ProgramaConocimientosPanel({
   const handleDelete = async (
     conocimiento: ConocimientoCurricular,
   ): Promise<void> => {
-    const confirmed = window.confirm(
-      "Eliminar este conocimiento SABER? Esta accion requiere confirmacion.",
-    );
+    const confirmed = await confirm({
+      title: "Eliminar conocimiento SABER",
+      message: "Eliminar este conocimiento SABER? Esta acción requiere confirmación.",
+      isDestructive: true,
+    });
     if (!confirmed) {
       return;
     }
@@ -561,9 +565,11 @@ function ProgramaConocimientosPanel({
   const handleProcesoDelete = async (
     conocimiento: ConocimientoCurricular,
   ): Promise<void> => {
-    const confirmed = window.confirm(
-      "Eliminar este conocimiento PROCESO? Esta accion requiere confirmacion.",
-    );
+    const confirmed = await confirm({
+      title: "Eliminar conocimiento PROCESO",
+      message: "Eliminar este conocimiento PROCESO? Esta acción requiere confirmación.",
+      isDestructive: true,
+    });
     if (!confirmed) {
       return;
     }
@@ -940,6 +946,7 @@ function ProgramaCriteriosPanel({
   onCriteriosSynced: (result: CriterioListResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
+  const confirm = useConfirm();
   const [items, setItems] = useState<CriterioEvaluacionCurricular[]>(criterios);
   const [form, setForm] = useState<ConocimientoFormState>(
     EMPTY_CONOCIMIENTO_FORM,
@@ -1056,9 +1063,11 @@ function ProgramaCriteriosPanel({
   const handleDelete = async (
     criterio: CriterioEvaluacionCurricular,
   ): Promise<void> => {
-    const confirmed = window.confirm(
-      "Eliminar este criterio de evaluacion? Esta accion requiere confirmacion.",
-    );
+    const confirmed = await confirm({
+      title: "Eliminar criterio de evaluación",
+      message: "Eliminar este criterio de evaluación? Esta acción requiere confirmación.",
+      isDestructive: true,
+    });
     if (!confirmed) {
       return;
     }
@@ -1269,6 +1278,7 @@ function ProgramaResultadosManager({
   onResultadosSynced: (result: ResultadoAprendizajeListResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
+  const confirm = useConfirm();
   const [resultados, setResultados] = useState<ResultadoAprendizaje[]>(
     competencia.resultados ?? [],
   );
@@ -1366,9 +1376,11 @@ function ProgramaResultadosManager({
   const handleDelete = async (
     resultado: ResultadoAprendizaje,
   ): Promise<void> => {
-    const confirmed = window.confirm(
-      "Eliminar este resultado de aprendizaje? Esta accion requiere confirmacion.",
-    );
+    const confirmed = await confirm({
+      title: "Eliminar resultado de aprendizaje",
+      message: "Eliminar este resultado de aprendizaje? Esta acción requiere confirmación.",
+      isDestructive: true,
+    });
     if (!confirmed) {
       return;
     }
@@ -1594,6 +1606,7 @@ export function ProgramaCompetenciasManager({
   onCompetenciasSynced: (result: ProgramaCompetenciaListResponse) => void;
   referenciaId: string;
 }>): React.JSX.Element {
+  const confirm = useConfirm();
   const [form, setForm] = useState<CompetenciaFormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [state, setState] = useState<OperationState>("idle");
@@ -1834,9 +1847,11 @@ export function ProgramaCompetenciasManager({
   };
 
   const handleDelete = async (competencia: ProgramaCompetencia): Promise<void> => {
-    const confirmed = window.confirm(
-      `Eliminar la competencia ${competencia.codigo_competencia}? Esta accion requiere confirmacion.`,
-    );
+    const confirmed = await confirm({
+      title: "Eliminar competencia",
+      message: `¿Eliminar la competencia ${competencia.codigo_competencia}? Esta acción requiere confirmación.`,
+      isDestructive: true,
+    });
     if (!confirmed) {
       return;
     }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramaWizardShell } from "./programa-wizard-shell";
@@ -89,7 +89,7 @@ describe("ProgramaWizardShell", () => {
     ).toBeInTheDocument();
   });
 
-  it("should allow deleting draft cargues without recovering them", () => {
+  it("should allow deleting draft cargues without recovering them", async () => {
     const forgetKnownDraft = vi.fn();
     const recoverDraftByReference = vi.fn();
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -126,13 +126,15 @@ describe("ProgramaWizardShell", () => {
       screen.getByRole("button", { name: /eliminar cargue borrador/i }),
     );
 
-    expect(forgetKnownDraft).toHaveBeenCalledWith(
-      "12345678-1234-4234-9234-123456789abc",
-    );
+    await waitFor(() => {
+      expect(forgetKnownDraft).toHaveBeenCalledWith(
+        "12345678-1234-4234-9234-123456789abc",
+      );
+    });
     expect(recoverDraftByReference).not.toHaveBeenCalled();
   });
 
-  it("should allow clearing the full local draft list", () => {
+  it("should allow clearing the full local draft list", async () => {
     const clearKnownDrafts = vi.fn();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(useProgramaWizardModule, "useProgramaWizard").mockReturnValue({
@@ -166,7 +168,9 @@ describe("ProgramaWizardShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /limpiar lista/i }));
 
-    expect(clearKnownDrafts).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(clearKnownDrafts).toHaveBeenCalledOnce();
+    });
   });
 
   it("shows enabled program PDF upload after program import even when global document flag is false", () => {

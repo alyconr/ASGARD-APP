@@ -12,6 +12,8 @@ import {
   Trash2,
   Check,
   X,
+  Search,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,7 +30,10 @@ import {
   listPlaneacionesProyecto,
   fetchPlaneacionDetalle,
 } from "../planeacion-api";
+import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
+import { buildPlaneacionWizardGuide } from "@/features/guide/wizard-guide-engine";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/feedback/confirm-context";
 
 type StepId = "dashboard" | "curricular" | "complementario" | "preview" | "confirmacion";
 
@@ -52,6 +57,7 @@ export function PlaneacionWizardShell({
   contexto: PlaneacionContextoResponse;
   referenciaId: string;
 }>): React.JSX.Element {
+  const confirm = useConfirm();
   const [activeStep, setActiveStep] = useState<StepId>("dashboard");
   const [planningsList, setPlanningsList] = useState<PlaneacionListResponse[]>([]);
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
@@ -73,9 +79,31 @@ export function PlaneacionWizardShell({
   const [recursos, setRecursos] = useState("");
   const [duracionHoras, setDuracionHoras] = useState<number>(0);
   const [instructor, setInstructor] = useState("");
+  const [tematicasSaber, setTematicasSaber] = useState("");
+  const [tematicasProceso, setTematicasProceso] = useState("");
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   // Confirmed details
   const [confirmedPlanning, setConfirmedPlanning] = useState<PlaneacionResponse | null>(null);
+
+  // Search query state
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter competencies based on code, name or learning results (RAP)
+  const filteredCompetencias = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return contexto.competencias;
+    }
+    return contexto.competencias.filter((comp) => {
+      const matchCodigo = comp.codigo_competencia.toLowerCase().includes(query);
+      const matchNombre = comp.nombre_competencia.toLowerCase().includes(query);
+      const matchResultado = comp.resultados.some((res) =>
+        res.descripcion.toLowerCase().includes(query)
+      );
+      return matchCodigo || matchNombre || matchResultado;
+    });
+  }, [contexto.competencias, searchQuery]);
 
   // Load existing plannings for this project
   const loadPlannings = useCallback(async () => {
@@ -193,6 +221,8 @@ export function PlaneacionWizardShell({
     setRecursos("");
     setDuracionHoras(0);
     setInstructor("");
+    setTematicasSaber("");
+    setTematicasProceso("");
     setActivePlanningId(null);
     setConfirmedPlanning(null);
   };
@@ -218,6 +248,8 @@ export function PlaneacionWizardShell({
       setRecursos((c.recursos_didacticos as string) ?? "");
       setDuracionHoras((c.duracion_horas as number) ?? 0);
       setInstructor((c.instructor_responsable as string) ?? "");
+      setTematicasSaber((c.tematicas_saber as string) ?? "");
+      setTematicasProceso((c.tematicas_proceso as string) ?? "");
 
       if (details.estado === "COMPLETO") {
         setConfirmedPlanning(details);
@@ -250,6 +282,11 @@ export function PlaneacionWizardShell({
     resetForm();
     setSelectedCompId(selectedCompId);
     setSelectedResultId(resultadoId);
+    const resultado = contexto.competencias
+      .find((competencia) => competencia.id === selectedCompId)
+      ?.resultados.find((item) => item.id === resultadoId);
+    setFaseId(resultado?.fase_id ?? "");
+    setActividadId(resultado?.actividad_id ?? "");
     setResultModalCompetenciaId(null);
 
     if (existing) {
@@ -283,6 +320,8 @@ export function PlaneacionWizardShell({
         recursos_didacticos: recursos,
         duracion_horas: duracionHoras,
         instructor_responsable: instructor,
+        tematicas_saber: tematicasSaber,
+        tematicas_proceso: tematicasProceso,
       },
     };
 
@@ -329,9 +368,11 @@ export function PlaneacionWizardShell({
   // Delete planning
   const handleDeletePlanning = async (planningId: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    const confirmed = window.confirm(
-      "¿Estás seguro de que deseas eliminar esta planeación pedagógica? Esta acción borrará los datos del lise de la base de datos y de MinIO."
-    );
+    const confirmed = await confirm({
+      title: "Eliminar planeación pedagógica",
+      message: "¿Estás seguro de que deseas eliminar esta planeación pedagógica? Esta acción borrará los datos de la base de datos y del almacenamiento físico en MinIO.",
+      isDestructive: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -359,11 +400,33 @@ export function PlaneacionWizardShell({
     downloadAnchor.remove();
   };
 
+  const remindInstructions = () => {
+    toast.info("Antes de agregar temáticas, revisa las instrucciones.");
+  };
+
   // Sidebar step rendering
   const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === activeStep);
+  const guide = buildPlaneacionWizardGuide({
+    activeStep,
+    competenciasCount: contexto.competencias.length,
+    fasesCount: contexto.fases.length,
+    selectedCompetencia: selectedCompetencia !== null,
+    selectedResultado: selectedResultado !== null,
+    faseSelected: faseId.length > 0,
+    actividadSelected: actividadId.length > 0,
+    conocimientosSelected: selectedConocimientos.length,
+    criteriosSelected: selectedCriterios.length,
+    instructor,
+    duracionHoras,
+    estrategias,
+    ambientes,
+    recursos,
+    confirmed: confirmedPlanning !== null,
+  });
 
   return (
-    <div className="grid gap-6">
+    <div id="planeacion-step-workspace" className="grid gap-6">
+      <WizardGuideAssistant guide={guide} storageKey="planeacion" />
       {/* Header Info */}
       <header className="flex flex-col gap-2 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-[0_14px_32px_rgba(23,53,47,0.06)]">
         <div className="flex items-center gap-2 text-[var(--accent-strong)]">
@@ -389,11 +452,37 @@ export function PlaneacionWizardShell({
       {/* DASHBOARD VIEW */}
       {activeStep === "dashboard" && (
         <section className="grid gap-6">
-          <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-            <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-1">Listado de Competencias del Programa</h3>
-            <p className="text-xs text-[var(--muted)] leading-relaxed">
-              Selecciona una competencia para elegir el resultado de aprendizaje que tendrá planeación. Los resultados completados quedan desactivados para evitar duplicidad.
-            </p>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-4">
+            <div className="max-w-xl">
+              <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-1">Listado de Competencias del Programa</h3>
+              <p className="text-xs text-[var(--muted)] leading-relaxed">
+                Selecciona una competencia para elegir el resultado de aprendizaje que tendrá planeación. Los resultados completados quedan desactivados para evitar duplicidad.
+              </p>
+            </div>
+
+            {/* Barra de Búsqueda de Competencias y Resultados */}
+            <div className="relative w-full max-w-sm md:shrink-0">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <Search className="h-4 w-4 text-slate-400" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar competencia o resultado..."
+                className="w-full rounded-lg border border-[color:var(--card-border)] bg-white py-2.5 pl-9 pr-9 text-xs placeholder-slate-400 outline-none transition focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] shadow-sm"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 transition"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {isLoadingDetails ? (
@@ -403,15 +492,39 @@ export function PlaneacionWizardShell({
                 <p className="text-sm font-semibold">Cargando detalles de la planeación...</p>
               </div>
             </div>
+          ) : filteredCompetencias.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[16rem] rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center">
+              <div className="rounded-full bg-slate-50 p-3 text-slate-400 mb-3 border border-slate-100">
+                <Search className="h-6 w-6" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-800">No se encontraron resultados</h4>
+              <p className="text-xs text-[var(--muted)] mt-1 max-w-sm">
+                No hay competencias ni resultados de aprendizaje que coincidan con &ldquo;{searchQuery}&rdquo;. Intenta con otro término.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="mt-4 inline-flex items-center justify-center rounded-lg bg-[var(--accent-soft)] px-3.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent)] hover:text-white transition"
+              >
+                Restablecer Búsqueda
+              </button>
+            </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {contexto.competencias.map((comp) => {
+              {filteredCompetencias.map((comp) => {
                 const plannings = planningsByCompetencia.get(comp.id) ?? [];
                 const completedCount = plannings.filter((p) => p.estado === "COMPLETO").length;
                 const draftCount = plannings.filter((p) => p.estado === "BORRADOR").length;
                 const totalResultados = comp.resultados.length;
                 const isComplete = totalResultados > 0 && completedCount === totalResultados;
                 const isDraft = draftCount > 0;
+
+                // Obtener resultados que coinciden con la búsqueda actual
+                const matchingResultados = searchQuery
+                  ? comp.resultados.filter((r) =>
+                      r.descripcion.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                  : [];
 
                 return (
                   <article
@@ -444,6 +557,24 @@ export function PlaneacionWizardShell({
                       <h4 className="text-sm font-semibold text-[var(--foreground)] leading-relaxed">
                         {comp.nombre_competencia}
                       </h4>
+
+                      {/* Mostrar los resultados que coinciden con la búsqueda */}
+                      {matchingResultados.length > 0 && (
+                        <div className="mt-3.5 rounded-lg border border-indigo-100 bg-indigo-50/30 p-3 text-[11px] leading-relaxed">
+                          <p className="font-bold text-indigo-700 mb-1.5 uppercase tracking-wider text-[9px] flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                            Resultados que coinciden ({matchingResultados.length}):
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-slate-700 font-medium">
+                            {matchingResultados.map((r) => (
+                              <li key={r.id} className="line-clamp-2">
+                                {r.descripcion}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <div className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
                         <span className="rounded-lg bg-slate-50 px-2.5 py-2 font-semibold">
                           {totalResultados} RAP
@@ -667,47 +798,32 @@ export function PlaneacionWizardShell({
                   {/* Selectores Proyecto */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label htmlFor="select-fase" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      <p className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                         Fase del Proyecto Formativo
-                      </label>
-                      <select
-                        id="select-fase"
-                        value={faseId}
-                        onChange={(e) => {
-                          setFaseId(e.target.value);
-                          setActividadId(""); // reset dependent activity
-                        }}
-                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                      >
-                        <option value="">-- Selecciona una Fase --</option>
-                        {contexto.fases.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.nombre_fase}
-                          </option>
-                        ))}
-                      </select>
+                      </p>
+                      <div className="min-h-10 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+                        {faseId
+                          ? faseMap.get(faseId)?.nombre_fase
+                          : "El RAP no tiene una fase asociada en la matriz del proyecto."}
+                      </div>
                     </div>
 
                     <div>
-                      <label htmlFor="select-actividad" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      <p className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                         Actividad del Proyecto
-                      </label>
-                      <select
-                        id="select-actividad"
-                        value={actividadId}
-                        disabled={!faseId}
-                        onChange={(e) => setActividadId(e.target.value)}
-                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)] disabled:bg-slate-50 disabled:opacity-50"
-                      >
-                        <option value="">-- Selecciona una Actividad --</option>
-                        {availableActividades.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.descripcion}
-                          </option>
-                        ))}
-                      </select>
+                      </p>
+                      <div className="min-h-10 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+                        {actividadId
+                          ? availableActividades.find((item) => item.id === actividadId)
+                              ?.descripcion
+                          : "El RAP no tiene una actividad asociada en la matriz del proyecto."}
+                      </div>
                     </div>
                   </div>
+                  <p className="text-xs text-[var(--muted)]">
+                    La fase y la actividad se cargan automáticamente desde la matriz del
+                    proyecto al seleccionar el resultado de aprendizaje.
+                  </p>
 
                   {/* Select All Toggle Control Bar */}
                   <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
@@ -774,6 +890,30 @@ export function PlaneacionWizardShell({
                         </label>
                       ))}
                     </div>
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <label htmlFor="tematicas-saber" className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Temáticas adicionales de conceptos y principios
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setInstructionsOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                        >
+                          <Info className="h-4 w-4" />
+                          Instrucciones
+                        </button>
+                      </div>
+                      <textarea
+                        id="tematicas-saber"
+                        value={tematicasSaber}
+                        onFocus={remindInstructions}
+                        onChange={(event) => setTematicasSaber(event.target.value)}
+                        rows={3}
+                        placeholder="Agrega las temáticas complementarias que se abordarán."
+                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                      />
+                    </div>
                   </div>
 
                   {/* Saberes Proceso checklist */}
@@ -807,6 +947,30 @@ export function PlaneacionWizardShell({
                           <span>{k.descripcion}</span>
                         </label>
                       ))}
+                    </div>
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <label htmlFor="tematicas-proceso" className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Temáticas adicionales de proceso
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setInstructionsOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                        >
+                          <Info className="h-4 w-4" />
+                          Instrucciones
+                        </button>
+                      </div>
+                      <textarea
+                        id="tematicas-proceso"
+                        value={tematicasProceso}
+                        onFocus={remindInstructions}
+                        onChange={(event) => setTematicasProceso(event.target.value)}
+                        rows={3}
+                        placeholder="Agrega las temáticas procedimentales complementarias."
+                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                      />
                     </div>
                   </div>
 
@@ -1027,6 +1191,11 @@ export function PlaneacionWizardShell({
                           <li key={k.id}>{k.descripcion}</li>
                         ))}
                     </ul>
+                    {tematicasSaber && (
+                      <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
+                        <strong>Temáticas adicionales:</strong> {tematicasSaber}
+                      </p>
+                    )}
                   </div>
 
                   <div className="border-t pt-4">
@@ -1038,6 +1207,11 @@ export function PlaneacionWizardShell({
                           <li key={k.id}>{k.descripcion}</li>
                         ))}
                     </ul>
+                    {tematicasProceso && (
+                      <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
+                        <strong>Temáticas adicionales:</strong> {tematicasProceso}
+                      </p>
+                    )}
                   </div>
 
                   <div className="border-t pt-4">
@@ -1192,6 +1366,12 @@ export function PlaneacionWizardShell({
                                   <li key={k.id}>{k.descripcion}</li>
                                 ))}
                             </ul>
+                            {(confirmedPlanning.datos_complementarios.tematicas_saber as string) && (
+                              <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                                <strong>Temáticas adicionales:</strong>{" "}
+                                {confirmedPlanning.datos_complementarios.tematicas_saber as string}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -1204,6 +1384,12 @@ export function PlaneacionWizardShell({
                                   <li key={k.id}>{k.descripcion}</li>
                                 ))}
                             </ul>
+                            {(confirmedPlanning.datos_complementarios.tematicas_proceso as string) && (
+                              <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                                <strong>Temáticas adicionales:</strong>{" "}
+                                {confirmedPlanning.datos_complementarios.tematicas_proceso as string}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -1272,6 +1458,90 @@ export function PlaneacionWizardShell({
             )}
           </div>
         </section>
+      )}
+
+      {instructionsOpen && (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setInstructionsOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="planning-instructions-title"
+            className="w-full max-w-2xl overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-6 py-5">
+              <div className="flex gap-3">
+                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white">
+                  <Info className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                    Orientación pedagógica
+                  </p>
+                  <h2 id="planning-instructions-title" className="mt-1 text-xl font-bold text-slate-900">
+                    Instrucciones antes de agregar información
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInstructionsOpen(false)}
+                aria-label="Cerrar instrucciones"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-slate-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+
+            <div className="grid gap-5 px-6 py-6 text-sm leading-6 text-slate-700">
+              <p>
+                Llegamos a los campos que convierten las decisiones pedagógicas en
+                condiciones reales de ejecución. Vamos a completarlos sin perder de
+                vista el aprendizaje que buscamos.
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <h3 className="font-bold text-slate-900">Pregúntate:</h3>
+                <p className="mt-1">
+                  ¿Cada dato que vas a registrar se relaciona con la actividad de
+                  aprendizaje? ¿Refleja los acuerdos del equipo ejecutor y las
+                  condiciones reales del centro?
+                </p>
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">Tu reto:</h3>
+                <p className="mt-1">
+                  Evita diligenciar estos campos como una lista independiente.
+                  Ambiente, materiales, instructores, tiempo y evidencia deben
+                  funcionar como un conjunto.
+                </p>
+              </div>
+              <div className="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4">
+                <h3 className="font-bold text-amber-950">Antes de continuar, verifica:</h3>
+                <p className="mt-1 text-amber-950">
+                  Antes de avanzar, imagina que otro instructor recibe esta planeación:
+                  ¿podría ejecutarla sin tener que adivinar información?
+                </p>
+              </div>
+            </div>
+
+            <footer className="flex justify-end border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setInstructionsOpen(false)}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+              >
+                Entendido
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </div>
   );

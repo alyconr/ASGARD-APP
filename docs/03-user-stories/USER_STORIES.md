@@ -21,6 +21,10 @@ Las historias de cargue se reinterpretan asi desde esta refactorizacion:
 
 El usuario entra por un dashboard maestro que permite seleccionar o continuar una referencia de programa, ver bloqueos reales y abrir solo los modulos habilitados. El dashboard no reemplaza la revision humana ni cambia la secuencia del wizard.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+El usuario cuenta con una guia visual persistente y no invasiva dentro de programa, proyecto y planeacion. La guia explica el paso actual, lista faltantes, muestra bloqueos reales y recomienda la accion siguiente sin reemplazar las validaciones del sistema.
+
 ---
 
 # 1. Épica: Inicio y borradores
@@ -334,3 +338,20 @@ Nota vigente: los criterios aparecen primero en un selector eficiente y se rende
 ### Criterios de aceptación
 - Si el programa cambia y queda inconsistente, debe mostrarse advertencia.
 - Debe indicarse el posible impacto sobre el proyecto asociado.
+
+---
+
+## HU-02B. Recibir guia contextual durante los wizards
+**Como** usuario gestor pedagogico
+**Quiero** ver un asistente visual que me indique que hacer y que falta
+**Para** avanzar por programa, proyecto y planeacion sin saltar reglas de negocio.
+
+### Criterios de aceptacion
+- El asistente debe aparecer en los tres wizards.
+- Debe mostrar severidad `info`, `warning`, `blocked` o `success`.
+- Debe mostrar checklist de requisitos completos y pendientes.
+- Debe advertir que el proyecto requiere programa `COMPLETO`.
+- Debe advertir que la planeacion requiere proyecto `COMPLETO`.
+- Debe recordar si el usuario colapso la ayuda.
+
+---

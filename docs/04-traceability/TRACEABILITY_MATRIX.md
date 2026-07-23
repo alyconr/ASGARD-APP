@@ -22,6 +22,10 @@ La trazabilidad queda reinterpretada asi:
 
 Se agrega trazabilidad para el dashboard maestro como entrada central de la Fase 1. Este componente agrega estado, metricas y mapa navegable, pero respeta las reglas existentes de cierre humano y dependencia entre modulos.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Se agrega trazabilidad para un asistente visual reutilizable en los wizards de programa, proyecto y planeacion. Este asistente muestra instrucciones, faltantes, bloqueos y CTA derivados del estado real del sistema.
+
 ---
 
 # 1. Propósito
@@ -61,6 +65,7 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
 | RN-DASHBOARD-ASGARD | La home debe centralizar acceso, bloqueos, metricas y mapa navegable sin saltar reglas de negocio | RF-DASHBOARD | HU-02A | Dashboard Service / Master Dashboard UI | Validar modulos habilitados, metricas y grafo navegable |
+| RN-ASISTENTE-GUIADO | Los wizards deben mostrar guia contextual con severidad, checklist y acciones sin reemplazar validaciones reales | RF-GUIA-ASGARD | HU-02B | Wizard Guide Engine / WizardGuideAssistant | Validar mensajes por paso, bloqueos entre modulos y persistencia UX |
 | RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual ni pasos `datos-programa`/`datos-proyecto` | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
 | RN-FLUJO-COMPACTO | El origen documental del programa muestra resumen compacto tras importacion y abre modal paginada de competencias | RF-06, RF-13 | HU-05, HU-13 | Programa Wizard / Excel Import UI | Validar resumen compacto, apertura de modal y paginacion |
 | RN-CURRICULO-FOCALIZADO | La estructura curricular carga una competencia seleccionada y conocimientos/criterios se eligen progresivamente | RF-08, RF-09, RF-10, RF-11, RF-12 | HU-07, HU-08, HU-09, HU-10, HU-11 | Curriculum Module | Validar selector de competencia y render progresivo |

@@ -44,6 +44,17 @@ Se incorpora un dashboard maestro ASGARD como entrada principal:
 - el backend expone el agregado por `GET /api/v1/dashboard/{referencia_id}`;
 - las pruebas deben cubrir servicio backend, gates y UI.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Se incorpora un asistente guiado transversal para los wizards:
+
+- visible en programa, proyecto y planeacion;
+- flotante, colapsable y no invasivo;
+- con severidad, mensaje, checklist y CTA;
+- basado en estado real de wizard, gates backend y contexto de planeacion;
+- con persistencia local ligera de experiencia;
+- sin reemplazar validadores ni reglas de habilitacion.
+
 ---
 
 # 2. Instrucción general para todas las tareas
@@ -94,6 +105,28 @@ Convertir la home en un panel maestro que agregue programa, proyecto y planeacio
 - el proyecto no se habilita por PDF evidencia ni por programa incompleto;
 - la planeacion no permite guardar ni confirmar si el proyecto no esta `COMPLETO`;
 - el mapa navegable solo activa enlaces disponibles.
+
+---
+
+## TASK-ASISTENTE-GUIADO-ASGARD. Guia transversal de usuario
+
+### Objetivo
+Agregar un asistente visual reutilizable que oriente al usuario durante los wizards de programa, proyecto y planeacion.
+
+### Debe hacer
+- crear motor de reglas de guia;
+- crear componente flotante colapsable;
+- integrar programa, proyecto y planeacion;
+- mostrar advertencias entre wizards;
+- persistir preferencias ligeras de UX;
+- agregar pruebas de motor y componente.
+
+### Aceptacion
+- el asistente aparece en los tres wizards;
+- muestra mensajes por paso y severidad;
+- advierte cuando proyecto o planeacion estan bloqueados;
+- no reemplaza validaciones reales ni modifica gates;
+- conserva UX ligera y no invasiva.
 
 ---
 

@@ -19,6 +19,7 @@ import {
 } from "@/features/proyecto/excel-import-api";
 import { eliminarCargueProyecto } from "@/features/proyecto/cargue-api";
 import { notify } from "@/components/feedback/notifications";
+import { useConfirm } from "@/components/feedback/confirm-context";
 
 import type {
   ExcelFasePreview,
@@ -511,10 +512,14 @@ export function ProyectoExcelImport({
   const [isFasesModalOpen, setIsFasesModalOpen] = useState<boolean>(false);
   const effectiveResult = localResult ?? currentResult;
 
+  const confirm = useConfirm();
+
   const handleEliminarCargue = async (): Promise<void> => {
-    const confirmed = window.confirm(
-      "¿Estás seguro de que deseas eliminar por completo el cargue del proyecto formativo? Esta acción eliminará permanentemente todos los datos y archivos del proyecto de la base de datos y de MinIO, preservando el programa de formación."
-    );
+    const confirmed = await confirm({
+      title: "Eliminar cargue de proyecto",
+      message: "¿Estás seguro de que deseas eliminar por completo el cargue del proyecto formativo? Esta acción eliminará permanentemente todos los datos y archivos del proyecto de la base de datos y de MinIO, preservando el programa de formación.",
+      isDestructive: true,
+    });
     if (!confirmed) return;
 
     setIsDeleting(true);

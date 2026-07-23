@@ -87,6 +87,17 @@ A partir del refactor del panel maestro:
 - el dashboard debe mostrar estados, bloqueos, acciones requeridas, metricas de avance y un mapa grafico navegable de programa, estructura curricular, proyecto y planeacion;
 - el backend debe exponer el estado agregado desde persistencia y no delegar las reglas de habilitacion exclusivamente al frontend.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+A partir de la implementacion del asistente guiado:
+
+- los wizards de programa, proyecto y planeacion pedagogica muestran un asistente visual flotante, colapsable y reutilizable;
+- el asistente deriva mensajes, checklist, severidad y CTA desde el estado real del wizard y desde reglas de backend ya expuestas;
+- el proyecto mantiene como fuente de bloqueo real la disponibilidad del backend y no una advertencia decorativa;
+- la planeacion pedagogica conserva el bloqueo backend que exige programa y proyecto en estado `COMPLETO`;
+- el asistente puede recordar de forma ligera si el usuario lo colapso para no invadir el flujo;
+- la guia nunca reemplaza las validaciones funcionales ni habilita modulos por si sola.
+
 ---
 
 # 1. Prioridad de instrucciones

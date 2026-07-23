@@ -11,6 +11,7 @@ import {
 
 import { notify } from "@/components/feedback/notifications";
 import { getDraft, saveDraft } from "@/features/drafts/api";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import type { DraftResponse, DraftStatus, EstadoDocumentalResponse } from "@/features/drafts/types";
 import {
   eliminarCargueProyecto,
@@ -157,6 +158,8 @@ export interface ProyectoWizardController {
   fetchDocState: () => Promise<void>;
   habilitarCarguePdf: () => Promise<void>;
   closeProject: () => Promise<void>;
+  isRevisionStepEnabled: boolean;
+  disabledSteps: ProyectoWizardStepId[];
 }
 
 export function useProyectoWizard({
@@ -166,6 +169,7 @@ export function useProyectoWizard({
   programaId: string | null;
   programaReferenciaId: string;
 }>): ProyectoWizardController {
+  const confirm = useConfirm();
   const [activeReferenceId, setActiveReferenceId] = useState<string | null>(
     null,
   );
@@ -458,7 +462,32 @@ export function useProyectoWizard({
     setContinueReferenceInput(value.trim());
   }, []);
 
+  const isRevisionStepEnabled = useMemo(() => {
+    if (payload === null) {
+      return false;
+    }
+    const hasExcelValid =
+      payload.documental.fuente_estructurada?.preview?.valid === true;
+    const hasExcelImported =
+      payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ||
+      docState?.proyecto_importado === true;
+    const hasPdfLoaded =
+      (payload.documental.proyecto_pdf !== null &&
+       payload.documental.proyecto_pdf !== undefined &&
+       payload.documental.proyecto_pdf.documento !== null &&
+       payload.documental.proyecto_pdf.documento !== undefined) ||
+      (docState?.proyecto_pdf !== null && docState?.proyecto_pdf !== undefined);
+    return hasExcelValid && hasExcelImported && hasPdfLoaded;
+  }, [payload, docState]);
+
+  const disabledSteps = useMemo<ProyectoWizardStepId[]>(() => {
+    return isRevisionStepEnabled ? [] : ["revision-proyecto"];
+  }, [isRevisionStepEnabled]);
+
   const goToStep = useCallback((stepId: ProyectoWizardStepId): void => {
+    if (stepId === "revision-proyecto" && !isRevisionStepEnabled) {
+      return;
+    }
     setCurrentStepId(stepId);
     setPayload((currentPayload) => {
       if (currentPayload === null) {
@@ -474,7 +503,7 @@ export function useProyectoWizard({
         },
       };
     });
-  }, []);
+  }, [isRevisionStepEnabled]);
 
   const goToNextStep = useCallback((): void => {
     const currentIndex = getStepIndex(currentStepId);
@@ -648,9 +677,10 @@ export function useProyectoWizard({
         return;
       }
 
-      const confirmed = window.confirm(
-        "Confirma que revisaste el consolidado y quieres cerrar el proyecto formativo como COMPLETO.",
-      );
+      const confirmed = await confirm({
+        title: "Cerrar proyecto formativo",
+        message: "Confirma que revisaste el consolidado y quieres cerrar el proyecto formativo como COMPLETO.",
+      });
       if (!confirmed) {
         return;
       }
@@ -746,7 +776,9 @@ export function useProyectoWizard({
   return {
     activeReferenceId,
     autosave,
-    canMoveNext: currentStepIndex < PROYECTO_WIZARD_STEPS.length - 1,
+    canMoveNext:
+      currentStepIndex < PROYECTO_WIZARD_STEPS.length - 1 &&
+      (currentStepId !== "fuente-proyecto" || isRevisionStepEnabled),
     canMovePrevious: currentStepIndex > 0,
     clearKnownDrafts,
     continueReferenceInput,
@@ -777,5 +809,7 @@ export function useProyectoWizard({
     fetchDocState,
     habilitarCarguePdf,
     closeProject,
+    isRevisionStepEnabled,
+    disabledSteps,
   };
 }

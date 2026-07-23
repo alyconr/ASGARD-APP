@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { notify } from "@/components/feedback/notifications";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import { eliminarCargueCompleto } from "@/features/proyecto/cargue-api";
 import {
   confirmProgramaExcelImport,
@@ -379,10 +380,14 @@ export function ProgramaExcelImport({
   const preview = currentResult?.preview ?? null;
   const imported = currentResult?.confirmacion.estado === "IMPORTADO";
 
+  const confirm = useConfirm();
+
   const handleEliminarCargue = async (): Promise<void> => {
-    const confirmed = window.confirm(
-      "¿Estás seguro de que deseas eliminar por completo el cargue del programa y del proyecto? Esta acción eliminará permanentemente todos los datos y archivos de la base de datos y de MinIO."
-    );
+    const confirmed = await confirm({
+      title: "Eliminar cargue completo",
+      message: "¿Estás seguro de que deseas eliminar por completo el cargue del programa y del proyecto? Esta acción eliminará permanentemente todos los datos y archivos de la base de datos y de MinIO.",
+      isDestructive: true,
+    });
     if (!confirmed) return;
 
     setIsDeleting(true);

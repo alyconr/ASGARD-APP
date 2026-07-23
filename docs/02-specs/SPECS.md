@@ -34,6 +34,15 @@ Desde esta refactorizacion integral, el sistema opera con un unico carril:
 - El dashboard muestra metricas de programa, proyecto y planeacion derivadas de persistencia, no de estado local.
 - El mapa navegable expone nodos de programa, estructura curricular, proyecto y planeacion con enlaces activos solo cuando el modulo esta habilitado.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+- Los wizards de programa, proyecto y planeacion pedagogica muestran un asistente flotante, colapsable y reutilizable.
+- El asistente presenta titulo, mensaje, severidad, checklist y CTA sugerido.
+- El motor de guia calcula mensajes desde estado real: paso actual, importaciones, cierres, disponibilidad de proyecto y acceso de planeacion.
+- Las advertencias entre wizards deben reflejar las reglas reales: proyecto requiere programa `COMPLETO`; planeacion requiere programa y proyecto `COMPLETO`.
+- El asistente persiste de forma ligera preferencias de UX, como estado colapsado.
+- El asistente no sustituye endpoints, validadores ni confirmaciones de cierre.
+
 ---
 
 # 1. Resumen

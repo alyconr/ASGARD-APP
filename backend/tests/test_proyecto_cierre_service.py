@@ -162,9 +162,22 @@ def build_project(*, with_activity: bool = True) -> ProyectoFormativo:
     return proyecto
 
 
-def build_project_draft(proyecto_id: uuid.UUID) -> BorradorSesion:
+def build_project_draft(proyecto_id: uuid.UUID, *, with_pdf: bool = True) -> BorradorSesion:
     """Create a project draft pointing at an imported project."""
     referencia_id = uuid.uuid4()
+    proyecto_pdf_payload = None
+    if with_pdf:
+        proyecto_pdf_payload = {
+            "documento": {
+                "original_filename": "proyecto.pdf",
+                "storage_key": "proyectos-formativos/some-key.pdf",
+                "size_bytes": 1024,
+                "content_type": "application/pdf",
+                "checksum_sha256": "some-sha",
+                "etag": "some-etag",
+            }
+        }
+
     draft = BorradorSesion(
         tipo_bloque=TipoBloqueBorrador.PROYECTO.value,
         referencia_id=referencia_id,
@@ -181,7 +194,8 @@ def build_project_draft(proyecto_id: uuid.UUID) -> BorradorSesion:
                         "confirmed_at": datetime.now(UTC).isoformat(),
                         "proyecto_id": str(proyecto_id),
                     }
-                }
+                },
+                "proyecto_pdf": proyecto_pdf_payload,
             },
         },
         estado_borrador=EstadoBloque.EN_REVISION,
@@ -192,6 +206,8 @@ def build_project_draft(proyecto_id: uuid.UUID) -> BorradorSesion:
 
 def build_service(
     proyecto: ProyectoFormativo,
+    *,
+    with_pdf: bool = True,
 ) -> tuple[
     ProyectoCierreService,
     FakeSession,
@@ -201,7 +217,7 @@ def build_service(
     BorradorSesion,
 ]:
     """Build the service and fake dependencies."""
-    draft = build_project_draft(proyecto.id)
+    draft = build_project_draft(proyecto.id, with_pdf=with_pdf)
     session = FakeSession()
     draft_repository = FakeDraftRepository(draft)
     proyecto_repository = FakeProyectoRepository(proyecto)
@@ -265,3 +281,15 @@ async def test_cerrar_proyecto_rechaza_fase_sin_actividades() -> None:
     assert session.committed is False
     assert proyecto_repository.saved == []
     assert audit_repository.events == []
+
+
+@pytest.mark.anyio
+async def test_validacion_falla_sin_proyecto_pdf() -> None:
+    """If the project PDF evidence is missing, the project is not closable."""
+    proyecto = build_project()
+    service, _, _, _, _, draft = build_service(proyecto, with_pdf=False)
+
+    result = await service.validar_completitud(draft.referencia_id)
+
+    assert result.cerrable is False
+    assert any(f.campo == "proyecto_pdf" for f in result.faltantes)

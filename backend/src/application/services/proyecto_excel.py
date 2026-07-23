@@ -429,7 +429,7 @@ class ProyectoExcelImportService:
             programa_id=programa_id,
             workbook=workbook,
         )
-        draft.paso_actual = "revision-proyecto"
+        draft.paso_actual = "fuente-proyecto"
         draft.payload_json = _merge_excel_import_into_payload(
             payload=draft.payload_json,
             result=import_result,

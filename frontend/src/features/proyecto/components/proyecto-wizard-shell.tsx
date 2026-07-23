@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
 import { cn } from "@/lib/utils";
 import { EstadoDocumentalResponse } from "@/features/drafts/types";
+import { useConfirm } from "@/components/feedback/confirm-context";
 
 const STEP_ICONS: Record<
   ProyectoWizardStepId,
@@ -84,28 +85,33 @@ function WizardProgress({
   onSelectStep,
   steps,
   touchedSteps,
+  disabledSteps = [],
 }: Readonly<{
   currentStepId: ProyectoWizardStepId;
   onSelectStep: (stepId: ProyectoWizardStepId) => void;
   steps: ProyectoWizardStepDefinition[];
   touchedSteps: ProyectoWizardStepId[];
+  disabledSteps?: ProyectoWizardStepId[];
 }>): React.JSX.Element {
   return (
     <nav aria-label="Progreso del wizard del proyecto" className="grid gap-2">
       {steps.map((step) => {
         const isCurrent = step.id === currentStepId;
         const isTouched = touchedSteps.includes(step.id);
+        const isDisabled = disabledSteps.includes(step.id);
 
         return (
           <button
             key={step.id}
             type="button"
+            disabled={isDisabled}
             onClick={() => onSelectStep(step.id)}
             className={cn(
-              "grid grid-cols-[2.25rem_1fr] gap-3 rounded-lg border px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
+              "grid grid-cols-[2.25rem_1fr] gap-3 rounded-lg border px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
               isCurrent
                 ? "border-[var(--accent)] bg-[var(--accent-soft)]"
                 : "border-[color:var(--card-border)] bg-white hover:border-[var(--accent)]/50",
+              isDisabled && "bg-slate-50/50 opacity-50",
             )}
           >
             <span
@@ -295,6 +301,7 @@ export function ProyectoWizardShell({
     programaId: availability.programa_id,
     programaReferenciaId: availability.programa_referencia_id ?? availability.referencia_id,
   });
+  const confirm = useConfirm();
   const currentStep =
     PROYECTO_WIZARD_STEPS[controller.currentStepIndex] ??
     PROYECTO_WIZARD_STEPS[0];
@@ -440,12 +447,13 @@ export function ProyectoWizardShell({
                       type="button"
                       aria-label={`Eliminar cargue ${draft.label}`}
                       title="Eliminar cargue del proyecto y archivos en MinIO"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Esto eliminara el cargue del proyecto en el servidor y sus archivos asociados en MinIO. Tambien se quitara de esta lista.",
-                          )
-                        ) {
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: "Eliminar cargue de proyecto",
+                          message: "Esto eliminará el cargue del proyecto en el servidor y sus archivos asociados en MinIO. También se quitará de esta lista.",
+                          isDestructive: true,
+                        });
+                        if (confirmed) {
                           void controller.forgetKnownDraft(draft.referenciaId);
                         }
                       }}
@@ -474,6 +482,7 @@ export function ProyectoWizardShell({
                 onSelectStep={controller.goToStep}
                 steps={PROYECTO_WIZARD_STEPS}
                 touchedSteps={controller.payload.meta.touchedSteps}
+                disabledSteps={controller.disabledSteps}
               />
             </section>
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4 text-sm leading-6">

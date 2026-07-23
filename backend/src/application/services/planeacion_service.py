@@ -149,6 +149,47 @@ class PlaneacionPedagogicaService:
                 "en estado COMPLETO"
             )
 
+        project_draft_stmt = select(BorradorSesion).where(
+            BorradorSesion.referencia_id == referencia_id,
+            BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROYECTO,
+        )
+        project_draft_res = await self._session.execute(project_draft_stmt)
+        project_draft = project_draft_res.scalar_one_or_none()
+
+        phase_by_name = {fase.nombre_fase: fase for fase in proyecto.fases}
+        project_rap_links: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
+        if project_draft is not None:
+            documental = project_draft.payload_json.get("documental", {})
+            fuente = documental.get("fuente_estructurada", {}) if isinstance(documental, dict) else {}
+            preview = fuente.get("preview", {}) if isinstance(fuente, dict) else {}
+            preview_fases = preview.get("fases", []) if isinstance(preview, dict) else []
+            for preview_fase in preview_fases:
+                if not isinstance(preview_fase, dict):
+                    continue
+                fase = phase_by_name.get(preview_fase.get("nombre_fase"))
+                if fase is None:
+                    continue
+                activity_by_description = {
+                    actividad.descripcion: actividad for actividad in fase.actividades
+                }
+                for preview_actividad in preview_fase.get("actividades", []):
+                    if not isinstance(preview_actividad, dict):
+                        continue
+                    actividad = activity_by_description.get(
+                        preview_actividad.get("descripcion")
+                    )
+                    if actividad is None:
+                        continue
+                    for competencia in preview_actividad.get("competencias", []):
+                        if not isinstance(competencia, dict):
+                            continue
+                        for resultado in competencia.get("resultados", []):
+                            if isinstance(resultado, dict) and resultado.get("rap_id"):
+                                project_rap_links[str(resultado["rap_id"])] = (
+                                    fase.id,
+                                    actividad.id,
+                                )
+
         # Format Fases & Actividades
         fase_dtos: list[ContextoFaseDTO] = []
         for f in proyecto.fases:
@@ -167,7 +208,14 @@ class PlaneacionPedagogicaService:
         comp_dtos: list[ContextoCompetenciaDTO] = []
         for c in programa.competencias:
             res_dtos = [
-                ContextoResultadoDTO(id=r.id, descripcion=r.descripcion)
+                ContextoResultadoDTO(
+                    id=r.id,
+                    descripcion=r.descripcion,
+                    fase_id=project_rap_links.get(r.codigo_resultado, (None, None))[0],
+                    actividad_id=project_rap_links.get(
+                        r.codigo_resultado, (None, None)
+                    )[1],
+                )
                 for r in c.resultados
             ]
             saberes_conceptos = [

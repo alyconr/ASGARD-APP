@@ -16,6 +16,8 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
+import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
+import { buildProgramaWizardGuide } from "@/features/guide/wizard-guide-engine";
 import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
 import { ProgramaDocumentUpload } from "@/features/programa/components/programa-document-upload";
 import { ProgramaExcelImport } from "@/features/programa/components/programa-excel-import";
@@ -23,6 +25,7 @@ import { PROGRAMA_WIZARD_STEPS } from "@/features/programa/constants";
 import { useProgramaWizard } from "@/features/programa/use-programa-wizard";
 import { ProyectoDisponibilidadPanel } from "@/features/proyecto/components/proyecto-disponibilidad-panel";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import type { EstadoDocumentalResponse } from "@/features/drafts/types";
 import type {
   ProgramaCierreResponse,
@@ -261,6 +264,7 @@ function DraftSummary({
 
 export function ProgramaWizardShell(): React.JSX.Element {
   const controller = useProgramaWizard();
+  const confirm = useConfirm();
   const currentStep =
     PROGRAMA_WIZARD_STEPS[controller.currentStepIndex] ??
     PROGRAMA_WIZARD_STEPS[0];
@@ -268,6 +272,13 @@ export function ProgramaWizardShell(): React.JSX.Element {
     controller.payload?.curricular.programa_formacion_id ??
     controller.payload?.documental.programa_excel?.confirmacion.programa_id ??
     null;
+  const guide = buildProgramaWizardGuide({
+    activeReferenceId: controller.activeReferenceId,
+    currentStepId: controller.currentStepId,
+    draftStatus: controller.draftStatus,
+    isWizardActive: controller.isWizardActive,
+    payload: controller.payload,
+  });
 
   if (controller.isBootstrapping) {
     return (
@@ -286,6 +297,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-5 px-5 py-6 lg:px-8">
+      <WizardGuideAssistant guide={guide} storageKey="programa" />
       <header className="rounded-lg border border-[color:var(--card-border)] bg-white px-5 py-4 shadow-[0_14px_32px_rgba(23,53,47,0.07)]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
@@ -332,7 +344,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
       ) : null}
 
       {!controller.isWizardActive ? (
-        <section className="grid gap-5 lg:grid-cols-[1fr_26rem]">
+        <section id="programa-step-workspace" className="grid gap-5 lg:grid-cols-[1fr_26rem]">
           <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
             <div className="flex items-center gap-2">
               <Route className="h-5 w-5 text-[var(--accent-strong)]" />
@@ -408,12 +420,12 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 {controller.knownDrafts.length > 0 ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Esto solo quitara las referencias locales de este navegador. Los borradores del servidor no se eliminan.",
-                        )
-                      ) {
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: "Limpiar lista local",
+                        message: "Esto solo quitará las referencias locales de este navegador. Los borradores del servidor no se eliminan.",
+                      });
+                      if (confirmed) {
                         controller.clearKnownDrafts();
                       }
                     }}
@@ -452,12 +464,13 @@ export function ProgramaWizardShell(): React.JSX.Element {
                         type="button"
                         aria-label={`Eliminar cargue ${draft.label}`}
                         title="Eliminar cargue y archivos en MinIO"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "Esto eliminara el cargue del servidor y sus archivos asociados en MinIO. Tambien se quitara de esta lista.",
-                            )
-                          ) {
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: "Eliminar cargue completo",
+                            message: "Esto eliminará el cargue del servidor y sus archivos asociados en MinIO. También se quitará de esta lista.",
+                            isDestructive: true,
+                          });
+                          if (confirmed) {
                             void controller.forgetKnownDraft(draft.referenciaId);
                           }
                         }}
@@ -505,7 +518,7 @@ export function ProgramaWizardShell(): React.JSX.Element {
             </ActionButton>
           </aside>
 
-          <div className="flex min-w-0 flex-col gap-4">
+          <div id="programa-step-workspace" className="flex min-w-0 flex-col gap-4">
             <div className="flex-1 overflow-y-auto rounded-lg">
               <StepWorkspace
                 currentStep={currentStep}

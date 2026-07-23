@@ -67,3 +67,83 @@ textarea {
 .sena-toast-description {
   color: var(--muted) !important;
 }
+
+.asgard-guide-avatar {
+  isolation: isolate;
+  animation: asgard-teacher-float 3.8s ease-in-out infinite;
+}
+
+.asgard-teacher-cap {
+  transform-origin: bottom center;
+  animation: asgard-teacher-cap 4.2s ease-in-out infinite;
+}
+
+.asgard-teacher-glasses-glare {
+  animation: asgard-teacher-glare 5s linear infinite;
+}
+
+.asgard-teacher-sparkle {
+  transform-origin: center;
+  animation: asgard-teacher-sparkle 3s ease-in-out infinite;
+}
+
+.asgard-teacher-sparkle--one {
+  animation-delay: 0s;
+}
+
+.asgard-teacher-sparkle--two {
+  animation-delay: 1.5s;
+}
+
+@keyframes asgard-teacher-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(1deg);
+  }
+}
+
+@keyframes asgard-teacher-cap {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-1.5deg) translateY(-0.75px);
+  }
+}
+
+@keyframes asgard-teacher-glare {
+  0% {
+    transform: translateX(-20px);
+  }
+  20% {
+    transform: translateX(20px);
+  }
+  100% {
+    transform: translateX(20px);
+  }
+}
+
+@keyframes asgard-teacher-sparkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.7) rotate(0deg);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.15) rotate(180deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asgard-guide-avatar,
+  .asgard-teacher-cap,
+  .asgard-teacher-glasses-glare,
+  .asgard-teacher-sparkle {
+    animation: none;
+  }
+}

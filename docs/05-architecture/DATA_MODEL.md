@@ -58,6 +58,12 @@ El dashboard maestro no introduce una tabla nueva. Su estado agregado se calcula
 
 El contrato de lectura debe exponer modulos, metricas y nodos de grafo sin duplicar persistencia ni convertir estado local del frontend en fuente de verdad.
 
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+El asistente guiado no introduce tablas nuevas. Su motor de reglas se calcula en frontend a partir de datos ya persistidos o consultados: payload del borrador, estado de programa/proyecto, disponibilidad de proyecto y contexto de planeacion.
+
+La unica persistencia adicional permitida es UX local ligera en el navegador, por ejemplo si el panel fue colapsado o si la ayuda inicial ya se vio. Esa persistencia local no es fuente de verdad de negocio.
+
 ---
 
 # 2. Alcance del modelo

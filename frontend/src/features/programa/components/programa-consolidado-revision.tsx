@@ -22,6 +22,7 @@ import {
   validarCompletitudPrograma,
 } from "@/features/programa/programa-cierre-api";
 import { ProgramaPendientesConciliacion } from "@/features/programa/components/programa-pendientes-conciliacion";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import type {
   ProgramaCierreResponse,
   ProgramaCompetencia,
@@ -98,6 +99,7 @@ export function ProgramaConsolidadoRevision(
     onProgramaCerrado = () => {},
     onSyncNeeded,
   } = props;
+  const confirm = useConfirm();
   const [validation, setValidation] =
     useState<ProgramaCompletitudResponse | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -171,9 +173,10 @@ export function ProgramaConsolidadoRevision(
     if (currentValidation === null || !currentValidation.cerrable) {
       return;
     }
-    const confirmed = window.confirm(
-      "Confirma que revisaste el consolidado y quieres cerrar el programa de formación como COMPLETO.",
-    );
+    const confirmed = await confirm({
+      title: "Cerrar programa de formación",
+      message: "Confirma que revisaste el consolidado y quieres cerrar el programa de formación como COMPLETO.",
+    });
     if (!confirmed) {
       return;
     }

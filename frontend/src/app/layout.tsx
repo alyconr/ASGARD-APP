@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 
 import { AppToaster } from "@/components/feedback/app-toaster";
+import { ConfirmProvider } from "@/components/feedback/confirm-context";
 
 import "./globals.css";
 
@@ -33,8 +34,10 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        {children}
-        <AppToaster />
+        <ConfirmProvider>
+          {children}
+          <AppToaster />
+        </ConfirmProvider>
       </body>
     </html>
   );

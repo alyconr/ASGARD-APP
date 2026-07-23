@@ -6,6 +6,8 @@ import { ArrowLeft, RefreshCcw } from "lucide-react";
 
 import { fetchPlaneacionContexto, type PlaneacionContextoResponse } from "@/features/planeacion/planeacion-api";
 import { PlaneacionWizardShell } from "@/features/planeacion/components/planeacion-wizard-shell";
+import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
+import { buildBlockedModuleGuide } from "@/features/guide/wizard-guide-engine";
 
 export default function PlaneacionPage({
   params,
@@ -60,8 +62,16 @@ export default function PlaneacionPage({
   }
 
   if (errorMessage !== null || contexto === null) {
+    const guide = buildBlockedModuleGuide(
+      "planeacion",
+      "Planeacion pedagogica no disponible",
+      errorMessage ??
+        "Debes cerrar el proyecto formativo como COMPLETO antes de iniciar la planeacion pedagogica.",
+    );
+
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-8">
+        <WizardGuideAssistant guide={guide} storageKey="planeacion" />
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm leading-6 text-amber-900 shadow-[0_18px_42px_rgba(23,53,47,0.04)]">
           <h2 className="text-lg font-semibold text-amber-950 mb-2">Planificación Pedagógica No Disponible</h2>
           <p>{errorMessage ?? "El módulo se encuentra inaccesible en este momento."}</p>

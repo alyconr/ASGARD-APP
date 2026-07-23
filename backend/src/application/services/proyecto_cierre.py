@@ -130,6 +130,21 @@ class ProyectoCierreService:
                 )
             )
         else:
+            documental = draft.payload_json.get("documental") or {}
+            proyecto_pdf = documental.get("proyecto_pdf")
+            has_pdf = (
+                isinstance(proyecto_pdf, dict)
+                and proyecto_pdf.get("documento") is not None
+            )
+            if not has_pdf:
+                faltantes.append(
+                    _missing(
+                        codigo="proyecto.documental.proyecto_pdf",
+                        campo="proyecto_pdf",
+                        mensaje="El PDF de evidencia del proyecto es obligatorio.",
+                    )
+                )
+
             if proyecto.programa.estado != EstadoBloque.COMPLETO:
                 faltantes.append(
                     _missing(

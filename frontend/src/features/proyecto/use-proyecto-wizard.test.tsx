@@ -204,6 +204,42 @@ describe("useProyectoWizard", () => {
   });
 
   it("navigates and autosaves the current project step", async () => {
+    mockGetDraft.mockImplementation(async () => {
+      const payload = buildProjectPayload();
+      payload.documental.fuente_estructurada = {
+        preview: {
+          valid: true,
+          proyecto: {
+            codigo_proyecto: "PR-001",
+            nombre_proyecto: "Proyecto formativo base",
+            version_proyecto: "1",
+          },
+        },
+        confirmacion: {
+          estado: "IMPORTADO",
+          confirmed_at: "2026-05-16T10:00:00.000Z",
+          proyecto_id: "some-id",
+        },
+      } as any;
+      payload.documental.proyecto_pdf = {
+        documento: {
+          original_filename: "proyecto.pdf",
+          storage_key: "proyectos-formativos/some-key.pdf",
+          size_bytes: 1024,
+          content_type: "application/pdf",
+          checksum_sha256: "some-sha",
+          etag: "some-etag",
+        },
+        uso: "EVIDENCIA_DOCUMENTAL",
+        updated_at: "2026-05-16T10:00:00.000Z",
+      } as any;
+      return buildDraftResponse({
+        paso_actual: "fuente-proyecto",
+        payload_json: payload as any,
+        estado_borrador: "BORRADOR",
+      });
+    });
+
     const { result } = renderHook(() =>
       useProyectoWizard({
         programaId: programId,
@@ -217,6 +253,36 @@ describe("useProyectoWizard", () => {
 
     await act(async () => {
       await result.current.startNewFlow();
+    });
+
+    await act(async () => {
+      result.current.updateProyectoExcelImport({
+        preview: {
+          valid: true,
+          proyecto: {
+            codigo_proyecto: "PR-001",
+            nombre_proyecto: "Proyecto formativo base",
+            version_proyecto: "1",
+          },
+        },
+        confirmacion: {
+          estado: "IMPORTADO",
+          confirmed_at: "2026-05-16T10:00:00.000Z",
+          proyecto_id: "some-id",
+        },
+      } as any);
+      result.current.updateProyectoPdfResult({
+        documento: {
+          original_filename: "proyecto.pdf",
+          storage_key: "proyectos-formativos/some-key.pdf",
+          size_bytes: 1024,
+          content_type: "application/pdf",
+          checksum_sha256: "some-sha",
+          etag: "some-etag",
+        },
+        uso: "EVIDENCIA_DOCUMENTAL",
+        updated_at: "2026-05-16T10:00:00.000Z",
+      } as any);
     });
 
     act(() => {

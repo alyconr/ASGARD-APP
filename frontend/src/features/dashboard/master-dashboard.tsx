@@ -35,6 +35,7 @@ import {
   setActiveProgramaDraftReference,
   type KnownDraftSummary,
 } from "@/features/drafts/storage";
+import { useConfirm } from "@/components/feedback/confirm-context";
 import { cn } from "@/lib/utils";
 
 function formatReferenceId(referenceId: string): string {
@@ -395,6 +396,7 @@ function ProgramFlowsPanel({
 }
 
 export function MasterDashboard(): React.JSX.Element {
+  const confirm = useConfirm();
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [programFlows, setProgramFlows] = useState<DashboardProgramFlow[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
@@ -488,14 +490,16 @@ export function MasterDashboard(): React.JSX.Element {
     setActiveProgramaDraftReference(cleanReference);
   };
 
-  const deleteSelectedProgramFlow = (referenceId: string): void => {
+  const deleteSelectedProgramFlow = async (referenceId: string): Promise<void> => {
     const selectedFlow = programFlows.find(
       (flow) => flow.referencia_id === referenceId,
     );
     const flowLabel = selectedFlow?.titulo ?? formatReferenceId(referenceId);
-    const confirmed = window.confirm(
-      `Vas a eliminar el flujo abierto "${flowLabel}". Esta accion quitara el borrador del panel y no se puede deshacer. Deseas continuar?`,
-    );
+    const confirmed = await confirm({
+      title: "Eliminar flujo de programa",
+      message: `Vas a eliminar el flujo abierto "${flowLabel}". Esta acción quitará el borrador del panel y borrará permanentemente todos los datos de la base de datos y archivos en MinIO. ¿Deseas continuar?`,
+      isDestructive: true,
+    });
     if (!confirmed) return;
 
     setIsDeletingFlow(true);
