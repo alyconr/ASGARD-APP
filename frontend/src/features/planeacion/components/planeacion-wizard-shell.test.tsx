@@ -48,6 +48,12 @@ const mockContexto: PlaneacionContextoResponse = {
           descripcion: "Resultado 1: Identificar requisitos técnicos",
           fase_id: "fase-1",
           actividad_id: "act-1",
+          asignaciones_proyecto: [
+            {
+              fase_id: "fase-1",
+              actividad_id: "act-1",
+            },
+          ],
         },
       ],
       conocimientos_saber: [
@@ -144,6 +150,11 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Vamos a iniciar la planeación pedagógica específica/i),
+      ).toBeInTheDocument();
+    });
 
     // Check that the active result is fixed and the user can select related items.
     expect(screen.getAllByText("Resultado 1: Identificar requisitos técnicos").length).toBeGreaterThan(0);
@@ -196,13 +207,26 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(screen.getByText(/Vamos a iniciar la planeación pedagógica específica/i)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    fireEvent.click(screen.getByRole("button", { name: "Instrucciones" }));
+    expect(screen.getByText(/No comiences por una lista de temas/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
 
     fireEvent.change(screen.getByLabelText("Temáticas adicionales de conceptos y principios"), {
       target: { value: "Arquitectura limpia" },
     });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Adicionar temática" })[0],
+    );
     fireEvent.change(screen.getByLabelText("Temáticas adicionales de proceso"), {
       target: { value: "Modelado colaborativo" },
     });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Adicionar temática" })[1],
+    );
 
     // Save draft
     const saveBtn = screen.getByText("Guardar Borrador");
@@ -218,8 +242,14 @@ describe("PlaneacionWizardShell", () => {
         fase_id: "fase-1",
         actividad_id: "act-1",
         datos_complementarios: expect.objectContaining({
-          tematicas_saber: "Arquitectura limpia",
-          tematicas_proceso: "Modelado colaborativo",
+          asignaciones_proyecto: [
+            {
+              fase_id: "fase-1",
+              actividad_id: "act-1",
+            },
+          ],
+          tematicas_saber: ["Arquitectura limpia"],
+          tematicas_proceso: ["Modelado colaborativo"],
         }),
       }),
     );
@@ -231,6 +261,20 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(screen.getByText("2. Campos Complementarios")).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /Instrucciones antes de agregar información/i })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Llegamos a los campos que convierten/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+
+    const actividadAprendizajeInput = screen.getByLabelText(
+      "Actividades de aprendizaje a desarrollar",
+    );
+    expect(actividadAprendizajeInput).toBeDisabled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Leer instrucción" })[0]);
+    expect(screen.getByText(/verbo en infinitivo/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    expect(actividadAprendizajeInput).toBeEnabled();
   });
 
   it("toggles all checkboxes when using the Select All button", async () => {

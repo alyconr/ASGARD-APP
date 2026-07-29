@@ -14,6 +14,7 @@ import {
   X,
   Search,
   Info,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,7 @@ import {
   type PlaneacionSaveRequest,
   type ContextoCompetencia,
   type ContextoFase,
+  type ContextoAsignacionProyecto,
   savePlaneacionBorrador,
   confirmarPlaneacion,
   deletePlaneacion,
@@ -36,6 +38,35 @@ import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/feedback/confirm-context";
 
 type StepId = "dashboard" | "curricular" | "complementario" | "preview" | "confirmacion";
+type InstructionStep = "curricular" | "complementario";
+type ComplementaryFieldId =
+  | "actividades_aprendizaje"
+  | "duracion_actividad_horas"
+  | "horas_trabajo_directo"
+  | "horas_trabajo_independiente"
+  | "descripcion_evidencia_aprendizaje"
+  | "estrategias_didacticas"
+  | "ambientes_tipificados"
+  | "ambiente"
+  | "materiales_formacion"
+  | "instructores"
+  | "observaciones";
+
+type InstructionTarget =
+  | { kind: "step"; step: InstructionStep }
+  | { field: ComplementaryFieldId; kind: "field" };
+
+interface ComplementaryFieldDefinition {
+  id: ComplementaryFieldId;
+  label: string;
+  placeholder: string;
+  rows?: number;
+  type: "number" | "text" | "textarea";
+  intro: string;
+  preguntate: string;
+  reto: string;
+  verifica: string;
+}
 
 interface StepDefinition {
   id: StepId;
@@ -49,6 +80,211 @@ const WIZARD_STEPS: StepDefinition[] = [
   { id: "preview", label: "Vista Previa", description: "Revisar la planeación pedagógica del resultado" },
   { id: "confirmacion", label: "Finalizado", description: "Descargar planeación aprobada" },
 ];
+
+const COMPLEMENTARY_FIELDS: ComplementaryFieldDefinition[] = [
+  {
+    id: "actividades_aprendizaje",
+    label: "Actividades de aprendizaje a desarrollar",
+    type: "textarea",
+    rows: 5,
+    placeholder: "Ejemplo: Determinar la situación actual de la organización mediante...",
+    intro:
+      "La actividad de aprendizaje debe formularse como una actividad genérica que posteriormente se desarrollará en la guía de aprendizaje a través de subactividades. Para ello, pongamos ahora al aprendiz en acción. ¿Qué hará concretamente para construir y demostrar el aprendizaje esperado?",
+    preguntate:
+      "¿La acción puede observarse? ¿Sobre qué objeto, problema, proceso o situación trabajará? ¿Bajo qué condición, contexto, recurso o referente deberá realizarla?",
+    reto:
+      "Redacta la actividad con la estructura verbo en infinitivo + objeto + condición. Procura que integre saber, hacer y ser, y que sea clara, pertinente y medible.",
+    verifica:
+      "Lee la actividad como si fueras otro instructor: ¿puedes imaginar qué hará el aprendiz? ¿Se relaciona directamente con los resultados? ¿Es coherente con la actividad del proyecto?",
+  },
+  {
+    id: "duracion_actividad_horas",
+    label: "Duración de actividad de aprendizaje",
+    type: "number",
+    placeholder: "Horas totales",
+    intro:
+      "Ahora demos a la actividad un tiempo realista. Primero pensemos en todo el proceso y después distribuyamos las horas.",
+    preguntate:
+      "¿Cuánto tiempo requiere orientar, explorar, practicar, producir la evidencia y retroalimentar? ¿Qué parte necesita acompañamiento directo y cuál puede desarrollarse con autonomía?",
+    reto:
+      "Define la duración total con el equipo ejecutor y distribúyela entre trabajo directo e independiente. No asignes horas únicamente para completar el total disponible.",
+    verifica:
+      "Comprueba que trabajo directo + trabajo independiente coincidan con la duración total y que el tiempo sea proporcional a la complejidad de los resultados y de la evidencia.",
+  },
+  {
+    id: "horas_trabajo_directo",
+    label: "Horas de trabajo directo",
+    type: "number",
+    placeholder: "Horas con acompañamiento",
+    intro: "Identifiquemos qué momentos requieren acompañamiento programado del instructor.",
+    preguntate:
+      "¿Cuándo necesita el aprendiz orientación, demostración, práctica acompañada, interacción sincrónica, seguimiento o retroalimentación inmediata?",
+    reto:
+      "Registra las horas en las que instructor y aprendices interactúan de manera programada, presencial o mediada por tecnología, dentro del ambiente de aprendizaje definido.",
+    verifica:
+      "¿Puedes explicar qué hará el instructor y qué hará el aprendiz durante esas horas? Si solo aparece una cantidad, todavía falta justificarla pedagógicamente.",
+  },
+  {
+    id: "horas_trabajo_independiente",
+    label: "Horas de trabajo independiente",
+    type: "number",
+    placeholder: "Horas autónomas",
+    intro:
+      "Veamos ahora qué parte del proceso puede desarrollar el aprendiz con autonomía y sin acompañamiento simultáneo.",
+    preguntate:
+      "¿Qué puede realizar por cuenta propia? ¿Cuenta con instrucciones, recursos, criterios y un resultado esperado? ¿El tiempo asignado es razonable para las condiciones de los aprendices?",
+    reto:
+      "No reduzcas estas horas a trabajo en casa. Pueden desarrollarse dentro o fuera del centro, siempre que exista una ruta clara y una relación directa con la actividad.",
+    verifica:
+      "¿El aprendiz sabrá qué debe hacer, para qué, con qué recursos y qué producto o avance se espera? Si alguna respuesta es no, ajusta la orientación.",
+  },
+  {
+    id: "descripcion_evidencia_aprendizaje",
+    label: "Descripción de la evidencia de aprendizaje",
+    type: "textarea",
+    rows: 5,
+    placeholder: "Describe qué presentará, ejecutará o responderá el aprendiz.",
+    intro:
+      "Llegó el momento de comprobar el aprendizaje. Imagina que debes emitir un juicio sustentado sobre lo que el aprendiz alcanzó.",
+    preguntate:
+      "¿Qué presentará, ejecutará o responderá? ¿La evidencia permite valorar los criterios de evaluación? ¿Demuestra aprendizaje o solamente confirma que participó en una actividad?",
+    reto:
+      "No confundas actividad con evidencia: la actividad ayuda a aprender; la evidencia permite demostrar lo aprendido. Selecciona conocimiento, desempeño o producto según lo que realmente deba comprobarse.",
+    verifica:
+      "Haz esta prueba: si solo tuvieras esta evidencia, ¿podrías determinar con objetividad si se alcanzó el resultado? ¿Es observable, verificable y coherente con los criterios?",
+  },
+  {
+    id: "estrategias_didacticas",
+    label: "Estrategias Didácticas",
+    type: "textarea",
+    rows: 5,
+    placeholder: "Aprendizaje basado en proyectos, casos, retos, simulaciones...",
+    intro: "Ya definimos qué hará el aprendiz. Ahora pensemos cómo vamos a facilitar que aprenda.",
+    preguntate:
+      "¿Necesita resolver un problema, analizar un caso, desarrollar un proyecto, enfrentar un reto, experimentar, simular o trabajar colaborativamente? ¿Qué estrategia le permitirá asumir un papel activo?",
+    reto:
+      "No repitas la actividad ni reduzcas la estrategia a una explicación del instructor. Selecciona el camino metodológico que mejor permita alcanzar los resultados en ese contexto.",
+    verifica:
+      "¿La estrategia lleva al aprendiz a actuar, analizar, decidir, crear, practicar o resolver? ¿Es viable con el tiempo, el ambiente y los recursos disponibles?",
+  },
+  {
+    id: "ambientes_tipificados",
+    label: "Ambientes de Aprendizaje Tipificados",
+    type: "textarea",
+    rows: 4,
+    placeholder: "Relaciona ambiente, materiales e instructores como una misma decisión.",
+    intro:
+      "Ahora vamos a organizar las condiciones que permitirán ejecutar la actividad: el ambiente, los materiales y los instructores deben responder a una misma decisión pedagógica.",
+    preguntate:
+      "¿Qué escenario requiere la actividad? ¿Con qué recursos debe contar? ¿Qué perfiles de instructores se necesitan para acompañarla y evaluarla?",
+    reto:
+      "No selecciones estos elementos por separado. Verifica que ambiente, materiales e instructores sean coherentes con la estrategia, la evidencia y las condiciones de seguridad, salud y ambiente.",
+    verifica:
+      "Imagina la actividad en ejecución: ¿el lugar, los recursos y el equipo humano permiten desarrollarla de principio a fin?",
+  },
+  {
+    id: "ambiente",
+    label: "Ambiente",
+    type: "textarea",
+    rows: 3,
+    placeholder: "Aula, taller, laboratorio, empresa, simulador o ambiente virtual.",
+    intro:
+      "Aterricemos la actividad en un escenario concreto. ¿Dónde podrá el aprendiz realizar lo que has planeado?",
+    preguntate:
+      "¿Se necesita aula, taller, laboratorio, empresa, unidad productiva, simulador o ambiente virtual? ¿Qué condiciones técnicas, pedagógicas y de seguridad debe ofrecer?",
+    reto:
+      "Selecciona el ambiente por su pertinencia, no solamente porque esté disponible. Indica el espacio concreto en el que se ejecutará la actividad.",
+    verifica:
+      "¿Ese ambiente permite realizar la actividad, utilizar la estrategia y producir la evidencia? ¿Otra persona podría ubicarlo o gestionarlo con la información registrada?",
+  },
+  {
+    id: "materiales_formacion",
+    label: "Materiales de Formación",
+    type: "textarea",
+    rows: 4,
+    placeholder: "Documentos, insumos, equipos, herramientas, software o recursos digitales.",
+    intro:
+      "Mira nuevamente la actividad y selecciona únicamente los recursos que realmente harán posible el aprendizaje.",
+    preguntate:
+      "¿Qué necesita el aprendiz? ¿Qué requiere el instructor? ¿Qué documentos, insumos, equipos, herramientas, software o recursos digitales son indispensables? ¿Están disponibles y en cantidad suficiente?",
+    reto:
+      "No construyas un inventario general ni selecciones materiales solo porque existen. Cada recurso debe cumplir una función concreta en la actividad.",
+    verifica:
+      "Revisa cada material: ¿puedes explicar para qué se utilizará? ¿Es compatible con el ambiente y la estrategia? ¿Su disponibilidad está confirmada?",
+  },
+  {
+    id: "instructores",
+    label: "Instructores",
+    type: "textarea",
+    rows: 3,
+    placeholder: "Indica quién orienta, acompaña, hace seguimiento o evalúa.",
+    intro: "Definamos ahora cómo participará el equipo ejecutor en esta actividad.",
+    preguntate:
+      "¿Quién orientará cada componente? ¿Quién acompañará la práctica? ¿Quién hará seguimiento o evaluará? ¿Las responsabilidades corresponden con el perfil de cada instructor?",
+    reto:
+      "No registres nombres sin función. Cuando participen varios instructores, su aporte debe integrar el proceso y evitar fragmentaciones o duplicidades.",
+    verifica:
+      "¿Cada instructor tiene una responsabilidad clara? ¿Las intervenciones están coordinadas? ¿El aprendiz percibirá una sola ruta formativa?",
+  },
+  {
+    id: "observaciones",
+    label: "Observaciones",
+    type: "textarea",
+    rows: 3,
+    placeholder: "Acuerdos, adaptaciones, restricciones, contingencias o decisiones útiles.",
+    intro:
+      "Antes de cerrar, piensa en quien tendrá que ejecutar esta planeación. ¿Hay una condición importante que todavía no aparece en los demás campos?",
+    preguntate:
+      "¿Existen acuerdos, adaptaciones, restricciones, contingencias, distribución de grupos, condiciones del ambiente o decisiones metodológicas que puedan afectar la ejecución?",
+    reto:
+      "Registra solo información nueva y útil. No repitas datos ya consignados ni conviertas este espacio en comentarios generales.",
+    verifica:
+      "Lee la observación: ¿ayuda a prevenir un problema, tomar una decisión o garantizar la continuidad del proceso? Si no, revisa si realmente es necesaria.",
+  },
+];
+
+const COMPLEMENTARY_FIELD_MAP = new Map(
+  COMPLEMENTARY_FIELDS.map((field) => [field.id, field]),
+);
+
+function normalizeTematicas(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function getStringValue(record: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
+function getNumberValue(record: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return 0;
+}
 
 export function PlaneacionWizardShell({
   contexto,
@@ -70,18 +306,32 @@ export function PlaneacionWizardShell({
   // Form State
   const [faseId, setFaseId] = useState<string>("");
   const [actividadId, setActividadId] = useState<string>("");
+  const [proyectoAsignaciones, setProyectoAsignaciones] = useState<
+    ContextoAsignacionProyecto[]
+  >([]);
   const [selectedConocimientos, setSelectedConocimientos] = useState<string[]>([]);
   const [selectedCriterios, setSelectedCriterios] = useState<string[]>([]);
   
   // Complementarios
+  const [actividadesAprendizaje, setActividadesAprendizaje] = useState("");
   const [estrategias, setEstrategias] = useState("");
-  const [ambientes, setAmbientes] = useState("");
-  const [recursos, setRecursos] = useState("");
+  const [ambientesTipificados, setAmbientesTipificados] = useState("");
+  const [ambiente, setAmbiente] = useState("");
+  const [materialesFormacion, setMaterialesFormacion] = useState("");
+  const [descripcionEvidencia, setDescripcionEvidencia] = useState("");
+  const [observaciones, setObservaciones] = useState("");
   const [duracionHoras, setDuracionHoras] = useState<number>(0);
-  const [instructor, setInstructor] = useState("");
-  const [tematicasSaber, setTematicasSaber] = useState("");
-  const [tematicasProceso, setTematicasProceso] = useState("");
-  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [horasTrabajoDirecto, setHorasTrabajoDirecto] = useState<number>(0);
+  const [horasTrabajoIndependiente, setHorasTrabajoIndependiente] = useState<number>(0);
+  const [instructores, setInstructores] = useState("");
+  const [tematicasSaber, setTematicasSaber] = useState<string[]>([]);
+  const [tematicasProceso, setTematicasProceso] = useState<string[]>([]);
+  const [nuevaTematicaSaber, setNuevaTematicaSaber] = useState("");
+  const [nuevaTematicaProceso, setNuevaTematicaProceso] = useState("");
+  const [instructionTarget, setInstructionTarget] = useState<InstructionTarget | null>(null);
+  const [readComplementaryFields, setReadComplementaryFields] = useState<Set<ComplementaryFieldId>>(
+    () => new Set(),
+  );
 
   // Confirmed details
   const [confirmedPlanning, setConfirmedPlanning] = useState<PlaneacionResponse | null>(null);
@@ -118,6 +368,12 @@ export function PlaneacionWizardShell({
   useEffect(() => {
     void loadPlannings();
   }, [loadPlannings]);
+
+  useEffect(() => {
+    if (activeStep === "curricular" || activeStep === "complementario") {
+      setInstructionTarget({ kind: "step", step: activeStep });
+    }
+  }, [activeStep]);
 
   // Map competence map
   const competenciasMap = useMemo(() => {
@@ -213,16 +469,26 @@ export function PlaneacionWizardShell({
   const resetForm = () => {
     setFaseId("");
     setActividadId("");
+    setProyectoAsignaciones([]);
     setSelectedResultId(null);
     setSelectedConocimientos([]);
     setSelectedCriterios([]);
+    setActividadesAprendizaje("");
     setEstrategias("");
-    setAmbientes("");
-    setRecursos("");
+    setAmbientesTipificados("");
+    setAmbiente("");
+    setMaterialesFormacion("");
+    setDescripcionEvidencia("");
+    setObservaciones("");
     setDuracionHoras(0);
-    setInstructor("");
-    setTematicasSaber("");
-    setTematicasProceso("");
+    setHorasTrabajoDirecto(0);
+    setHorasTrabajoIndependiente(0);
+    setInstructores("");
+    setTematicasSaber([]);
+    setTematicasProceso([]);
+    setNuevaTematicaSaber("");
+    setNuevaTematicaProceso("");
+    setReadComplementaryFields(new Set());
     setActivePlanningId(null);
     setConfirmedPlanning(null);
   };
@@ -235,21 +501,42 @@ export function PlaneacionWizardShell({
     try {
       const details = await fetchPlaneacionDetalle(planning.id);
       const resultId = details.resultado_id ?? details.resultados_ids[0] ?? fallbackResultadoId;
+      const resultadoContexto = contexto.competencias
+        .flatMap((competencia) => competencia.resultados)
+        .find((resultado) => resultado.id === resultId);
+      const savedAssignments = Array.isArray(
+        details.datos_complementarios.asignaciones_proyecto,
+      )
+        ? (details.datos_complementarios
+            .asignaciones_proyecto as ContextoAsignacionProyecto[])
+        : [];
+      const assignments =
+        savedAssignments.length > 0
+          ? savedAssignments
+          : (resultadoContexto?.asignaciones_proyecto ?? []);
       setActivePlanningId(details.id);
       setSelectedResultId(resultId);
-      setFaseId(details.fase_id ?? "");
-      setActividadId(details.actividad_id ?? "");
+      setProyectoAsignaciones(assignments);
+      setFaseId(assignments[0]?.fase_id ?? details.fase_id ?? "");
+      setActividadId(assignments[0]?.actividad_id ?? details.actividad_id ?? "");
       setSelectedConocimientos(details.conocimientos_ids);
       setSelectedCriterios(details.criterios_ids);
 
       const c = details.datos_complementarios;
-      setEstrategias((c.estrategias_didacticas as string) ?? "");
-      setAmbientes((c.ambientes_aprendizaje as string) ?? "");
-      setRecursos((c.recursos_didacticos as string) ?? "");
-      setDuracionHoras((c.duracion_horas as number) ?? 0);
-      setInstructor((c.instructor_responsable as string) ?? "");
-      setTematicasSaber((c.tematicas_saber as string) ?? "");
-      setTematicasProceso((c.tematicas_proceso as string) ?? "");
+      setActividadesAprendizaje(getStringValue(c, "actividades_aprendizaje"));
+      setEstrategias(getStringValue(c, "estrategias_didacticas"));
+      setAmbientesTipificados(getStringValue(c, "ambientes_tipificados"));
+      setAmbiente(getStringValue(c, "ambiente", "ambientes_aprendizaje"));
+      setMaterialesFormacion(getStringValue(c, "materiales_formacion", "recursos_didacticos"));
+      setDescripcionEvidencia(getStringValue(c, "descripcion_evidencia_aprendizaje"));
+      setObservaciones(getStringValue(c, "observaciones"));
+      setDuracionHoras(getNumberValue(c, "duracion_actividad_horas", "duracion_horas"));
+      setHorasTrabajoDirecto(getNumberValue(c, "horas_trabajo_directo"));
+      setHorasTrabajoIndependiente(getNumberValue(c, "horas_trabajo_independiente"));
+      setInstructores(getStringValue(c, "instructores", "instructor_responsable"));
+      setTematicasSaber(normalizeTematicas(c.tematicas_saber));
+      setTematicasProceso(normalizeTematicas(c.tematicas_proceso));
+      setReadComplementaryFields(new Set(COMPLEMENTARY_FIELDS.map((field) => field.id)));
 
       if (details.estado === "COMPLETO") {
         setConfirmedPlanning(details);
@@ -285,8 +572,10 @@ export function PlaneacionWizardShell({
     const resultado = contexto.competencias
       .find((competencia) => competencia.id === selectedCompId)
       ?.resultados.find((item) => item.id === resultadoId);
-    setFaseId(resultado?.fase_id ?? "");
-    setActividadId(resultado?.actividad_id ?? "");
+    const assignments = resultado?.asignaciones_proyecto ?? [];
+    setProyectoAsignaciones(assignments);
+    setFaseId(assignments[0]?.fase_id ?? resultado?.fase_id ?? "");
+    setActividadId(assignments[0]?.actividad_id ?? resultado?.actividad_id ?? "");
     setResultModalCompetenciaId(null);
 
     if (existing) {
@@ -315,11 +604,22 @@ export function PlaneacionWizardShell({
       conocimientos_ids: selectedConocimientos,
       criterios_ids: selectedCriterios,
       datos_complementarios: {
+        actividades_aprendizaje: actividadesAprendizaje,
+        duracion_actividad_horas: duracionHoras,
+        horas_trabajo_directo: horasTrabajoDirecto,
+        horas_trabajo_independiente: horasTrabajoIndependiente,
+        descripcion_evidencia_aprendizaje: descripcionEvidencia,
         estrategias_didacticas: estrategias,
-        ambientes_aprendizaje: ambientes,
-        recursos_didacticos: recursos,
+        ambientes_tipificados: ambientesTipificados,
+        ambiente,
+        materiales_formacion: materialesFormacion,
+        instructores,
+        observaciones,
+        ambientes_aprendizaje: ambiente,
+        recursos_didacticos: materialesFormacion,
         duracion_horas: duracionHoras,
-        instructor_responsable: instructor,
+        instructor_responsable: instructores,
+        asignaciones_proyecto: proyectoAsignaciones,
         tematicas_saber: tematicasSaber,
         tematicas_proceso: tematicasProceso,
       },
@@ -400,8 +700,132 @@ export function PlaneacionWizardShell({
     downloadAnchor.remove();
   };
 
-  const remindInstructions = () => {
-    toast.info("Antes de agregar temáticas, revisa las instrucciones.");
+  const addTematica = (
+    value: string,
+    setValue: React.Dispatch<React.SetStateAction<string>>,
+    setItems: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      toast.warning("Escribe una temática antes de adicionarla.");
+      return;
+    }
+    setItems((current) =>
+      current.some((item) => item.toLocaleLowerCase() === normalized.toLocaleLowerCase())
+        ? current
+        : [...current, normalized],
+    );
+    setValue("");
+  };
+
+  const openComplementaryFieldInstruction = (field: ComplementaryFieldId) => {
+    setInstructionTarget({ field, kind: "field" });
+  };
+
+  const closeInstruction = (markAsRead = false) => {
+    if (markAsRead && instructionTarget?.kind === "field") {
+      setReadComplementaryFields((current) => {
+        const next = new Set(current);
+        next.add(instructionTarget.field);
+        return next;
+      });
+    }
+    setInstructionTarget(null);
+  };
+
+  const getComplementaryFieldValue = (field: ComplementaryFieldId): string | number => {
+    switch (field) {
+      case "actividades_aprendizaje":
+        return actividadesAprendizaje;
+      case "duracion_actividad_horas":
+        return duracionHoras || "";
+      case "horas_trabajo_directo":
+        return horasTrabajoDirecto || "";
+      case "horas_trabajo_independiente":
+        return horasTrabajoIndependiente || "";
+      case "descripcion_evidencia_aprendizaje":
+        return descripcionEvidencia;
+      case "estrategias_didacticas":
+        return estrategias;
+      case "ambientes_tipificados":
+        return ambientesTipificados;
+      case "ambiente":
+        return ambiente;
+      case "materiales_formacion":
+        return materialesFormacion;
+      case "instructores":
+        return instructores;
+      case "observaciones":
+        return observaciones;
+    }
+  };
+
+  const updateComplementaryField = (field: ComplementaryFieldId, value: string) => {
+    switch (field) {
+      case "actividades_aprendizaje":
+        setActividadesAprendizaje(value);
+        break;
+      case "duracion_actividad_horas":
+        setDuracionHoras(Number(value) || 0);
+        break;
+      case "horas_trabajo_directo":
+        setHorasTrabajoDirecto(Number(value) || 0);
+        break;
+      case "horas_trabajo_independiente":
+        setHorasTrabajoIndependiente(Number(value) || 0);
+        break;
+      case "descripcion_evidencia_aprendizaje":
+        setDescripcionEvidencia(value);
+        break;
+      case "estrategias_didacticas":
+        setEstrategias(value);
+        break;
+      case "ambientes_tipificados":
+        setAmbientesTipificados(value);
+        break;
+      case "ambiente":
+        setAmbiente(value);
+        break;
+      case "materiales_formacion":
+        setMaterialesFormacion(value);
+        break;
+      case "instructores":
+        setInstructores(value);
+        break;
+      case "observaciones":
+        setObservaciones(value);
+        break;
+    }
+  };
+
+  const getSavedComplementaryValue = (
+    record: Record<string, unknown>,
+    field: ComplementaryFieldId,
+  ): string | number => {
+    switch (field) {
+      case "actividades_aprendizaje":
+        return getStringValue(record, "actividades_aprendizaje");
+      case "duracion_actividad_horas":
+        return getNumberValue(record, "duracion_actividad_horas", "duracion_horas");
+      case "horas_trabajo_directo":
+        return getNumberValue(record, "horas_trabajo_directo");
+      case "horas_trabajo_independiente":
+        return getNumberValue(record, "horas_trabajo_independiente");
+      case "descripcion_evidencia_aprendizaje":
+        return getStringValue(record, "descripcion_evidencia_aprendizaje");
+      case "estrategias_didacticas":
+        return getStringValue(record, "estrategias_didacticas");
+      case "ambientes_tipificados":
+        return getStringValue(record, "ambientes_tipificados");
+      case "ambiente":
+        return getStringValue(record, "ambiente", "ambientes_aprendizaje");
+      case "materiales_formacion":
+        return getStringValue(record, "materiales_formacion", "recursos_didacticos");
+      case "instructores":
+        return getStringValue(record, "instructores", "instructor_responsable");
+      case "observaciones":
+        return getStringValue(record, "observaciones");
+    }
   };
 
   // Sidebar step rendering
@@ -416,13 +840,17 @@ export function PlaneacionWizardShell({
     actividadSelected: actividadId.length > 0,
     conocimientosSelected: selectedConocimientos.length,
     criteriosSelected: selectedCriterios.length,
-    instructor,
+    instructor: instructores,
     duracionHoras,
     estrategias,
-    ambientes,
-    recursos,
+    ambientes: ambiente,
+    recursos: materialesFormacion,
     confirmed: confirmedPlanning !== null,
   });
+  const activeFieldInstruction =
+    instructionTarget?.kind === "field"
+      ? (COMPLEMENTARY_FIELD_MAP.get(instructionTarget.field) ?? null)
+      : null;
 
   return (
     <div id="planeacion-step-workspace" className="grid gap-6">
@@ -792,33 +1220,54 @@ export function PlaneacionWizardShell({
             {/* STEP 1: CURRICULAR */}
             {activeStep === "curricular" && (
               <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">1. Estructura Curricular y de Proyecto</h2>
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+                      Orientación pedagógica
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold text-[var(--foreground)]">1. Estructura Curricular y de Proyecto</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInstructionTarget({ kind: "step", step: "curricular" })}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)] hover:bg-white"
+                  >
+                    <Info className="h-4 w-4" />
+                    Instrucciones
+                  </button>
+                </div>
                 
                 <div className="grid gap-5">
-                  {/* Selectores Proyecto */}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <p className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                        Fase del Proyecto Formativo
-                      </p>
-                      <div className="min-h-10 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
-                        {faseId
-                          ? faseMap.get(faseId)?.nombre_fase
-                          : "El RAP no tiene una fase asociada en la matriz del proyecto."}
+                  <div>
+                    <p className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Fases y actividades del proyecto
+                    </p>
+                    {proyectoAsignaciones.length > 0 ? (
+                      <div className="grid gap-3">
+                        {proyectoAsignaciones.map((assignment) => {
+                          const fase = faseMap.get(assignment.fase_id);
+                          const actividad = fase?.actividades.find(
+                            (item) => item.id === assignment.actividad_id,
+                          );
+                          return (
+                            <div
+                              key={`${assignment.fase_id}-${assignment.actividad_id}`}
+                              className="grid gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 sm:grid-cols-[12rem_1fr]"
+                            >
+                              <strong>{fase?.nombre_fase ?? "Fase no disponible"}</strong>
+                              <span>
+                                {actividad?.descripcion ?? "Actividad no disponible"}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-
-                    <div>
-                      <p className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                        Actividad del Proyecto
-                      </p>
-                      <div className="min-h-10 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
-                        {actividadId
-                          ? availableActividades.find((item) => item.id === actividadId)
-                              ?.descripcion
-                          : "El RAP no tiene una actividad asociada en la matriz del proyecto."}
+                    ) : (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                        El RAP no tiene fases o actividades asociadas en la matriz del
+                        proyecto.
                       </div>
-                    </div>
+                    )}
                   </div>
                   <p className="text-xs text-[var(--muted)]">
                     La fase y la actividad se cargan automáticamente desde la matriz del
@@ -891,28 +1340,66 @@ export function PlaneacionWizardShell({
                       ))}
                     </div>
                     <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <label htmlFor="tematicas-saber" className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                          Temáticas adicionales de conceptos y principios
-                        </label>
+                      <label htmlFor="tematicas-saber" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Temáticas adicionales de conceptos y principios
+                      </label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          id="tematicas-saber"
+                          value={nuevaTematicaSaber}
+                          onChange={(event) => setNuevaTematicaSaber(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addTematica(
+                                nuevaTematicaSaber,
+                                setNuevaTematicaSaber,
+                                setTematicasSaber,
+                              );
+                            }
+                          }}
+                          placeholder="Escribe una temática complementaria."
+                          className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                        />
                         <button
                           type="button"
-                          onClick={() => setInstructionsOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                          onClick={() =>
+                            addTematica(
+                              nuevaTematicaSaber,
+                              setNuevaTematicaSaber,
+                              setTematicasSaber,
+                            )
+                          }
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
                         >
-                          <Info className="h-4 w-4" />
-                          Instrucciones
+                          <Plus className="h-4 w-4" />
+                          Adicionar temática
                         </button>
                       </div>
-                      <textarea
-                        id="tematicas-saber"
-                        value={tematicasSaber}
-                        onFocus={remindInstructions}
-                        onChange={(event) => setTematicasSaber(event.target.value)}
-                        rows={3}
-                        placeholder="Agrega las temáticas complementarias que se abordarán."
-                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                      />
+                      {tematicasSaber.length > 0 && (
+                        <ul className="mt-3 grid gap-2">
+                          {tematicasSaber.map((tematica) => (
+                            <li
+                              key={tematica}
+                              className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+                            >
+                              <span>{tematica}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setTematicasSaber((items) =>
+                                    items.filter((item) => item !== tematica),
+                                  )
+                                }
+                                aria-label={`Eliminar temática ${tematica}`}
+                                className="text-emerald-700 hover:text-rose-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
 
@@ -949,28 +1436,66 @@ export function PlaneacionWizardShell({
                       ))}
                     </div>
                     <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <label htmlFor="tematicas-proceso" className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                          Temáticas adicionales de proceso
-                        </label>
+                      <label htmlFor="tematicas-proceso" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Temáticas adicionales de proceso
+                      </label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          id="tematicas-proceso"
+                          value={nuevaTematicaProceso}
+                          onChange={(event) => setNuevaTematicaProceso(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addTematica(
+                                nuevaTematicaProceso,
+                                setNuevaTematicaProceso,
+                                setTematicasProceso,
+                              );
+                            }
+                          }}
+                          placeholder="Escribe una temática procedimental."
+                          className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                        />
                         <button
                           type="button"
-                          onClick={() => setInstructionsOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                          onClick={() =>
+                            addTematica(
+                              nuevaTematicaProceso,
+                              setNuevaTematicaProceso,
+                              setTematicasProceso,
+                            )
+                          }
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
                         >
-                          <Info className="h-4 w-4" />
-                          Instrucciones
+                          <Plus className="h-4 w-4" />
+                          Adicionar temática
                         </button>
                       </div>
-                      <textarea
-                        id="tematicas-proceso"
-                        value={tematicasProceso}
-                        onFocus={remindInstructions}
-                        onChange={(event) => setTematicasProceso(event.target.value)}
-                        rows={3}
-                        placeholder="Agrega las temáticas procedimentales complementarias."
-                        className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                      />
+                      {tematicasProceso.length > 0 && (
+                        <ul className="mt-3 grid gap-2">
+                          {tematicasProceso.map((tematica) => (
+                            <li
+                              key={tematica}
+                              className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+                            >
+                              <span>{tematica}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setTematicasProceso((items) =>
+                                    items.filter((item) => item !== tematica),
+                                  )
+                                }
+                                aria-label={`Eliminar temática ${tematica}`}
+                                className="text-emerald-700 hover:text-rose-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
 
@@ -1039,76 +1564,101 @@ export function PlaneacionWizardShell({
             {/* STEP 2: COMPLEMENTARIO */}
             {activeStep === "complementario" && (
               <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-6 shadow-sm">
-                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">2. Campos Complementarios</h2>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">
+                      Orientación pedagógica
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold text-[var(--foreground)]">2. Campos Complementarios</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInstructionTarget({ kind: "step", step: "complementario" })}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent-strong)] hover:bg-white"
+                  >
+                    <Info className="h-4 w-4" />
+                    Instrucciones
+                  </button>
+                </div>
                 <p className="text-xs text-amber-700 mb-4 bg-amber-50 border border-amber-100 p-2.5 rounded-lg">
                   💡 <strong>Nota sobre Brecha Documental:</strong> No existe un formato de planeación institucional estricto configurado en este repositorio. Se expone un bloque extensible de campos didácticos recomendados.
                 </p>
 
-                <div className="grid gap-5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Instructor Responsable
-                    </label>
-                    <input
-                      type="text"
-                      value={instructor}
-                      onChange={(e) => setInstructor(e.target.value)}
-                      placeholder="Nombre del instructor a cargo"
-                      className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Duración de Acompañamiento (Horas)
-                    </label>
-                    <input
-                      type="number"
-                      value={duracionHoras || ""}
-                      onChange={(e) => setDuracionHoras(parseInt(e.target.value) || 0)}
-                      placeholder="Número de horas"
-                      className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Estrategias Didácticas Activas
-                    </label>
-                    <textarea
-                      value={estrategias}
-                      onChange={(e) => setEstrategias(e.target.value)}
-                      placeholder="Actividades de aprendizaje, talleres, simulaciones, etc."
-                      rows={4}
-                      className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)] resize-y"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Ambientes de Aprendizaje
-                    </label>
-                    <textarea
-                      value={ambientes}
-                      onChange={(e) => setAmbientes(e.target.value)}
-                      placeholder="Aulas teóricas, talleres de software, plataformas virtuales, etc."
-                      rows={3}
-                      className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)] resize-y"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                      Recursos Didácticos y Medios
-                    </label>
-                    <textarea
-                      value={recursos}
-                      onChange={(e) => setRecursos(e.target.value)}
-                      placeholder="Equipos, guías de aprendizaje, computadores, licencias, etc."
-                      rows={3}
-                      className="w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--accent)] resize-y"
-                    />
-                  </div>
+                <div className="grid gap-4">
+                  {COMPLEMENTARY_FIELDS.map((field) => {
+                    const hasReadInstruction = readComplementaryFields.has(field.id);
+                    const value = getComplementaryFieldValue(field.id);
+                    return (
+                      <article
+                        key={field.id}
+                        className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={field.id}
+                              className="block text-sm font-bold text-slate-800"
+                            >
+                              {field.label}
+                            </label>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex min-h-8 items-center rounded-lg px-2.5 py-1 text-xs font-semibold",
+                                hasReadInstruction
+                                  ? "bg-emerald-50 text-emerald-800"
+                                  : "bg-amber-50 text-amber-800",
+                              )}
+                            >
+                              {hasReadInstruction ? "Instrucción leída" : "Pendiente de lectura"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openComplementaryFieldInstruction(field.id)}
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-strong)] hover:bg-white"
+                            >
+                              <Info className="h-4 w-4" />
+                              Leer instrucción
+                            </button>
+                          </div>
+                        </div>
+                        {field.type === "textarea" ? (
+                          <textarea
+                            id={field.id}
+                            value={String(value)}
+                            disabled={!hasReadInstruction}
+                            onChange={(event) =>
+                              updateComplementaryField(field.id, event.target.value)
+                            }
+                            placeholder={
+                              hasReadInstruction
+                                ? field.placeholder
+                                : "Lee la instrucción para habilitar este campo."
+                            }
+                            rows={field.rows ?? 3}
+                            className="w-full resize-y rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+                          />
+                        ) : (
+                          <input
+                            id={field.id}
+                            type={field.type}
+                            value={value}
+                            disabled={!hasReadInstruction}
+                            onChange={(event) =>
+                              updateComplementaryField(field.id, event.target.value)
+                            }
+                            placeholder={
+                              hasReadInstruction
+                                ? field.placeholder
+                                : "Lee la instrucción para habilitar este campo."
+                            }
+                            className="min-h-10 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)]/70 focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+                          />
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
 
                 <div className="mt-6 flex justify-between gap-3 border-t border-[var(--line)] pt-4">
@@ -1159,8 +1709,8 @@ export function PlaneacionWizardShell({
                       <p className="mt-1 font-semibold">{selectedCompetencia.codigo_competencia} - {selectedCompetencia.nombre_competencia}</p>
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-500 uppercase">Instructor</h4>
-                      <p className="mt-1 font-semibold">{instructor || "No asignado"}</p>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Instructores</h4>
+                      <p className="mt-1 font-semibold">{instructores || "No asignado"}</p>
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-slate-500 uppercase">Duración (Horas)</h4>
@@ -1191,10 +1741,12 @@ export function PlaneacionWizardShell({
                           <li key={k.id}>{k.descripcion}</li>
                         ))}
                     </ul>
-                    {tematicasSaber && (
-                      <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
-                        <strong>Temáticas adicionales:</strong> {tematicasSaber}
-                      </p>
+                    {tematicasSaber.length > 0 && (
+                      <ul className="mt-3 list-disc rounded-lg bg-slate-100 py-3 pl-8 pr-3 text-sm text-slate-700">
+                        {tematicasSaber.map((tematica) => (
+                          <li key={tematica}>{tematica}</li>
+                        ))}
+                      </ul>
                     )}
                   </div>
 
@@ -1207,10 +1759,12 @@ export function PlaneacionWizardShell({
                           <li key={k.id}>{k.descripcion}</li>
                         ))}
                     </ul>
-                    {tematicasProceso && (
-                      <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
-                        <strong>Temáticas adicionales:</strong> {tematicasProceso}
-                      </p>
+                    {tematicasProceso.length > 0 && (
+                      <ul className="mt-3 list-disc rounded-lg bg-slate-100 py-3 pl-8 pr-3 text-sm text-slate-700">
+                        {tematicasProceso.map((tematica) => (
+                          <li key={tematica}>{tematica}</li>
+                        ))}
+                      </ul>
                     )}
                   </div>
 
@@ -1226,18 +1780,14 @@ export function PlaneacionWizardShell({
                   </div>
 
                   <div className="border-t pt-4 grid gap-3 text-sm text-slate-700">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">Estrategias Didácticas</h4>
-                      <p className="whitespace-pre-wrap">{estrategias || "No detallado"}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">Ambientes</h4>
-                      <p className="whitespace-pre-wrap">{ambientes || "No detallado"}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">Recursos</h4>
-                      <p className="whitespace-pre-wrap">{recursos || "No detallado"}</p>
-                    </div>
+                    {COMPLEMENTARY_FIELDS.map((field) => (
+                      <div key={field.id}>
+                        <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">{field.label}</h4>
+                        <p className="whitespace-pre-wrap">
+                          {String(getComplementaryFieldValue(field.id) || "No detallado")}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -1315,9 +1865,13 @@ export function PlaneacionWizardShell({
                             </p>
                           </div>
                           <div>
-                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Instructor Responsable</span>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Instructores</span>
                             <p className="mt-1 font-semibold text-slate-800">
-                              {(confirmedPlanning.datos_complementarios.instructor_responsable as string) || "No asignado"}
+                              {getStringValue(
+                                confirmedPlanning.datos_complementarios,
+                                "instructores",
+                                "instructor_responsable",
+                              ) || "No asignado"}
                             </p>
                           </div>
                           <div>
@@ -1334,9 +1888,19 @@ export function PlaneacionWizardShell({
                             </p>
                           </div>
                           <div>
-                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Duración de Acompañamiento</span>
+                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Duración de actividad</span>
                             <p className="mt-1 font-semibold text-slate-800">
-                              {confirmedPlanning.datos_complementarios.duracion_horas ? `${confirmedPlanning.datos_complementarios.duracion_horas} Horas` : "No asignado"}
+                              {getNumberValue(
+                                confirmedPlanning.datos_complementarios,
+                                "duracion_actividad_horas",
+                                "duracion_horas",
+                              )
+                                ? `${getNumberValue(
+                                    confirmedPlanning.datos_complementarios,
+                                    "duracion_actividad_horas",
+                                    "duracion_horas",
+                                  )} Horas`
+                                : "No asignado"}
                             </p>
                           </div>
                         </div>
@@ -1366,12 +1930,16 @@ export function PlaneacionWizardShell({
                                   <li key={k.id}>{k.descripcion}</li>
                                 ))}
                             </ul>
-                            {(confirmedPlanning.datos_complementarios.tematicas_saber as string) && (
-                              <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                                <strong>Temáticas adicionales:</strong>{" "}
-                                {confirmedPlanning.datos_complementarios.tematicas_saber as string}
+                            {normalizeTematicas(
+                              confirmedPlanning.datos_complementarios.tematicas_saber,
+                            ).map((tematica) => (
+                              <p
+                                key={tematica}
+                                className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"
+                              >
+                                {tematica}
                               </p>
-                            )}
+                            ))}
                           </div>
                           <div>
                             <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -1384,12 +1952,16 @@ export function PlaneacionWizardShell({
                                   <li key={k.id}>{k.descripcion}</li>
                                 ))}
                             </ul>
-                            {(confirmedPlanning.datos_complementarios.tematicas_proceso as string) && (
-                              <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                                <strong>Temáticas adicionales:</strong>{" "}
-                                {confirmedPlanning.datos_complementarios.tematicas_proceso as string}
+                            {normalizeTematicas(
+                              confirmedPlanning.datos_complementarios.tematicas_proceso,
+                            ).map((tematica) => (
+                              <p
+                                key={tematica}
+                                className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"
+                              >
+                                {tematica}
                               </p>
-                            )}
+                            ))}
                           </div>
                         </div>
 
@@ -1409,24 +1981,21 @@ export function PlaneacionWizardShell({
 
                         {/* Campos Complementarios */}
                         <div className="grid gap-4 text-sm">
-                          <div>
-                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Estrategias Didácticas Activas</span>
-                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                              {(confirmedPlanning.datos_complementarios.estrategias_didacticas as string) || "No detallado"}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Ambientes de Aprendizaje</span>
-                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                              {(confirmedPlanning.datos_complementarios.ambientes_aprendizaje as string) || "No detallado"}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Recursos Didácticos y Medios</span>
-                            <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                              {(confirmedPlanning.datos_complementarios.recursos_didacticos as string) || "No detallado"}
-                            </p>
-                          </div>
+                          {COMPLEMENTARY_FIELDS.map((field) => (
+                            <div key={field.id}>
+                              <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                {field.label}
+                              </span>
+                              <p className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                {String(
+                                  getSavedComplementaryValue(
+                                    confirmedPlanning.datos_complementarios,
+                                    field.id,
+                                  ) || "No detallado",
+                                )}
+                              </p>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -1460,13 +2029,13 @@ export function PlaneacionWizardShell({
         </section>
       )}
 
-      {instructionsOpen && (
+      {instructionTarget !== null && (
         <div
           role="presentation"
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setInstructionsOpen(false);
+              closeInstruction();
             }
           }}
         >
@@ -1488,11 +2057,16 @@ export function PlaneacionWizardShell({
                   <h2 id="planning-instructions-title" className="mt-1 text-xl font-bold text-slate-900">
                     Instrucciones antes de agregar información
                   </h2>
+                  {activeFieldInstruction !== null ? (
+                    <p className="mt-1 text-sm font-semibold text-emerald-800">
+                      {activeFieldInstruction.label}
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setInstructionsOpen(false)}
+                onClick={() => closeInstruction()}
                 aria-label="Cerrar instrucciones"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-slate-900"
               >
@@ -1501,32 +2075,80 @@ export function PlaneacionWizardShell({
             </header>
 
             <div className="grid gap-5 px-6 py-6 text-sm leading-6 text-slate-700">
-              <p>
-                Llegamos a los campos que convierten las decisiones pedagógicas en
-                condiciones reales de ejecución. Vamos a completarlos sin perder de
-                vista el aprendizaje que buscamos.
-              </p>
+              {activeFieldInstruction !== null ? (
+                <p>{activeFieldInstruction.intro}</p>
+              ) : instructionTarget.kind === "step" && instructionTarget.step === "curricular" ? (
+                <p>
+                  Vamos a iniciar la planeación pedagógica específica. Este es el
+                  momento de transformar los resultados de aprendizaje en una ruta
+                  formativa que pueda ejecutarse.
+                </p>
+              ) : (
+                <p>
+                  Llegamos a los campos que convierten las decisiones pedagógicas en
+                  condiciones reales de ejecución. Vamos a completarlos sin perder de
+                  vista el aprendizaje que buscamos.
+                </p>
+              )}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <h3 className="font-bold text-slate-900">Pregúntate:</h3>
                 <p className="mt-1">
-                  ¿Cada dato que vas a registrar se relaciona con la actividad de
-                  aprendizaje? ¿Refleja los acuerdos del equipo ejecutor y las
-                  condiciones reales del centro?
+                  {activeFieldInstruction !== null ? (
+                    activeFieldInstruction.preguntate
+                  ) : instructionTarget.kind === "step" && instructionTarget.step === "curricular" ? (
+                    <>
+                      ¿Tienes claros los resultados de aprendizaje, los conocimientos
+                      del saber y de proceso, y los criterios de evaluación que vas a
+                      integrar? ¿Reconoces la fase y la actividad del proyecto a las
+                      que responderá la planeación?
+                    </>
+                  ) : (
+                    <>
+                      ¿Cada dato que vas a registrar se relaciona con la actividad de
+                      aprendizaje? ¿Refleja los acuerdos del equipo ejecutor y las
+                      condiciones reales del centro?
+                    </>
+                  )}
                 </p>
               </div>
               <div>
                 <h3 className="font-bold text-slate-900">Tu reto:</h3>
                 <p className="mt-1">
-                  Evita diligenciar estos campos como una lista independiente.
-                  Ambiente, materiales, instructores, tiempo y evidencia deben
-                  funcionar como un conjunto.
+                  {activeFieldInstruction !== null ? (
+                    activeFieldInstruction.reto
+                  ) : instructionTarget.kind === "step" && instructionTarget.step === "curricular" ? (
+                    <>
+                      No comiences por una lista de temas. Empieza por definir qué
+                      debe lograr el aprendiz y cómo ese logro aporta al proyecto
+                      formativo.
+                    </>
+                  ) : (
+                    <>
+                      Evita diligenciar estos campos como una lista independiente.
+                      Ambiente, materiales, instructores, tiempo y evidencia deben
+                      funcionar como un conjunto.
+                    </>
+                  )}
                 </p>
               </div>
               <div className="rounded-xl border-l-4 border-amber-400 bg-amber-50 p-4">
                 <h3 className="font-bold text-amber-950">Antes de continuar, verifica:</h3>
                 <p className="mt-1 text-amber-950">
-                  Antes de avanzar, imagina que otro instructor recibe esta planeación:
-                  ¿podría ejecutarla sin tener que adivinar información?
+                  {activeFieldInstruction !== null ? (
+                    activeFieldInstruction.verifica
+                  ) : instructionTarget.kind === "step" && instructionTarget.step === "curricular" ? (
+                    <>
+                      Explícalo en una frase: ¿qué aprendizaje debe alcanzar el
+                      aprendiz en esta parte del proceso? Si todavía no es claro,
+                      revisa los referentes antes de continuar.
+                    </>
+                  ) : (
+                    <>
+                      Antes de avanzar, imagina que otro instructor recibe esta
+                      planeación: ¿podría ejecutarla sin tener que adivinar
+                      información?
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -1534,7 +2156,7 @@ export function PlaneacionWizardShell({
             <footer className="flex justify-end border-t border-slate-100 px-6 py-4">
               <button
                 type="button"
-                onClick={() => setInstructionsOpen(false)}
+                onClick={() => closeInstruction(true)}
                 className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
               >
                 Entendido
