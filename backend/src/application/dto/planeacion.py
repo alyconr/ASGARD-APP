@@ -9,6 +9,13 @@ from pydantic import BaseModel, Field
 
 
 # Context retrieval DTOs
+class ContextoAsignacionProyectoDTO(BaseModel):
+    """Project phase and activity assigned to a learning result."""
+
+    fase_id: uuid.UUID
+    actividad_id: uuid.UUID
+
+
 class ContextoResultadoDTO(BaseModel):
     """Learning result context metadata."""
 
@@ -16,6 +23,9 @@ class ContextoResultadoDTO(BaseModel):
     descripcion: str
     fase_id: uuid.UUID | None = None
     actividad_id: uuid.UUID | None = None
+    asignaciones_proyecto: list[ContextoAsignacionProyectoDTO] = Field(
+        default_factory=list
+    )
 
     model_config = {"from_attributes": True}
 

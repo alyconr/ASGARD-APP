@@ -92,9 +92,13 @@ async def test_obtener_contexto_success() -> None:
     mock_proj_result = MagicMock()
     mock_proj_result.scalar_one_or_none.return_value = proyecto
 
+    mock_project_drafts_result = MagicMock()
+    mock_project_drafts_result.scalars.return_value.all.return_value = []
+
     session.execute.side_effect = [
         mock_draft_result,  # draft lookup
         mock_proj_result,  # project lookup
+        mock_project_drafts_result,  # project drafts lookup
     ]
     session.get.return_value = programa
 

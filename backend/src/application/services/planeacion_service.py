@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from src.application.dto.planeacion import (
     ContextoActividadDTO,
+    ContextoAsignacionProyectoDTO,
     ContextoCompetenciaDTO,
     ContextoConocimientoDTO,
     ContextoCriterioDTO,
@@ -150,19 +151,38 @@ class PlaneacionPedagogicaService:
             )
 
         project_draft_stmt = select(BorradorSesion).where(
-            BorradorSesion.referencia_id == referencia_id,
             BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROYECTO,
         )
         project_draft_res = await self._session.execute(project_draft_stmt)
-        project_draft = project_draft_res.scalar_one_or_none()
+        project_draft = next(
+            (
+                draft
+                for draft in project_draft_res.scalars().all()
+                if (
+                    draft.payload_json.get("proyecto", {}).get("codigo_proyecto")
+                    == proyecto.codigo_proyecto
+                    and draft.payload_json.get("proyecto", {}).get(
+                        "nombre_proyecto"
+                    )
+                    == proyecto.nombre_proyecto
+                )
+            ),
+            None,
+        )
 
         phase_by_name = {fase.nombre_fase: fase for fase in proyecto.fases}
-        project_rap_links: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
+        project_rap_links: dict[str, list[tuple[uuid.UUID, uuid.UUID]]] = {}
         if project_draft is not None:
             documental = project_draft.payload_json.get("documental", {})
-            fuente = documental.get("fuente_estructurada", {}) if isinstance(documental, dict) else {}
+            fuente = (
+                documental.get("fuente_estructurada", {})
+                if isinstance(documental, dict)
+                else {}
+            )
             preview = fuente.get("preview", {}) if isinstance(fuente, dict) else {}
-            preview_fases = preview.get("fases", []) if isinstance(preview, dict) else []
+            preview_fases = (
+                preview.get("fases", []) if isinstance(preview, dict) else []
+            )
             for preview_fase in preview_fases:
                 if not isinstance(preview_fase, dict):
                     continue
@@ -185,10 +205,15 @@ class PlaneacionPedagogicaService:
                             continue
                         for resultado in competencia.get("resultados", []):
                             if isinstance(resultado, dict) and resultado.get("rap_id"):
-                                project_rap_links[str(resultado["rap_id"])] = (
+                                link = (
                                     fase.id,
                                     actividad.id,
                                 )
+                                links = project_rap_links.setdefault(
+                                    str(resultado["rap_id"]), []
+                                )
+                                if link not in links:
+                                    links.append(link)
 
         # Format Fases & Actividades
         fase_dtos: list[ContextoFaseDTO] = []
@@ -207,17 +232,24 @@ class PlaneacionPedagogicaService:
         # (separated by saber/proceso), and criteria
         comp_dtos: list[ContextoCompetenciaDTO] = []
         for c in programa.competencias:
-            res_dtos = [
-                ContextoResultadoDTO(
-                    id=r.id,
-                    descripcion=r.descripcion,
-                    fase_id=project_rap_links.get(r.codigo_resultado, (None, None))[0],
-                    actividad_id=project_rap_links.get(
-                        r.codigo_resultado, (None, None)
-                    )[1],
+            res_dtos = []
+            for r in c.resultados:
+                links = project_rap_links.get(r.codigo_resultado or "", [])
+                res_dtos.append(
+                    ContextoResultadoDTO(
+                        id=r.id,
+                        descripcion=r.descripcion,
+                        fase_id=links[0][0] if links else None,
+                        actividad_id=links[0][1] if links else None,
+                        asignaciones_proyecto=[
+                            ContextoAsignacionProyectoDTO(
+                                fase_id=fase_id,
+                                actividad_id=actividad_id,
+                            )
+                            for fase_id, actividad_id in links
+                        ],
+                    )
                 )
-                for r in c.resultados
-            ]
             saberes_conceptos = [
                 ContextoConocimientoDTO(id=k.id, descripcion=k.descripcion)
                 for k in c.conocimientos

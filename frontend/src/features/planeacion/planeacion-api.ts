@@ -5,6 +5,12 @@ export interface ContextoResultado {
   descripcion: string;
   fase_id?: string | null;
   actividad_id?: string | null;
+  asignaciones_proyecto?: ContextoAsignacionProyecto[];
+}
+
+export interface ContextoAsignacionProyecto {
+  fase_id: string;
+  actividad_id: string;
 }
 
 export interface ContextoConocimiento {
