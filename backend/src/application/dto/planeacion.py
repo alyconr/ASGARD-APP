@@ -87,9 +87,11 @@ class PlaneacionContextoDTO(BaseModel):
     programa_id: uuid.UUID
     codigo_programa: str
     nombre_programa: str
+    version_programa: str | None = None
     proyecto_id: uuid.UUID
     codigo_proyecto: str
     nombre_proyecto: str
+    version_proyecto: str | None = None
     competencias: list[ContextoCompetenciaDTO]
     fases: list[ContextoFaseDTO]
 

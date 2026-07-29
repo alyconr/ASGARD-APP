@@ -286,6 +286,18 @@ function getNumberValue(record: Record<string, unknown>, ...keys: string[]): num
   return 0;
 }
 
+function formatCodigoVersion(codigo: string, version?: string | null): string {
+  return version?.trim() ? `${codigo} / versión ${version}` : codigo;
+}
+
+function formatPreviewDate(date: Date): string {
+  return date.toLocaleDateString("es-CO", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 export function PlaneacionWizardShell({
   contexto,
   referenciaId,
@@ -302,6 +314,9 @@ export function PlaneacionWizardShell({
   const [activePlanningId, setActivePlanningId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [fechaPrevisualizacion, setFechaPrevisualizacion] = useState(() =>
+    formatPreviewDate(new Date()),
+  );
   
   // Form State
   const [faseId, setFaseId] = useState<string>("");
@@ -1684,6 +1699,7 @@ export function PlaneacionWizardShell({
                       onClick={async () => {
                         const savedId = await handleSaveDraft(true);
                         if (savedId) {
+                          setFechaPrevisualizacion(formatPreviewDate(new Date()));
                           setActiveStep("preview");
                         }
                       }}
@@ -1703,6 +1719,41 @@ export function PlaneacionWizardShell({
                 <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">3. Previsualización y Control de Aprobación</h2>
 
                 <div className="grid gap-6 border rounded-lg p-5 bg-slate-50/50">
+                  <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Denominación del Programa de Formación</h4>
+                      <p className="mt-1 font-semibold text-slate-800">{contexto.nombre_programa}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Fecha de Elaboración</h4>
+                      <p className="mt-1 font-semibold text-slate-800">{fechaPrevisualizacion}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Código y versión del Programa de Formación</h4>
+                      <p className="mt-1 font-semibold text-slate-800">
+                        {formatCodigoVersion(contexto.codigo_programa, contexto.version_programa)}
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Nombre del Proyecto Formativo</h4>
+                      <p className="mt-1 font-semibold text-slate-800">
+                        {contexto.nombre_proyecto || "No aplica para complementaria"}
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Código del Proyecto</h4>
+                      <p className="mt-1 font-semibold text-slate-800">
+                        {contexto.codigo_proyecto
+                          ? formatCodigoVersion(contexto.codigo_proyecto, contexto.version_proyecto)
+                          : "No aplica para complementaria"}
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase">Nombre del Instructor</h4>
+                      <p className="mt-1 font-semibold text-slate-800">{instructores || "No asignado"}</p>
+                    </div>
+                  </div>
+
                   <div className="grid gap-4 sm:grid-cols-2 text-sm">
                     <div>
                       <h4 className="text-xs font-bold text-slate-500 uppercase">Competencia</h4>

@@ -49,6 +49,7 @@ async def test_obtener_contexto_success() -> None:
     programa = ProgramaFormacion(
         codigo_programa="228118",
         nombre_programa="Analisis de software",
+        version_programa="1",
         estado=EstadoBloque.COMPLETO,
     )
     programa.id = programa_id
@@ -117,6 +118,8 @@ async def test_obtener_contexto_success() -> None:
     # Assert
     assert contexto.programa_id == programa_id
     assert contexto.proyecto_id == proyecto_id
+    assert contexto.version_programa == "1"
+    assert contexto.version_proyecto == "1"
     assert len(contexto.competencias) == 1
     assert contexto.competencias[0].nombre_competencia == "Desarrollar software"
     assert len(contexto.competencias[0].resultados) == 1

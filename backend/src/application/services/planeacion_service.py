@@ -281,9 +281,11 @@ class PlaneacionPedagogicaService:
             programa_id=programa.id,
             codigo_programa=programa.codigo_programa,
             nombre_programa=programa.nombre_programa,
+            version_programa=programa.version_programa,
             proyecto_id=proyecto.id,
             codigo_proyecto=proyecto.codigo_proyecto,
             nombre_proyecto=proyecto.nombre_proyecto,
+            version_proyecto=proyecto.version_proyecto,
             competencias=comp_dtos,
             fases=fase_dtos,
         )

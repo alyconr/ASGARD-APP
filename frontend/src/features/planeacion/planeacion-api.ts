@@ -48,9 +48,11 @@ export interface PlaneacionContextoResponse {
   programa_id: string;
   codigo_programa: string;
   nombre_programa: string;
+  version_programa?: string | null;
   proyecto_id: string;
   codigo_proyecto: string;
   nombre_proyecto: string;
+  version_proyecto?: string | null;
   competencias: ContextoCompetencia[];
   fases: ContextoFase[];
 }

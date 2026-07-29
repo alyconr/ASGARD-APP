@@ -18,9 +18,11 @@ const mockContexto: PlaneacionContextoResponse = {
   programa_id: "prog-1",
   codigo_programa: "220501",
   nombre_programa: "Análisis y Desarrollo de Software",
+  version_programa: "1",
   proyecto_id: "proj-1",
   codigo_proyecto: "123456",
   nombre_proyecto: "Sistema de Información de Pruebas",
+  version_proyecto: "2",
   fases: [
     {
       id: "fase-1",
