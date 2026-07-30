@@ -86,6 +86,10 @@ class ProgramaFormacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     nombre_programa: Mapped[str] = mapped_column(Text, nullable=False)
     version_programa: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    modalidad_formacion: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
     estado: Mapped[EstadoBloque] = mapped_column(
         estado_bloque_enum,
         nullable=False,

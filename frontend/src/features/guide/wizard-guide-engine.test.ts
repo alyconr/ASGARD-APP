@@ -116,6 +116,33 @@ describe("wizard guide engine", () => {
     expect(guide.checklist.some((item) => item.status === "current")).toBe(true);
   });
 
+  it("blocks official generation with backend-derived gaps", () => {
+    const guide = buildPlaneacionWizardGuide({
+      activeStep: "preview",
+      competenciasCount: 2,
+      fasesCount: 1,
+      selectedCompetencia: true,
+      selectedResultado: true,
+      faseSelected: true,
+      actividadSelected: true,
+      conocimientosSelected: 3,
+      criteriosSelected: 2,
+      instructor: "Ana Instructor",
+      duracionHoras: 12,
+      estrategias: "Trabajo colaborativo",
+      ambientes: "Aula TIC",
+      recursos: "Computadores",
+      confirmed: false,
+      officialMissing: [
+        "Falta la regional.",
+        "La duracion total no coincide.",
+      ],
+    });
+
+    expect(guide.severity).toBe("blocked");
+    expect(guide.checklist[0].label).toBe("Falta la regional.");
+  });
+
   it("creates a blocked inter-wizard guide with a dashboard CTA", () => {
     const guide = buildBlockedModuleGuide(
       "planeacion",

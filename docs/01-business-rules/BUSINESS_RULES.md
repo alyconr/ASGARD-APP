@@ -659,3 +659,12 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 - la validación humana será obligatoria antes del cierre,
 - el alcance se limitará a la Fase 1,
 - la implementación se hará de forma incremental.
+
+## Formato oficial de planeacion pedagogica
+
+- La salida institucional obligatoria es `GPFI-F-134 V05` en `.xlsx`, generada desde la plantilla canónica y almacenada en MinIO.
+- La planeación individual materializa una fila por cada asignación única de fase y actividad.
+- El consolidado incluye solo planeaciones `COMPLETO`; los borradores se excluyen y se reportan.
+- La duración total debe coincidir con horas de trabajo directo más independiente; cualquier diferencia bloquea la generación.
+- Modalidad, fecha, clasificación, equipo curricular, regional y centro son obligatorios.
+- Saberes SABER y PROCESO se separan, incorporan temáticas adicionales y eliminan duplicados exactos conservando orden estable.

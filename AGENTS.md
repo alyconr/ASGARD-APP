@@ -63,9 +63,20 @@ A partir de la implementación de la planeación pedagógica:
 - la planeación pedagógica se organiza *por competencia* asociada al programa de formación y vinculada a una fase y actividad del proyecto formativo;
 - se implementa el modelo relacional `PlaneacionPedagogica` y tablas M2M de asociación para resultados (`planeacion_resultados`), conocimientos (`planeacion_conocimientos`), y criterios (`planeacion_criterios`);
 - los campos complementarios didácticos (estrategias didácticas, ambientes de aprendizaje, recursos y medios, duración en horas, e instructor responsable) se consolidan de forma flexible y extensible dentro de una columna JSONB `datos_complementarios`;
-- al confirmar la planeación de una competencia, se genera un archivo estructurado `.json` que se almacena en MinIO con el prefijo `planeaciones-pedagogicas/{programa_id}/{proyecto_id}/{competencia_id}/planeacion.json`;
+- al confirmar la planeación de un resultado, se genera el workbook institucional `GPFI-F-134 V05` desde la plantilla canónica del backend y se almacena como `.xlsx` en MinIO bajo rutas legibles de programa, proyecto y resultado;
 - la eliminación de una planeación elimina tanto el registro de base de datos como el archivo físico de MinIO;
 - completar la planeación para una competencia guarda de manera independiente el estado sin afectar o sobrescribir las demás competencias del proyecto.
+
+## Decision funcional FORMATO-OFICIAL-PLANEACION-GPFI-F-134-V05
+
+- la salida oficial de la planeación es el workbook `GPFI-F-134 V05`; JSON deja de ser el artefacto descargable principal;
+- la plantilla binaria canónica vive en `backend/src/infrastructure/templates/planeacion/GPFI-F-134V05.xlsx` y nunca se sobrescribe;
+- `Instrucciones` permanece intacta y los datos se escriben exclusivamente en `FASE`;
+- `modalidad_formacion` pertenece al programa; fecha, clasificación, equipo de gestión curricular, regional y centro se persisten una sola vez por proyecto en `PlaneacionDocumentoConfig`;
+- la exportación individual genera una fila por cada asignación fase/actividad del RAP;
+- la exportación consolidada incluye únicamente planeaciones `COMPLETO`, excluye borradores y ordena por fase, actividad, competencia y resultado;
+- antes de generar se validan pertenencias curriculares, coherencia fase/actividad, metadata institucional y la igualdad entre duración total y horas directas más independientes;
+- los Excel se guardan y leen desde MinIO con `save_excel` y `read_excel`; la descarga siempre transmite el archivo real desde backend.
 
 ## Decision funcional REFACTOR-FLUJO-DOCUMENTAL-RESTRICCION-REHIDRATACION
 A partir del refactor del flujo documental de programa y proyecto:

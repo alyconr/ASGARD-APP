@@ -102,6 +102,65 @@ export interface PlaneacionListResponse {
   fecha_actualizacion: string;
 }
 
+export type ClasificacionInformacion =
+  | "PUBLICA"
+  | "PUBLICA_CLASIFICADA"
+  | "PUBLICA_RESERVADA";
+
+export interface PlaneacionDocumentoConfig {
+  proyecto_id: string;
+  fecha_elaboracion: string | null;
+  modalidad_formacion: string | null;
+  clasificacion_informacion: ClasificacionInformacion | null;
+  equipo_gestion_curricular: string[];
+  regional: string | null;
+  centro_formacion: string | null;
+  storage_key: string | null;
+  file_name: string | null;
+  content_type: string | null;
+  checksum_sha256: string | null;
+  fecha_generacion: string | null;
+  version: number;
+}
+
+export interface PlaneacionDocumentoConfigUpdate {
+  fecha_elaboracion: string;
+  modalidad_formacion: string;
+  clasificacion_informacion: ClasificacionInformacion;
+  equipo_gestion_curricular: string[];
+  regional: string;
+  centro_formacion: string;
+}
+
+export interface FormatoOficialFaltante {
+  codigo: string;
+  mensaje: string;
+  paso: "configuracion" | "curricular" | "complementario" | "confirmacion";
+}
+
+export interface FormatoOficialEstado {
+  listo: boolean;
+  faltantes: FormatoOficialFaltante[];
+  planeaciones_completas: number;
+  borradores_excluidos: number;
+  storage_key: string | null;
+  file_name: string | null;
+  checksum_sha256: string | null;
+  fecha_generacion: string | null;
+}
+
+export interface FormatoOficialGenerado {
+  storage_key: string;
+  file_name: string;
+  content_type: string;
+  checksum_sha256: string;
+  fecha_generacion: string;
+  version: number;
+  filas_generadas: number;
+  planeaciones_incluidas: number;
+  borradores_excluidos: number;
+}
+
 export async function fetchPlaneacionContexto(
   referenciaId: string,
 ): Promise<PlaneacionContextoResponse> {
@@ -222,5 +281,130 @@ export async function deletePlaneacion(planeacionId: string): Promise<void> {
 
   if (!response.ok) {
     throw new Error("No fue posible eliminar la planeación.");
+  }
+}
+
+export async function fetchPlaneacionDocumentoConfig(
+  proyectoId: string,
+): Promise<PlaneacionDocumentoConfig> {
+  return requestJson(
+    `/planeaciones/proyecto/${proyectoId}/configuracion-formato-oficial`,
+  );
+}
+
+export async function savePlaneacionDocumentoConfig(
+  proyectoId: string,
+  payload: PlaneacionDocumentoConfigUpdate,
+): Promise<PlaneacionDocumentoConfig> {
+  return requestJson(
+    `/planeaciones/proyecto/${proyectoId}/configuracion-formato-oficial`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function fetchFormatoOficialEstadoIndividual(
+  planeacionId: string,
+): Promise<FormatoOficialEstado> {
+  return requestJson(`/planeaciones/${planeacionId}/estado-formato-oficial`);
+}
+
+export async function fetchFormatoOficialEstadoConsolidado(
+  proyectoId: string,
+): Promise<FormatoOficialEstado> {
+  return requestJson(
+    `/planeaciones/proyecto/${proyectoId}/estado-formato-oficial`,
+  );
+}
+
+export async function generarFormatoOficialIndividual(
+  planeacionId: string,
+): Promise<FormatoOficialGenerado> {
+  return requestJson(
+    `/planeaciones/${planeacionId}/generar-formato-oficial`,
+    { method: "POST" },
+  );
+}
+
+export async function generarFormatoOficialConsolidado(
+  proyectoId: string,
+): Promise<FormatoOficialGenerado> {
+  return requestJson(
+    `/planeaciones/proyecto/${proyectoId}/generar-formato-oficial`,
+    { method: "POST" },
+  );
+}
+
+export async function downloadFormatoOficialIndividual(
+  planeacionId: string,
+): Promise<void> {
+  await downloadWorkbook(
+    `/planeaciones/${planeacionId}/descargar-formato-oficial`,
+    "GPFI-F-134V05-planeacion.xlsx",
+  );
+}
+
+export async function downloadFormatoOficialConsolidado(
+  proyectoId: string,
+): Promise<void> {
+  await downloadWorkbook(
+    `/planeaciones/proyecto/${proyectoId}/descargar-formato-oficial`,
+    "GPFI-F-134V05-planeacion-pedagogica.xlsx",
+  );
+}
+
+async function requestJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    cache: "no-store",
+    ...init,
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return response.json() as Promise<T>;
+}
+
+async function downloadWorkbook(
+  path: string,
+  fallbackName: string,
+): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const utf8Name = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const filename = utf8Name ? decodeURIComponent(utf8Name) : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as {
+      detail?: string | string[];
+    };
+    if (Array.isArray(payload.detail)) {
+      return payload.detail.join(" ");
+    }
+    return payload.detail ?? "No fue posible completar la operación.";
+  } catch {
+    return "No fue posible completar la operación.";
   }
 }

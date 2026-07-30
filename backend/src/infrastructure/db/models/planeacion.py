@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
     Table,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy import (
@@ -38,6 +41,12 @@ if TYPE_CHECKING:
         FaseProyecto,
         ProyectoFormativo,
     )
+
+CLASIFICACIONES_INFORMACION = (
+    "PUBLICA",
+    "PUBLICA_CLASIFICADA",
+    "PUBLICA_RESERVADA",
+)
 
 
 # Many-to-Many Association Tables
@@ -173,4 +182,55 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     criterios: Mapped[list[CriterioEvaluacion]] = relationship(
         secondary=planeacion_criterios,
+    )
+
+
+class PlaneacionDocumentoConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Shared institutional metadata and consolidated planning artifact."""
+
+    __tablename__ = "planeacion_documento_config"
+    __table_args__ = (
+        UniqueConstraint(
+            "proyecto_id",
+            name="uq_planeacion_documento_config_proyecto_id",
+        ),
+        CheckConstraint(
+            "clasificacion_informacion IS NULL OR "
+            "clasificacion_informacion IN "
+            "('PUBLICA', 'PUBLICA_CLASIFICADA', 'PUBLICA_RESERVADA')",
+            name="ck_planeacion_documento_config_clasificacion",
+        ),
+    )
+
+    proyecto_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("proyectos_formativos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_elaboracion: Mapped[date | None] = mapped_column(Date, nullable=True)
+    clasificacion_informacion: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+    )
+    equipo_gestion_curricular: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    regional: Mapped[str | None] = mapped_column(Text, nullable=True)
+    centro_formacion: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fecha_generacion: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    proyecto: Mapped[ProyectoFormativo] = relationship(
+        back_populates="planeacion_documento_config",
     )

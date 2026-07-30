@@ -27,6 +27,21 @@ El usuario cuenta con una guia visual persistente y no invasiva dentro de progra
 
 ---
 
+## HU - Descargar la planeacion en el formato institucional
+
+**Como** instructor o integrante del equipo de gestión curricular
+**Quiero** generar la planeación individual o consolidada en `GPFI-F-134 V05`
+**Para** obtener el documento institucional completo sin reconstruirlo manualmente.
+
+### Criterios de aceptación
+
+- El sistema conserva las hojas, logos, estilos, combinaciones y configuración de impresión de la plantilla.
+- La vista previa informa faltantes y permite regresar al campo correspondiente.
+- La generación individual repite una fila por asignación fase/actividad.
+- El consolidado incluye completas, excluye borradores y muestra ambos contadores.
+- El Excel se almacena en MinIO y se descarga como Blob desde el backend.
+- Una duración inconsistente o metadata faltante impide generar.
+
 # 1. Épica: Inicio y borradores
 
 ## HU-01. Iniciar cargue del programa

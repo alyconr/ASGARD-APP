@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import io
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.planeacion import (
+    FormatoOficialEstadoDTO,
+    FormatoOficialGeneradoDTO,
     PlaneacionContextoDTO,
+    PlaneacionDocumentoConfigDTO,
+    PlaneacionDocumentoConfigUpdateDTO,
     PlaneacionListDTO,
     PlaneacionResponseDTO,
     PlaneacionSaveDTO,
 )
+from src.application.services.planeacion_formato_excel import EXCEL_CONTENT_TYPE
 from src.application.services.planeacion_service import (
     PlaneacionAccessError,
     PlaneacionPedagogicaService,
@@ -77,6 +85,85 @@ async def listar_planeaciones(
 
 
 @router.get(
+    "/proyecto/{proyecto_id}/configuracion-formato-oficial",
+    response_model=PlaneacionDocumentoConfigDTO,
+)
+async def obtener_configuracion_formato_oficial(
+    proyecto_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+) -> PlaneacionDocumentoConfigDTO:
+    """Return shared institutional workbook metadata."""
+    try:
+        return await service.obtener_configuracion_documento(proyecto_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.put(
+    "/proyecto/{proyecto_id}/configuracion-formato-oficial",
+    response_model=PlaneacionDocumentoConfigDTO,
+)
+async def guardar_configuracion_formato_oficial(
+    proyecto_id: uuid.UUID,
+    dto: PlaneacionDocumentoConfigUpdateDTO,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+    session: AsyncSession = Depends(get_async_session),
+) -> PlaneacionDocumentoConfigDTO:
+    """Persist shared institutional workbook metadata."""
+    try:
+        result = await service.guardar_configuracion_documento(proyecto_id, dto)
+        await session.commit()
+        return result
+    except (PlaneacionAccessError, ValueError) as error:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get(
+    "/proyecto/{proyecto_id}/estado-formato-oficial",
+    response_model=FormatoOficialEstadoDTO,
+)
+async def obtener_estado_formato_consolidado(
+    proyecto_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+) -> FormatoOficialEstadoDTO:
+    """Return consolidated generation readiness and counts."""
+    return await service.obtener_estado_formato_consolidado(proyecto_id)
+
+
+@router.post(
+    "/proyecto/{proyecto_id}/generar-formato-oficial",
+    response_model=FormatoOficialGeneradoDTO,
+)
+async def generar_formato_consolidado(
+    proyecto_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+    session: AsyncSession = Depends(get_async_session),
+) -> FormatoOficialGeneradoDTO:
+    """Generate and store the consolidated official project workbook."""
+    try:
+        result = await service.generar_formato_consolidado(proyecto_id)
+        await session.commit()
+        return result
+    except (PlaneacionAccessError, ValueError) as error:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/proyecto/{proyecto_id}/descargar-formato-oficial")
+async def descargar_formato_consolidado(
+    proyecto_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+) -> StreamingResponse:
+    """Stream the latest consolidated workbook stored in MinIO."""
+    try:
+        content, filename = await service.descargar_formato_consolidado(proyecto_id)
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return _excel_response(content, filename)
+
+
+@router.get(
     "/{planeacion_id}",
     response_model=PlaneacionResponseDTO,
     status_code=status.HTTP_200_OK,
@@ -93,6 +180,53 @@ async def obtener_detalle(
             detail=f"No se encontró la planeación pedagógica con id {planeacion_id}",
         )
     return detail
+
+
+@router.get(
+    "/{planeacion_id}/estado-formato-oficial",
+    response_model=FormatoOficialEstadoDTO,
+)
+async def obtener_estado_formato_individual(
+    planeacion_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+) -> FormatoOficialEstadoDTO:
+    """Return individual generation readiness from backend rules."""
+    try:
+        return await service.obtener_estado_formato_individual(planeacion_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post(
+    "/{planeacion_id}/generar-formato-oficial",
+    response_model=FormatoOficialGeneradoDTO,
+)
+async def generar_formato_individual(
+    planeacion_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+    session: AsyncSession = Depends(get_async_session),
+) -> FormatoOficialGeneradoDTO:
+    """Regenerate one completed planning workbook."""
+    try:
+        result = await service.generar_formato_individual(planeacion_id)
+        await session.commit()
+        return result
+    except (PlaneacionAccessError, ValueError) as error:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.get("/{planeacion_id}/descargar-formato-oficial")
+async def descargar_formato_individual(
+    planeacion_id: uuid.UUID,
+    service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+) -> StreamingResponse:
+    """Stream one official workbook stored in MinIO."""
+    try:
+        content, filename = await service.descargar_formato_individual(planeacion_id)
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return _excel_response(content, filename)
 
 
 @router.post(
@@ -186,3 +320,18 @@ async def eliminar_planeacion(
         ) from error
 
     return {"message": "Planeación pedagógica eliminada con éxito."}
+
+
+def _excel_response(content: bytes, filename: str) -> StreamingResponse:
+    safe_filename = filename.replace('"', "")
+    encoded_filename = quote(filename, safe="")
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=EXCEL_CONTENT_TYPE,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{safe_filename}"; '
+                f"filename*=UTF-8''{encoded_filename}"
+            )
+        },
+    )

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 
 from src.application.dto.planeacion import (
+    FormatoOficialEstadoDTO,
+    FormatoOficialGeneradoDTO,
     PlaneacionContextoDTO,
+    PlaneacionDocumentoConfigDTO,
+    PlaneacionDocumentoConfigUpdateDTO,
     PlaneacionListDTO,
     PlaneacionResponseDTO,
     PlaneacionSaveDTO,
@@ -24,6 +28,7 @@ class FakePlaneacionPedagogicaService:
         """Set up mock state."""
         self.contexto_mock: PlaneacionContextoDTO | None = None
         self.planeaciones: dict[uuid.UUID, PlaneacionResponseDTO] = {}
+        self.configs: dict[uuid.UUID, PlaneacionDocumentoConfigDTO] = {}
 
     async def obtener_contexto(self, referencia_id: uuid.UUID) -> PlaneacionContextoDTO:
         """Simulate contextual fetch."""
@@ -87,10 +92,107 @@ class FakePlaneacionPedagogicaService:
         p = self.planeaciones[planeacion_id]
         p.estado = "COMPLETO"
         p.storage_key = "mock-key"
-        p.file_name = "mock-file.json"
-        p.content_type = "application/json"
+        p.file_name = "GPFI-F-134V05-planeacion.xlsx"
+        p.content_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         p.fecha_generacion = datetime.now(UTC)
         return p
+
+    async def obtener_configuracion_documento(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> PlaneacionDocumentoConfigDTO:
+        return self.configs.get(
+            proyecto_id,
+            PlaneacionDocumentoConfigDTO(proyecto_id=proyecto_id),
+        )
+
+    async def guardar_configuracion_documento(
+        self,
+        proyecto_id: uuid.UUID,
+        dto: PlaneacionDocumentoConfigUpdateDTO,
+    ) -> PlaneacionDocumentoConfigDTO:
+        config = PlaneacionDocumentoConfigDTO(
+            proyecto_id=proyecto_id,
+            **dto.model_dump(),
+        )
+        self.configs[proyecto_id] = config
+        return config
+
+    async def obtener_estado_formato_individual(
+        self,
+        planeacion_id: uuid.UUID,
+    ) -> FormatoOficialEstadoDTO:
+        planning = self.planeaciones[planeacion_id]
+        return FormatoOficialEstadoDTO(
+            listo=True,
+            planeaciones_completas=int(planning.estado == "COMPLETO"),
+            storage_key=planning.storage_key,
+            file_name=planning.file_name,
+        )
+
+    async def obtener_estado_formato_consolidado(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> FormatoOficialEstadoDTO:
+        complete = [
+            planning
+            for planning in self.planeaciones.values()
+            if planning.proyecto_id == proyecto_id
+            and planning.estado == "COMPLETO"
+        ]
+        return FormatoOficialEstadoDTO(
+            listo=bool(complete),
+            planeaciones_completas=len(complete),
+        )
+
+    async def generar_formato_individual(
+        self,
+        planeacion_id: uuid.UUID,
+    ) -> FormatoOficialGeneradoDTO:
+        planning = self.planeaciones[planeacion_id]
+        now = datetime.now(UTC)
+        return FormatoOficialGeneradoDTO(
+            storage_key=planning.storage_key or "mock-key",
+            file_name=planning.file_name or "GPFI-F-134V05-planeacion.xlsx",
+            content_type=planning.content_type or "application/octet-stream",
+            checksum_sha256="a" * 64,
+            fecha_generacion=now,
+            version=1,
+            filas_generadas=1,
+            planeaciones_incluidas=1,
+        )
+
+    async def generar_formato_consolidado(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> FormatoOficialGeneradoDTO:
+        complete = await self.obtener_estado_formato_consolidado(proyecto_id)
+        return FormatoOficialGeneradoDTO(
+            storage_key="consolidado/mock.xlsx",
+            file_name="GPFI-F-134V05-planeacion-pedagogica.xlsx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            checksum_sha256="b" * 64,
+            fecha_generacion=datetime.now(UTC),
+            version=1,
+            filas_generadas=complete.planeaciones_completas,
+            planeaciones_incluidas=complete.planeaciones_completas,
+        )
+
+    async def descargar_formato_individual(
+        self,
+        planeacion_id: uuid.UUID,
+    ) -> tuple[bytes, str]:
+        return b"PK\x03\x04mock", "GPFI-F-134V05-planeacion.xlsx"
+
+    async def descargar_formato_consolidado(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> tuple[bytes, str]:
+        return b"PK\x03\x04mock", "GPFI-F-134V05-planeacion-pedagogica.xlsx"
 
     async def eliminar_planeacion(self, planeacion_id: uuid.UUID) -> None:
         """Simulate delete."""
@@ -152,7 +254,38 @@ def test_planeacion_endpoints_flow() -> None:
     assert confirm_res.json()["estado"] == "COMPLETO"
     assert confirm_res.json()["storage_key"] == "mock-key"
 
-    # 5. Test DELETE
+    # 5. Test official configuration
+    config_payload = {
+        "fecha_elaboracion": date.today().isoformat(),
+        "modalidad_formacion": "Presencial",
+        "clasificacion_informacion": "PUBLICA",
+        "equipo_gestion_curricular": ["Ana Instructor"],
+        "regional": "Distrito Capital",
+        "centro_formacion": "Centro de prueba",
+    }
+    config_res = client.put(
+        f"/api/v1/planeaciones/proyecto/{proyecto_id}/"
+        "configuracion-formato-oficial",
+        json=config_payload,
+    )
+    assert config_res.status_code == 200
+    assert config_res.json()["modalidad_formacion"] == "Presencial"
+
+    # 6. Test individual and consolidated real-download contracts
+    individual_download = client.get(
+        f"/api/v1/planeaciones/{planning_id}/descargar-formato-oficial"
+    )
+    assert individual_download.status_code == 200
+    assert individual_download.content.startswith(b"PK")
+    assert "spreadsheetml.sheet" in individual_download.headers["content-type"]
+
+    consolidated_generate = client.post(
+        f"/api/v1/planeaciones/proyecto/{proyecto_id}/generar-formato-oficial"
+    )
+    assert consolidated_generate.status_code == 200
+    assert consolidated_generate.json()["planeaciones_incluidas"] == 1
+
+    # 7. Test DELETE
     delete_res = client.delete(f"/api/v1/planeaciones/{planning_id}")
     assert delete_res.status_code == 200
     assert delete_res.json()["message"] == "Planeación pedagógica eliminada con éxito."

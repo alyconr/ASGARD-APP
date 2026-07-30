@@ -76,6 +76,8 @@ interface PlaneacionGuideInput {
   ambientes: string;
   recursos: string;
   confirmed: boolean;
+  officialMissing?: string[];
+  hoursMatch?: boolean;
 }
 
 function item(
@@ -316,6 +318,8 @@ export function buildPlaneacionWizardGuide({
   ambientes,
   recursos,
   confirmed,
+  officialMissing = [],
+  hoursMatch = true,
 }: PlaneacionGuideInput): WizardGuideState {
   if (confirmed || activeStep === "confirmacion") {
     return {
@@ -340,15 +344,27 @@ export function buildPlaneacionWizardGuide({
   if (activeStep === "dashboard") {
     return {
       wizard: "planeacion",
-      severity: competenciasCount > 0 && fasesCount > 0 ? "info" : "blocked",
+      severity:
+        competenciasCount === 0 || fasesCount === 0
+          ? "blocked"
+          : officialMissing.length > 0
+            ? "warning"
+            : "info",
       eyebrow: "Planeacion pedagogica",
-      title: "Elige una competencia y RAP",
+      title:
+        officialMissing.length > 0
+          ? "Prepara el formato oficial"
+          : "Elige una competencia y RAP",
       message:
+        officialMissing[0] ??
         "Selecciona una competencia y luego un resultado de aprendizaje para construir la planeacion.",
       checklist: [
         item("competencias", "Competencias disponibles", competenciasCount > 0, true),
         item("fases", "Fases del proyecto disponibles", fasesCount > 0),
         item("resultado", "Resultado de aprendizaje elegido", selectedResultado),
+        ...officialMissing.slice(0, 3).map((label, index) =>
+          item(`official-${index}`, label, false),
+        ),
       ],
       primaryAction: { label: "Elegir resultado", targetId: "planeacion-step-workspace" },
     };
@@ -399,12 +415,31 @@ export function buildPlaneacionWizardGuide({
       checklist: [
         item("instructor", "Instructor responsable", hasText(instructor), true),
         item("duracion", "Duracion en horas", duracionHoras > 0),
+        item("horas", "Duracion y distribucion de horas coherentes", hoursMatch),
         item("estrategias", "Estrategias didacticas", hasText(estrategias)),
         item("ambientes", "Ambientes de aprendizaje", hasText(ambientes)),
         item("recursos", "Recursos y medios", hasText(recursos)),
       ],
       primaryAction: {
         label: "Ver previsualizacion",
+        targetId: "planeacion-step-workspace",
+      },
+    };
+  }
+
+  if (officialMissing.length > 0) {
+    return {
+      wizard: "planeacion",
+      severity: "blocked",
+      eyebrow: "Formato oficial GPFI-F-134 V05",
+      title: "Hay datos pendientes para generar",
+      message:
+        "Corrige los faltantes indicados por el backend antes de aprobar la planeacion.",
+      checklist: officialMissing.slice(0, 6).map((label, index) =>
+        item(`official-${index}`, label, false, index === 0),
+      ),
+      primaryAction: {
+        label: "Ir al primer faltante",
         targetId: "planeacion-step-workspace",
       },
     };

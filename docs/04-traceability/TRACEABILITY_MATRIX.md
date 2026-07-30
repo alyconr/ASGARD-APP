@@ -480,3 +480,14 @@ Esta matriz se usa para:
 - organizar pruebas,
 - justificar decisiones de implementación,
 - y evitar desarrollo fuera de alcance.
+
+## Trazabilidad GPFI-F-134 V05
+
+| Requisito | Backend | Frontend | Prueba |
+|---|---|---|---|
+| Plantilla oficial inmutable | `PlaneacionFormatoExcelService` | Estado GPFI-F-134 V05 | `test_planeacion_formato_excel.py` |
+| Metadata compartida por proyecto | `PlaneacionDocumentoConfig` | Configuración documental | servicios y endpoints de planeación |
+| Exportación individual | generar/descargar por `planeacion_id` | Generar y Descargar Excel oficial | endpoints y API frontend |
+| Exportación consolidada | generar/descargar por `proyecto_id` | Contadores y descarga consolidada | endpoints y wizard |
+| Validación de horas y brechas | estado de formato oficial | Vista previa y asistente | servicio y guide engine |
+| MinIO real | `save_excel` / `read_excel` | descarga Blob | pruebas HTTP y API |

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
@@ -30,6 +31,9 @@ from src.infrastructure.db.models.curriculum import (
     motivo_fallo_enum,
 )
 from src.infrastructure.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+
+if TYPE_CHECKING:
+    from src.infrastructure.db.models.planeacion import PlaneacionDocumentoConfig
 
 
 class ProyectoFormativo(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -75,6 +79,13 @@ class ProyectoFormativo(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     fases: Mapped[list["FaseProyecto"]] = relationship(
         back_populates="proyecto",
         cascade="all, delete-orphan",
+    )
+    planeacion_documento_config: Mapped["PlaneacionDocumentoConfig | None"] = (
+        relationship(
+            back_populates="proyecto",
+            cascade="all, delete-orphan",
+            uselist=False,
+        )
     )
 
 

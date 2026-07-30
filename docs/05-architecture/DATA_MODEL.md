@@ -538,7 +538,7 @@ Representa la planeación pedagógica de una competencia para un proyecto format
 - actividad_id (UUID, FK a `actividades_proyecto`, nullable, SET NULL)
 - estado (EstadoBloque: BORRADOR, COMPLETO)
 - datos_complementarios (JSONB, contiene campos extensibles como estrategias didácticas, ambientes, recursos, duración, e instructor)
-- storage_key (string nullable, prefijo canónico `planeaciones-pedagogicas/{programa_id}/{proyecto_id}/{competencia_id}/planeacion.json` en MinIO)
+- storage_key (string nullable, ruta legible del Excel individual `planeaciones-pedagogicas/{programa}/{proyecto}/resultados/{codigo_resultado}/GPFI-F-134V05-planeacion.xlsx`)
 - file_name (string nullable, nombre del archivo generado)
 - content_type (string nullable, content-type del archivo)
 - checksum_sha256 (string nullable, hash del contenido del archivo)
@@ -778,3 +778,18 @@ Quedan cerradas para Fase 1 estas decisiones:
 - la completitud se calcula por reglas explicitas del dominio,
 - el Excel canonico es la unica fuente estructurada activa,
 - el PDF queda exclusivamente como evidencia documental.
+
+## PlaneacionDocumentoConfig
+
+Configuración 1:1 asociada a `ProyectoFormativo`:
+
+- `proyecto_id` único;
+- `fecha_elaboracion`;
+- `clasificacion_informacion`;
+- `equipo_gestion_curricular` JSONB;
+- `regional`;
+- `centro_formacion`;
+- metadata del consolidado: `storage_key`, `file_name`, `content_type`, `checksum_sha256`, `fecha_generacion`, `version`;
+- timestamps.
+
+`ProgramaFormacion.modalidad_formacion` conserva la modalidad como atributo intrínseco del programa. El Excel individual usa la ruta `planeaciones-pedagogicas/{programa}/{proyecto}/resultados/{codigo_resultado}/GPFI-F-134V05-planeacion.xlsx`; el consolidado usa `formato-oficial/GPFI-F-134V05-planeacion-pedagogica.xlsx`.

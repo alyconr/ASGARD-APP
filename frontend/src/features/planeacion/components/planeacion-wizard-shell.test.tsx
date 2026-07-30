@@ -12,6 +12,13 @@ vi.mock("../planeacion-api", () => ({
   savePlaneacionBorrador: vi.fn(),
   confirmarPlaneacion: vi.fn(),
   deletePlaneacion: vi.fn(),
+  fetchPlaneacionDocumentoConfig: vi.fn(),
+  savePlaneacionDocumentoConfig: vi.fn(),
+  fetchFormatoOficialEstadoIndividual: vi.fn(),
+  fetchFormatoOficialEstadoConsolidado: vi.fn(),
+  generarFormatoOficialConsolidado: vi.fn(),
+  downloadFormatoOficialIndividual: vi.fn(),
+  downloadFormatoOficialConsolidado: vi.fn(),
 }));
 
 const mockContexto: PlaneacionContextoResponse = {
@@ -125,7 +132,88 @@ describe("PlaneacionWizardShell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue([]);
+    vi.spyOn(api, "fetchPlaneacionDocumentoConfig").mockResolvedValue({
+      proyecto_id: "proj-1",
+      fecha_elaboracion: "2026-07-29",
+      modalidad_formacion: "Presencial",
+      clasificacion_informacion: "PUBLICA",
+      equipo_gestion_curricular: ["Ana Instructor"],
+      regional: "Distrito Capital",
+      centro_formacion: "Centro de prueba",
+      storage_key: null,
+      file_name: null,
+      content_type: null,
+      checksum_sha256: null,
+      fecha_generacion: null,
+      version: 1,
+    });
+    vi.spyOn(api, "fetchFormatoOficialEstadoConsolidado").mockResolvedValue({
+      listo: false,
+      faltantes: [
+        {
+          codigo: "SIN_PLANEACIONES_COMPLETAS",
+          mensaje: "No existen planeaciones completas para exportar.",
+          paso: "confirmacion",
+        },
+      ],
+      planeaciones_completas: 0,
+      borradores_excluidos: 0,
+      storage_key: null,
+      file_name: null,
+      checksum_sha256: null,
+      fecha_generacion: null,
+    });
+    vi.spyOn(api, "fetchFormatoOficialEstadoIndividual").mockResolvedValue({
+      listo: true,
+      faltantes: [],
+      planeaciones_completas: 0,
+      borradores_excluidos: 1,
+      storage_key: null,
+      file_name: null,
+      checksum_sha256: null,
+      fecha_generacion: null,
+    });
     vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  it("shows and saves the official document configuration", async () => {
+    vi.spyOn(api, "savePlaneacionDocumentoConfig").mockResolvedValue({
+      proyecto_id: "proj-1",
+      fecha_elaboracion: "2026-07-29",
+      modalidad_formacion: "Presencial",
+      clasificacion_informacion: "PUBLICA",
+      equipo_gestion_curricular: ["Ana Instructor"],
+      regional: "Distrito Capital",
+      centro_formacion: "Centro de prueba",
+      storage_key: null,
+      file_name: null,
+      content_type: null,
+      checksum_sha256: null,
+      fecha_generacion: null,
+      version: 1,
+    });
+
+    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
+
+    expect(
+      await screen.findByText("Configuración documental"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Generar consolidado oficial" }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Guardar configuración" }),
+    );
+
+    await waitFor(() => {
+      expect(api.savePlaneacionDocumentoConfig).toHaveBeenCalledWith(
+        "proj-1",
+        expect.objectContaining({
+          modalidad_formacion: "Presencial",
+          equipo_gestion_curricular: ["Ana Instructor"],
+        }),
+      );
+    });
   });
 
   it("renders the dashboard list of competencies correctly", async () => {
@@ -347,8 +435,11 @@ describe("PlaneacionWizardShell", () => {
     const mockCompletedDetail: PlaneacionResponse = {
       ...mockPlanningDetail,
       estado: "COMPLETO",
-      storage_key: "planeaciones-pedagogicas/prog-1/proj-1/comp-1/planeacion.json",
-      file_name: "planeacion.json",
+      storage_key:
+        "planeaciones-pedagogicas/programa/proyecto/resultados/rap-1/GPFI-F-134V05-planeacion.xlsx",
+      file_name: "GPFI-F-134V05-planeacion.xlsx",
+      content_type:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       fecha_generacion: "2026-05-27T12:00:00Z",
     };
 

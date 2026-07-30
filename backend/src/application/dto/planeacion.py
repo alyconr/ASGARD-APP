@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -153,3 +154,74 @@ class PlaneacionListDTO(BaseModel):
     fecha_actualizacion: datetime
 
     model_config = {"from_attributes": True}
+
+
+ClasificacionInformacion = Literal[
+    "PUBLICA",
+    "PUBLICA_CLASIFICADA",
+    "PUBLICA_RESERVADA",
+]
+
+
+class PlaneacionDocumentoConfigUpdateDTO(BaseModel):
+    """Institutional metadata shared by all planning rows in a project."""
+
+    fecha_elaboracion: date
+    modalidad_formacion: str = Field(min_length=1, max_length=150)
+    clasificacion_informacion: ClasificacionInformacion
+    equipo_gestion_curricular: list[str] = Field(min_length=1)
+    regional: str = Field(min_length=1)
+    centro_formacion: str = Field(min_length=1)
+
+
+class PlaneacionDocumentoConfigDTO(BaseModel):
+    """Persisted official workbook configuration and consolidated artifact."""
+
+    proyecto_id: uuid.UUID
+    fecha_elaboracion: date | None = None
+    modalidad_formacion: str | None = None
+    clasificacion_informacion: ClasificacionInformacion | None = None
+    equipo_gestion_curricular: list[str] = Field(default_factory=list)
+    regional: str | None = None
+    centro_formacion: str | None = None
+    storage_key: str | None = None
+    file_name: str | None = None
+    content_type: str | None = None
+    checksum_sha256: str | None = None
+    fecha_generacion: datetime | None = None
+    version: int = 1
+
+
+class FormatoOficialFaltanteDTO(BaseModel):
+    """One actionable gap that blocks the official workbook."""
+
+    codigo: str
+    mensaje: str
+    paso: Literal["configuracion", "curricular", "complementario", "confirmacion"]
+
+
+class FormatoOficialEstadoDTO(BaseModel):
+    """Backend-derived generation readiness for one planning or one project."""
+
+    listo: bool
+    faltantes: list[FormatoOficialFaltanteDTO] = Field(default_factory=list)
+    planeaciones_completas: int = 0
+    borradores_excluidos: int = 0
+    storage_key: str | None = None
+    file_name: str | None = None
+    checksum_sha256: str | None = None
+    fecha_generacion: datetime | None = None
+
+
+class FormatoOficialGeneradoDTO(BaseModel):
+    """Metadata returned after storing an official workbook."""
+
+    storage_key: str
+    file_name: str
+    content_type: str
+    checksum_sha256: str
+    fecha_generacion: datetime
+    version: int
+    filas_generadas: int
+    planeaciones_incluidas: int
+    borradores_excluidos: int = 0

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
+import { ExtractorSenaInstructions } from "@/components/wizard/extractor-sena-instructions";
 import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildProgramaWizardGuide } from "@/features/guide/wizard-guide-engine";
@@ -190,6 +191,10 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "origen-documental" ? (
             <div className="grid gap-4">
+              <ExtractorSenaInstructions
+                referenceId={referenceId}
+                scope="programa"
+              />
               {programaExcelImportado ? (
                 <ProgramaDocumentUpload
                   currentResult={programaPdfResult}

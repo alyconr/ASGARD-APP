@@ -15,6 +15,9 @@ import {
   Search,
   Info,
   Plus,
+  FileSpreadsheet,
+  Settings2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,11 +29,20 @@ import {
   type ContextoCompetencia,
   type ContextoFase,
   type ContextoAsignacionProyecto,
+  type ClasificacionInformacion,
+  type FormatoOficialEstado,
   savePlaneacionBorrador,
   confirmarPlaneacion,
   deletePlaneacion,
   listPlaneacionesProyecto,
   fetchPlaneacionDetalle,
+  fetchPlaneacionDocumentoConfig,
+  savePlaneacionDocumentoConfig,
+  fetchFormatoOficialEstadoIndividual,
+  fetchFormatoOficialEstadoConsolidado,
+  generarFormatoOficialConsolidado,
+  downloadFormatoOficialIndividual,
+  downloadFormatoOficialConsolidado,
 } from "../planeacion-api";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildPlaneacionWizardGuide } from "@/features/guide/wizard-guide-engine";
@@ -298,6 +310,11 @@ function formatPreviewDate(date: Date): string {
   });
 }
 
+function formatInputDate(date: Date): string {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
 export function PlaneacionWizardShell({
   contexto,
   referenciaId,
@@ -317,6 +334,20 @@ export function PlaneacionWizardShell({
   const [fechaPrevisualizacion, setFechaPrevisualizacion] = useState(() =>
     formatPreviewDate(new Date()),
   );
+  const [officialStatus, setOfficialStatus] =
+    useState<FormatoOficialEstado | null>(null);
+  const [consolidatedStatus, setConsolidatedStatus] =
+    useState<FormatoOficialEstado | null>(null);
+  const [isOfficialBusy, setIsOfficialBusy] = useState(false);
+  const [fechaElaboracion, setFechaElaboracion] = useState(() =>
+    formatInputDate(new Date()),
+  );
+  const [modalidadFormacion, setModalidadFormacion] = useState("");
+  const [clasificacionInformacion, setClasificacionInformacion] =
+    useState<ClasificacionInformacion>("PUBLICA");
+  const [equipoGestionCurricular, setEquipoGestionCurricular] = useState("");
+  const [regional, setRegional] = useState("");
+  const [centroFormacion, setCentroFormacion] = useState("");
   
   // Form State
   const [faseId, setFaseId] = useState<string>("");
@@ -380,9 +411,34 @@ export function PlaneacionWizardShell({
     }
   }, [contexto.proyecto_id]);
 
+  const loadOfficialFormat = useCallback(async () => {
+    try {
+      const [config, status] = await Promise.all([
+        fetchPlaneacionDocumentoConfig(contexto.proyecto_id),
+        fetchFormatoOficialEstadoConsolidado(contexto.proyecto_id),
+      ]);
+      setFechaElaboracion(
+        config.fecha_elaboracion ?? formatInputDate(new Date()),
+      );
+      setModalidadFormacion(config.modalidad_formacion ?? "");
+      setClasificacionInformacion(
+        config.clasificacion_informacion ?? "PUBLICA",
+      );
+      setEquipoGestionCurricular(
+        config.equipo_gestion_curricular.join("\n"),
+      );
+      setRegional(config.regional ?? "");
+      setCentroFormacion(config.centro_formacion ?? "");
+      setConsolidatedStatus(status);
+    } catch {
+      setConsolidatedStatus(null);
+    }
+  }, [contexto.proyecto_id]);
+
   useEffect(() => {
     void loadPlannings();
-  }, [loadPlannings]);
+    void loadOfficialFormat();
+  }, [loadOfficialFormat, loadPlannings]);
 
   useEffect(() => {
     if (activeStep === "curricular" || activeStep === "complementario") {
@@ -506,6 +562,7 @@ export function PlaneacionWizardShell({
     setReadComplementaryFields(new Set());
     setActivePlanningId(null);
     setConfirmedPlanning(null);
+    setOfficialStatus(null);
   };
 
   const loadPlanningDetails = async (
@@ -552,6 +609,13 @@ export function PlaneacionWizardShell({
       setTematicasSaber(normalizeTematicas(c.tematicas_saber));
       setTematicasProceso(normalizeTematicas(c.tematicas_proceso));
       setReadComplementaryFields(new Set(COMPLEMENTARY_FIELDS.map((field) => field.id)));
+      try {
+        setOfficialStatus(
+          await fetchFormatoOficialEstadoIndividual(details.id),
+        );
+      } catch {
+        setOfficialStatus(null);
+      }
 
       if (details.estado === "COMPLETO") {
         setConfirmedPlanning(details);
@@ -669,8 +733,13 @@ export function PlaneacionWizardShell({
     try {
       const res = await confirmarPlaneacion(planningId);
       setConfirmedPlanning(res);
-      await loadPlannings();
-      toast.success("Planeación pedagógica aprobada y almacenada en MinIO");
+      const [status] = await Promise.all([
+        fetchFormatoOficialEstadoIndividual(planningId),
+        loadPlannings(),
+        loadOfficialFormat(),
+      ]);
+      setOfficialStatus(status);
+      toast.success("Formato oficial generado y almacenado en MinIO");
       setActiveStep("confirmacion");
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Error al aprobar la planeación";
@@ -701,18 +770,95 @@ export function PlaneacionWizardShell({
     }
   };
 
-  // Download pedagogical planning file
-  const handleDownload = () => {
+  const handleSaveOfficialConfig = async () => {
+    const team = equipoGestionCurricular
+      .split(/[\n,;]+/)
+      .map((member) => member.trim())
+      .filter(Boolean);
+    setIsOfficialBusy(true);
+    try {
+      await savePlaneacionDocumentoConfig(contexto.proyecto_id, {
+        fecha_elaboracion: fechaElaboracion,
+        modalidad_formacion: modalidadFormacion,
+        clasificacion_informacion: clasificacionInformacion,
+        equipo_gestion_curricular: team,
+        regional,
+        centro_formacion: centroFormacion,
+      });
+      await loadOfficialFormat();
+      toast.success("Configuración del formato oficial guardada");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible guardar la configuración",
+      );
+    } finally {
+      setIsOfficialBusy(false);
+    }
+  };
+
+  const handleGenerateConsolidated = async () => {
+    setIsOfficialBusy(true);
+    try {
+      const result = await generarFormatoOficialConsolidado(
+        contexto.proyecto_id,
+      );
+      await loadOfficialFormat();
+      toast.success(
+        `${result.planeaciones_incluidas} planeaciones incluidas; ${result.borradores_excluidos} borradores excluidos`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible generar el consolidado",
+      );
+    } finally {
+      setIsOfficialBusy(false);
+    }
+  };
+
+  const handleDownloadConsolidated = async () => {
+    try {
+      await downloadFormatoOficialConsolidado(contexto.proyecto_id);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible descargar el consolidado",
+      );
+    }
+  };
+
+  const handleDownload = async () => {
     if (!confirmedPlanning) return;
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(confirmedPlanning.datos_complementarios, null, 2)
-    )}`;
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", jsonString);
-    downloadAnchor.setAttribute("download", confirmedPlanning.file_name ?? "planeacion.json");
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    try {
+      await downloadFormatoOficialIndividual(confirmedPlanning.id);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible descargar el Excel oficial",
+      );
+    }
+  };
+
+  const handleGoToOfficialGap = () => {
+    const gap = officialStatus?.faltantes[0];
+    if (!gap) return;
+    if (gap.paso === "configuracion") {
+      setActiveStep("dashboard");
+      window.setTimeout(() => {
+        document
+          .getElementById("planeacion-document-config")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+      return;
+    }
+    setActiveStep(
+      gap.paso === "confirmacion" ? "preview" : gap.paso,
+    );
   };
 
   const addTematica = (
@@ -861,6 +1007,12 @@ export function PlaneacionWizardShell({
     ambientes: ambiente,
     recursos: materialesFormacion,
     confirmed: confirmedPlanning !== null,
+    officialMissing:
+      activeStep === "dashboard"
+        ? (consolidatedStatus?.faltantes.map((gap) => gap.mensaje) ?? [])
+        : (officialStatus?.faltantes.map((gap) => gap.mensaje) ?? []),
+    hoursMatch:
+      duracionHoras === horasTrabajoDirecto + horasTrabajoIndependiente,
   });
   const activeFieldInstruction =
     instructionTarget?.kind === "field"
@@ -895,6 +1047,146 @@ export function PlaneacionWizardShell({
       {/* DASHBOARD VIEW */}
       {activeStep === "dashboard" && (
         <section className="grid gap-6">
+          <div
+            id="planeacion-document-config"
+            className="grid gap-5 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-sm"
+          >
+            <div className="flex flex-col gap-3 border-b border-[var(--line)] pb-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-[var(--accent-strong)]">
+                  <Settings2 className="h-4 w-4" />
+                  <h2 className="text-sm font-bold uppercase">
+                    Configuración documental
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                  Metadata compartida por el formato oficial GPFI-F-134 V05.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-lg bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
+                  {consolidatedStatus?.planeaciones_completas ?? 0} completas
+                </span>
+                <span className="rounded-lg bg-amber-50 px-3 py-2 font-semibold text-amber-700">
+                  {consolidatedStatus?.borradores_excluidos ?? 0} borradores excluidos
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Fecha de elaboración
+                <input
+                  type="date"
+                  value={fechaElaboracion}
+                  onChange={(event) => setFechaElaboracion(event.target.value)}
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Modalidad de formación
+                <input
+                  value={modalidadFormacion}
+                  onChange={(event) => setModalidadFormacion(event.target.value)}
+                  placeholder="Presencial, virtual o combinada"
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Clasificación de la información
+                <select
+                  value={clasificacionInformacion}
+                  onChange={(event) =>
+                    setClasificacionInformacion(
+                      event.target.value as ClasificacionInformacion,
+                    )
+                  }
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                >
+                  <option value="PUBLICA">Pública</option>
+                  <option value="PUBLICA_CLASIFICADA">Pública clasificada</option>
+                  <option value="PUBLICA_RESERVADA">Pública reservada</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Regional
+                <input
+                  value={regional}
+                  onChange={(event) => setRegional(event.target.value)}
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Centro de formación
+                <input
+                  value={centroFormacion}
+                  onChange={(event) => setCentroFormacion(event.target.value)}
+                  className="min-h-10 rounded-lg border border-[color:var(--card-border)] bg-white px-3 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                Equipo de gestión curricular
+                <textarea
+                  rows={3}
+                  value={equipoGestionCurricular}
+                  onChange={(event) =>
+                    setEquipoGestionCurricular(event.target.value)
+                  }
+                  placeholder="Un integrante por línea"
+                  className="resize-y rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm font-normal outline-none focus:border-[var(--accent)]"
+                />
+              </label>
+            </div>
+
+            {consolidatedStatus?.faltantes.length ? (
+              <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>{consolidatedStatus.faltantes[0].mensaje}</p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                disabled={isOfficialBusy}
+                onClick={() => void handleSaveOfficialConfig()}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                Guardar configuración
+              </button>
+              <button
+                type="button"
+                disabled={isOfficialBusy || consolidatedStatus?.listo !== true}
+                onClick={() => void handleGenerateConsolidated()}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Generar consolidado oficial
+              </button>
+              <button
+                type="button"
+                disabled={!consolidatedStatus?.storage_key}
+                onClick={() => void handleDownloadConsolidated()}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Descargar consolidado
+              </button>
+              {consolidatedStatus?.fecha_generacion ? (
+                <p className="self-center text-xs text-[var(--muted)]">
+                  Última generación:{" "}
+                  {new Date(
+                    consolidatedStatus.fecha_generacion,
+                  ).toLocaleString("es-CO")}
+                  {consolidatedStatus.checksum_sha256
+                    ? ` · SHA-256 ${consolidatedStatus.checksum_sha256.slice(0, 12)}…`
+                    : ""}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-lg border border-slate-100 bg-slate-50/50 p-4">
             <div className="max-w-xl">
               <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-1">Listado de Competencias del Programa</h3>
@@ -1699,6 +1991,13 @@ export function PlaneacionWizardShell({
                       onClick={async () => {
                         const savedId = await handleSaveDraft(true);
                         if (savedId) {
+                          try {
+                            setOfficialStatus(
+                              await fetchFormatoOficialEstadoIndividual(savedId),
+                            );
+                          } catch {
+                            setOfficialStatus(null);
+                          }
                           setFechaPrevisualizacion(formatPreviewDate(new Date()));
                           setActiveStep("preview");
                         }
@@ -1717,6 +2016,55 @@ export function PlaneacionWizardShell({
             {activeStep === "preview" && (
               <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-6 shadow-sm">
                 <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">3. Previsualización y Control de Aprobación</h2>
+
+                <div
+                  className={cn(
+                    "mb-5 grid gap-3 rounded-lg border p-4",
+                    officialStatus?.listo
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-amber-200 bg-amber-50",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet
+                      className={cn(
+                        "mt-0.5 h-5 w-5 shrink-0",
+                        officialStatus?.listo
+                          ? "text-emerald-700"
+                          : "text-amber-700",
+                      )}
+                    />
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Formato oficial GPFI-F-134 V05
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-700">
+                        {officialStatus?.listo
+                          ? "La información está completa y puede generarse sobre la plantilla institucional."
+                          : "Hay datos que impiden generar el workbook oficial."}
+                      </p>
+                    </div>
+                  </div>
+                  {officialStatus?.faltantes.length ? (
+                    <>
+                      <ul className="grid gap-1 pl-8 text-xs text-amber-900">
+                        {officialStatus.faltantes.map((gap) => (
+                          <li key={gap.codigo} className="list-disc">
+                            {gap.mensaje}
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        onClick={handleGoToOfficialGap}
+                        className="ml-8 inline-flex min-h-9 w-fit items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                      >
+                        Ir al primer campo faltante
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : null}
+                </div>
 
                 <div className="grid gap-6 border rounded-lg p-5 bg-slate-50/50">
                   <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2">
@@ -1852,11 +2200,12 @@ export function PlaneacionWizardShell({
                   </button>
                   <button
                     type="button"
-                    disabled={isSaving}
+                    disabled={isSaving || officialStatus?.listo !== true}
                     onClick={() => void handleConfirmAndApprove()}
                     className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
                   >
-                    Aprobar y Guardar en MinIO
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Generar formato oficial
                   </button>
                 </div>
               </section>
@@ -1871,7 +2220,7 @@ export function PlaneacionWizardShell({
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">¡Planeación Pedagógica Completada!</h2>
                   <p className="mt-2 text-sm text-[var(--muted)] max-w-md">
-                    Los datos curriculares y de planeación del resultado de aprendizaje han sido validados, aprobados e integrados. El archivo JSON definitivo se ha guardado en el Object Storage MinIO.
+                    Los datos fueron validados y diligenciados en el workbook institucional GPFI-F-134 V05. El Excel oficial está almacenado en MinIO.
                   </p>
 
                   <div className="mt-6 w-full max-w-md border rounded-lg bg-slate-50 p-4 text-left text-sm text-slate-700 grid gap-2">
@@ -2055,11 +2404,11 @@ export function PlaneacionWizardShell({
                   <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full justify-center">
                     <button
                       type="button"
-                      onClick={handleDownload}
+                      onClick={() => void handleDownload()}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition"
                     >
                       <Download className="h-4 w-4" />
-                      Descargar Archivo Aprobado
+                      Descargar Excel oficial
                     </button>
                     <button
                       type="button"

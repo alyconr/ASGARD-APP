@@ -770,3 +770,13 @@ Antes de generar código, Codex debe:
 6. leer este plan de implementación,
 7. implementar solo el módulo solicitado,
 8. reportar ambigüedades antes de asumir comportamientos no definidos.
+
+## Hito - Formato oficial GPFI-F-134 V05
+
+1. Incorporar plantilla canónica y configuración documental persistente.
+2. Generar Excel individual con una fila por asignación fase/actividad.
+3. Generar consolidado estable con planeaciones `COMPLETO`.
+4. Guardar y leer los artefactos mediante MinIO.
+5. Exponer generación, estado y descarga tipada.
+6. Integrar configuración, brechas, contadores y Blob en el wizard.
+7. Verificar OOXML, imágenes, merges, filas adicionales, impresión y regresiones.

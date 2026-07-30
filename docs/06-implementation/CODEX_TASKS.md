@@ -964,3 +964,14 @@ Una tarea se considera terminada cuando:
 - no rompe tareas anteriores,
 - mantiene persistencia y trazabilidad,
 - y puede verificarse funcionalmente.
+
+## TASK-FORMATO-OFICIAL-GPFI-F-134-V05
+
+- [x] Empaquetar la plantilla oficial inmutable.
+- [x] Persistir modalidad y metadata documental compartida.
+- [x] Reemplazar el JSON descargable por Excel oficial.
+- [x] Implementar exportación individual y consolidada.
+- [x] Validar metadata, relaciones curriculares, asignaciones y horas.
+- [x] Guardar con `save_excel` y descargar con `read_excel`.
+- [x] Integrar vista previa, dashboard y asistente guiado.
+- [x] Cubrir generador, HTTP, API Blob y UI con pruebas focalizadas.

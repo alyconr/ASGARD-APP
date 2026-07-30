@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
+import { ExtractorSenaInstructions } from "@/components/wizard/extractor-sena-instructions";
 import { ProyectoDocumentUpload } from "@/features/proyecto/components/proyecto-document-upload";
 import { ProyectoExcelImport } from "@/features/proyecto/components/proyecto-excel-import";
 import { PROYECTO_WIZARD_STEPS } from "@/features/proyecto/constants";
@@ -183,6 +184,10 @@ function StepWorkspace({
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
           {currentStep.id === "fuente-proyecto" && payload !== null ? (
             <div className="grid gap-4">
+              <ExtractorSenaInstructions
+                referenceId={payload.meta.referenciaId}
+                scope="proyecto"
+              />
               {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" ||
               docState?.proyecto_importado === true ? (
                 <ProyectoDocumentUpload

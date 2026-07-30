@@ -8,7 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
+from src.infrastructure.db.models.planeacion import (
+    PlaneacionDocumentoConfig,
+    PlaneacionPedagogica,
+)
+from src.infrastructure.db.models.proyecto import ProyectoFormativo
 
 
 class PlaneacionPedagogicaRepository:
@@ -29,7 +33,9 @@ class PlaneacionPedagogicaRepository:
                 selectinload(PlaneacionPedagogica.criterios),
                 selectinload(PlaneacionPedagogica.competencia),
                 selectinload(PlaneacionPedagogica.resultado),
-                selectinload(PlaneacionPedagogica.proyecto),
+                selectinload(PlaneacionPedagogica.proyecto).selectinload(
+                    ProyectoFormativo.programa
+                ),
                 selectinload(PlaneacionPedagogica.fase),
                 selectinload(PlaneacionPedagogica.actividad),
             )
@@ -76,6 +82,50 @@ class PlaneacionPedagogicaRepository:
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
+
+    async def list_full_by_proyecto(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> list[PlaneacionPedagogica]:
+        """List project planning rows with workbook relationships loaded."""
+        statement = (
+            select(PlaneacionPedagogica)
+            .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
+            .options(
+                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.conocimientos),
+                selectinload(PlaneacionPedagogica.criterios),
+                selectinload(PlaneacionPedagogica.competencia),
+                selectinload(PlaneacionPedagogica.resultado),
+                selectinload(PlaneacionPedagogica.proyecto).selectinload(
+                    ProyectoFormativo.programa
+                ),
+                selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlaneacionPedagogica.actividad),
+            )
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().unique().all())
+
+    async def get_document_config(
+        self,
+        proyecto_id: uuid.UUID,
+    ) -> PlaneacionDocumentoConfig | None:
+        """Return the shared official-document configuration."""
+        statement = select(PlaneacionDocumentoConfig).where(
+            PlaneacionDocumentoConfig.proyecto_id == proyecto_id
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def save_document_config(
+        self,
+        config: PlaneacionDocumentoConfig,
+    ) -> PlaneacionDocumentoConfig:
+        """Persist shared official-document configuration."""
+        self._session.add(config)
+        await self._session.flush()
+        return config
 
     async def save(self, planeacion: PlaneacionPedagogica) -> PlaneacionPedagogica:
         """Add or flush a pedagogical planning entity to session."""

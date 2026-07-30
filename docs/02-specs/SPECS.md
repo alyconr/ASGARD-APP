@@ -758,3 +758,13 @@ La Fase 1 se considera terminada cuando el sistema permite:
 - gestionar fases y actividades,
 - validar y cerrar el proyecto,
 - y mantener trazabilidad básica del proceso.
+
+## Exportacion GPFI-F-134 V05
+
+- Plantilla: `backend/src/infrastructure/templates/planeacion/GPFI-F-134V05.xlsx`.
+- Hojas: `Instrucciones` intacta y `FASE` diligenciada.
+- Encabezado: fecha, programa, modalidad, código/versión, proyecto, equipo curricular, regional y centro.
+- Tabla `FASE`: columnas A:P según fase, actividad, competencia, RAP, saberes, criterios y campos complementarios.
+- Endpoints individuales: `POST/GET /api/v1/planeaciones/{planeacion_id}/generar-formato-oficial` y `descargar-formato-oficial`.
+- Endpoints consolidados: `POST/GET /api/v1/planeaciones/proyecto/{proyecto_id}/generar-formato-oficial` y `descargar-formato-oficial`.
+- La descarga usa `StreamingResponse`, content type OOXML y `Content-Disposition` UTF-8.

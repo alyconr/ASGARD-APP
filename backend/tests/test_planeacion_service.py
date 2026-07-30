@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.application.dto.planeacion import PlaneacionSaveDTO
+from src.application.services.planeacion_formato_excel import (
+    EXCEL_CONTENT_TYPE,
+    FormatoExcelResultado,
+    PlaneacionFormatoExcelService,
+)
 from src.application.services.planeacion_service import (
     PlaneacionAccessError,
     PlaneacionPedagogicaService,
@@ -22,8 +28,15 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
-from src.infrastructure.db.models.proyecto import ProyectoFormativo
+from src.infrastructure.db.models.planeacion import (
+    PlaneacionDocumentoConfig,
+    PlaneacionPedagogica,
+)
+from src.infrastructure.db.models.proyecto import (
+    ActividadProyecto,
+    FaseProyecto,
+    ProyectoFormativo,
+)
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
 
 
@@ -265,6 +278,15 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
     )
     proyecto.id = proyecto_id
     proyecto.programa_id = programa_id
+    programa = ProgramaFormacion(
+        codigo_programa="228118",
+        nombre_programa="Analisis de software",
+        version_programa="1",
+        modalidad_formacion="Presencial",
+        estado=EstadoBloque.COMPLETO,
+    )
+    programa.id = programa_id
+    proyecto.programa = programa
 
     competencia = Competencia(
         codigo_competencia="220501046",
@@ -292,14 +314,31 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
 
     repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
     repository.get_by_id.return_value = planning
+    repository.get_document_config.return_value = PlaneacionDocumentoConfig(
+        proyecto_id=proyecto_id,
+        fecha_elaboracion=date(2026, 7, 29),
+        clasificacion_informacion="PUBLICA",
+        equipo_gestion_curricular=["Ana Instructor"],
+        regional="Distrito Capital",
+        centro_formacion="Centro de prueba",
+    )
 
     storage_service = AsyncMock()
+    formato_service = MagicMock(spec=PlaneacionFormatoExcelService)
+    formato_service.generar.return_value = FormatoExcelResultado(
+        content=b"PK\x03\x04official",
+        checksum_sha256="a" * 64,
+        filas_generadas=1,
+    )
 
     service = PlaneacionPedagogicaService(
         session=session,
         repository=repository,
         storage_service=storage_service,
+        formato_excel_service=formato_service,
     )
+    service._collect_gaps = AsyncMock(return_value=[])
+    service._build_rows = AsyncMock(return_value=[MagicMock()])
     session.get.return_value = proyecto
 
     # Act
@@ -309,12 +348,114 @@ async def test_confirmar_y_generar_uploads_to_storage() -> None:
     assert res.estado == "COMPLETO"
     assert res.storage_key is not None
     assert "planeaciones-pedagogicas/" in res.storage_key
-    assert res.file_name == (
-        f"planeacion_{competencia.codigo_competencia}_{str(resultado_id)[:8]}.json"
-    )
+    assert res.file_name == "GPFI-F-134V05-planeacion.xlsx"
 
     # Verify MinIO upload call
-    storage_service.save_pdf.assert_called_once()
-    assert storage_service.save_pdf.call_args[1]["key"] == res.storage_key
-    assert storage_service.save_pdf.call_args[1]["content_type"] == "application/json"
+    storage_service.save_excel.assert_called_once()
+    assert storage_service.save_excel.call_args[1]["key"] == res.storage_key
+    assert (
+        storage_service.save_excel.call_args[1]["content_type"]
+        == EXCEL_CONTENT_TYPE
+    )
     repository.save.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_formato_oficial_rejects_inconsistent_duration() -> None:
+    proyecto_id = uuid.uuid4()
+    competencia_id = uuid.uuid4()
+    resultado_id = uuid.uuid4()
+    phase_id = uuid.uuid4()
+    activity_id = uuid.uuid4()
+
+    programa = ProgramaFormacion(
+        codigo_programa="228118",
+        nombre_programa="Analisis de software",
+        version_programa="1",
+        modalidad_formacion="Presencial",
+        estado=EstadoBloque.COMPLETO,
+    )
+    programa.id = uuid.uuid4()
+    proyecto = ProyectoFormativo(
+        programa_id=programa.id,
+        codigo_proyecto="PR-01",
+        nombre_proyecto="Proyecto",
+        version_proyecto="1",
+        estado=EstadoBloque.COMPLETO,
+    )
+    proyecto.id = proyecto_id
+    proyecto.programa = programa
+    competencia = Competencia(
+        codigo_competencia="COMP-01",
+        nombre_competencia="Competencia",
+    )
+    competencia.id = competencia_id
+    resultado = ResultadoAprendizaje(
+        competencia_id=competencia_id,
+        descripcion="Resultado",
+    )
+    resultado.id = resultado_id
+    conocimiento = Conocimiento(
+        competencia_id=competencia_id,
+        tipo=TipoConocimiento.SABER,
+        descripcion="Saber",
+    )
+    criterio = CriterioEvaluacion(
+        competencia_id=competencia_id,
+        descripcion="Criterio",
+    )
+    planning = PlaneacionPedagogica(
+        proyecto_id=proyecto_id,
+        competencia_id=competencia_id,
+        resultado_id=resultado_id,
+        fase_id=phase_id,
+        actividad_id=activity_id,
+        datos_complementarios={
+            "actividades_aprendizaje": "Actividad",
+            "duracion_actividad_horas": 10,
+            "horas_trabajo_directo": 8,
+            "horas_trabajo_independiente": 4,
+            "descripcion_evidencia_aprendizaje": "Evidencia",
+            "estrategias_didacticas": "ABP",
+            "ambiente": "Aula",
+            "materiales_formacion": "Computador",
+            "instructores": "Ana",
+        },
+    )
+    planning.proyecto = proyecto
+    planning.competencia = competencia
+    planning.resultado = resultado
+    planning.conocimientos = [conocimiento]
+    planning.criterios = [criterio]
+
+    phase = FaseProyecto(
+        proyecto_id=proyecto_id,
+        nombre_fase="Analisis",
+    )
+    phase.id = phase_id
+    activity = ActividadProyecto(
+        fase_id=phase_id,
+        descripcion="Actividad",
+    )
+    activity.id = activity_id
+    repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+    repository.get_document_config.return_value = PlaneacionDocumentoConfig(
+        proyecto_id=proyecto_id,
+        fecha_elaboracion=date(2026, 7, 29),
+        clasificacion_informacion="PUBLICA",
+        equipo_gestion_curricular=["Ana"],
+        regional="Distrito Capital",
+        centro_formacion="Centro",
+    )
+    service = PlaneacionPedagogicaService(
+        session=AsyncMock(),
+        repository=repository,
+        storage_service=AsyncMock(),
+    )
+    service._project_structure = AsyncMock(
+        return_value=({phase_id: phase}, {activity_id: activity})
+    )
+
+    gaps = await service._collect_gaps(planning, require_complete=False)
+
+    assert "DURACION_INCONSISTENTE" in {gap.codigo for gap in gaps}

@@ -81,7 +81,9 @@ async def test_eliminar_cargue_completo_resets_drafts_and_deletes_records() -> N
     mock_execute_result_proj.scalar_one_or_none.return_value = draft_proyecto
 
     mock_execute_result_proyecto_db = MagicMock()
-    mock_execute_result_proyecto_db.scalar_one_or_none.return_value = proyecto_db
+    mock_execute_result_proyecto_db.scalars.return_value.all.return_value = [
+        proyecto_db
+    ]
 
     # session.execute calls
     session.execute.side_effect = [
