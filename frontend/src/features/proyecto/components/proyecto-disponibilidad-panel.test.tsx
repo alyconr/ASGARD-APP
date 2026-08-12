@@ -80,6 +80,42 @@ describe("ProyectoDisponibilidadPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows continue state after PDF evidence is loaded without enabling project link", async () => {
+    mockFetchJson(buildAvailability());
+
+    render(
+      <ProyectoDisponibilidadPanel
+        referenciaId={referenciaId}
+        programaEstado="BORRADOR"
+        docState={{
+          programa_excel: null,
+          proyecto_excel: null,
+          programa_pdf: {
+            original_filename: "programa.pdf",
+            storage_key: "programas/test/documentos/programa.pdf",
+            size_bytes: 1024,
+            content_type: "application/pdf",
+            checksum_sha256: "checksum",
+          },
+          proyecto_pdf: null,
+          programa_importado: false,
+          proyecto_importado: false,
+          documentos_habilitados: false,
+          cargue_pdf_habilitado: false,
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Cargue documental desbloqueado"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("DESBLOQUEADO PARA CONTINUAR")).toBeInTheDocument();
+    expect(screen.getByText(/puedes continuar con el flujo/i)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Wizard base del proyecto formativo"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders enabled state when the program is complete", async () => {
     mockFetchJson(
       buildAvailability({

@@ -44,12 +44,16 @@ class FakePlaneacionPedagogicaService:
             PlaneacionListDTO(
                 id=p.id,
                 proyecto_id=p.proyecto_id,
-                competencia_id=p.competencia_id,
-                resultado_id=p.resultado_id,
-                resultado_descripcion=p.resultado_descripcion or "Resultado mock",
-                codigo_competencia="220501046",
-                nombre_competencia="Desarrollar software",
+                fase_id=p.fase_id,
+                actividad_id=p.actividad_id,
+                nombre_fase="Analisis",
+                descripcion_actividad="Estructurar propuesta tecnica",
+                actividades_aprendizaje="Actividad de prueba",
                 estado=p.estado,
+                competencias_count=1,
+                resultados_count=len(p.resultados_ids),
+                resultados_especificos=1,
+                resultados_transversales=0,
                 fecha_actualizacion=datetime.now(UTC),
             )
             for p in self.planeaciones.values()
@@ -68,9 +72,6 @@ class FakePlaneacionPedagogicaService:
         response = PlaneacionResponseDTO(
             id=planning_id,
             proyecto_id=dto.proyecto_id,
-            competencia_id=dto.competencia_id,
-            resultado_id=dto.resultado_id,
-            resultado_descripcion="Resultado mock",
             fase_id=dto.fase_id,
             actividad_id=dto.actividad_id,
             estado="BORRADOR",
@@ -78,6 +79,7 @@ class FakePlaneacionPedagogicaService:
             resultados_ids=dto.resultados_ids,
             conocimientos_ids=dto.conocimientos_ids,
             criterios_ids=dto.criterios_ids,
+            competencias=[],
             version=1,
         )
         self.planeaciones[planning_id] = response
@@ -207,7 +209,8 @@ def test_planeacion_endpoints_flow() -> None:
 
     referencia_id = uuid.uuid4()
     proyecto_id = uuid.uuid4()
-    competencia_id = uuid.uuid4()
+    fase_id = uuid.uuid4()
+    actividad_id = uuid.uuid4()
     resultado_id = uuid.uuid4()
 
     fake_service.contexto_mock = PlaneacionContextoDTO(
@@ -217,7 +220,6 @@ def test_planeacion_endpoints_flow() -> None:
         proyecto_id=proyecto_id,
         codigo_proyecto="PR-01",
         nombre_proyecto="Proyecto formativo test",
-        competencias=[],
         fases=[],
     )
 
@@ -229,8 +231,8 @@ def test_planeacion_endpoints_flow() -> None:
     # 2. Test POST save draft
     save_payload = {
         "proyecto_id": str(proyecto_id),
-        "competencia_id": str(competencia_id),
-        "resultado_id": str(resultado_id),
+        "fase_id": str(fase_id),
+        "actividad_id": str(actividad_id),
         "resultados_ids": [str(resultado_id)],
         "conocimientos_ids": [],
         "criterios_ids": [],
@@ -240,7 +242,7 @@ def test_planeacion_endpoints_flow() -> None:
     assert save_res.status_code == 200
     planning_id = save_res.json()["id"]
     assert save_res.json()["estado"] == "BORRADOR"
-    assert save_res.json()["resultado_id"] == str(resultado_id)
+    assert save_res.json()["resultados_ids"] == [str(resultado_id)]
 
     # 3. Test GET list
     list_res = client.get(f"/api/v1/planeaciones/proyecto/{proyecto_id}")
@@ -291,3 +293,4 @@ def test_planeacion_endpoints_flow() -> None:
     assert delete_res.json()["message"] == "Planeación pedagógica eliminada con éxito."
 
     app.dependency_overrides.clear()
+

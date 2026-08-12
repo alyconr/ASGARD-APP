@@ -106,14 +106,23 @@ export function ProyectoDisponibilidadPanel({
   }, [fallbackAvailability, referenciaId, docState]);
 
   const isBlocked = availability.proyecto_bloqueado;
-  const Icon = isBlocked ? LockKeyhole : CheckCircle2;
+  const hasPdfEvidence =
+    docState?.programa_pdf !== null && docState?.programa_pdf !== undefined
+      ? true
+      : docState?.proyecto_pdf !== null && docState?.proyecto_pdf !== undefined;
+  const showsContinueState = isBlocked && hasPdfEvidence;
+  const isVisuallyBlocked = isBlocked && !showsContinueState;
+  const Icon = isVisuallyBlocked ? LockKeyhole : CheckCircle2;
+  const panelMessage = showsContinueState
+    ? "PDF cargado como evidencia documental. Puedes continuar con el flujo; el modulo proyecto se habilita funcionalmente cuando el programa quede cerrado como COMPLETO."
+    : availability.mensaje;
 
   return (
     <section
       aria-label="Disponibilidad del modulo proyecto formativo"
       className={cn(
         "rounded-lg border bg-white p-4 shadow-[0_14px_32px_rgba(23,53,47,0.06)]",
-        isBlocked ? "border-amber-200" : "border-emerald-200",
+        isVisuallyBlocked ? "border-amber-200" : "border-emerald-200",
         className,
       )}
     >
@@ -122,7 +131,7 @@ export function ProyectoDisponibilidadPanel({
           <span
             className={cn(
               "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-              isBlocked
+              isVisuallyBlocked
                 ? "bg-amber-50 text-amber-700"
                 : "bg-emerald-50 text-emerald-700",
             )}
@@ -134,12 +143,14 @@ export function ProyectoDisponibilidadPanel({
               Modulo proyecto
             </p>
             <h3 className="mt-1 text-lg font-semibold text-[var(--foreground)]">
-              {isBlocked
+              {isVisuallyBlocked
                 ? "Modulo proyecto bloqueado"
-                : "Modulo proyecto habilitado"}
+                : showsContinueState
+                  ? "Cargue documental desbloqueado"
+                  : "Modulo proyecto habilitado"}
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              {availability.mensaje}
+              {panelMessage}
             </p>
             {errorMessage !== null ? (
               <p className="mt-2 text-sm leading-6 text-amber-800">
@@ -152,7 +163,7 @@ export function ProyectoDisponibilidadPanel({
         <span
           className={cn(
             "inline-flex min-h-9 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold",
-            isBlocked
+            isVisuallyBlocked
               ? "bg-amber-50 text-amber-800"
               : "bg-emerald-50 text-emerald-800",
           )}
@@ -162,7 +173,11 @@ export function ProyectoDisponibilidadPanel({
           ) : (
             <ShieldCheck className="h-4 w-4" />
           )}
-          {isBlocked ? "BLOQUEADO" : "LISTO PARA INICIAR"}
+          {isVisuallyBlocked
+            ? "BLOQUEADO"
+            : showsContinueState
+              ? "DESBLOQUEADO PARA CONTINUAR"
+              : "LISTO PARA INICIAR"}
         </span>
       </div>
 

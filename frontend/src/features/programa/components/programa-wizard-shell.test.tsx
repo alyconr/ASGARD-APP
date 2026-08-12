@@ -241,6 +241,13 @@ describe("ProgramaWizardShell", () => {
 
     render(<ProgramaWizardShell />);
 
+    const excelRegion = screen.getByTestId("programa-excel-import");
+    const pdfHeading = screen.getByText(/PDF del programa/i);
+
+    expect(
+      excelRegion.compareDocumentPosition(pdfHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText(/PDF del programa/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /cargar como evidencia/i }),

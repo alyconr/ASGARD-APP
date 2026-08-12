@@ -18,6 +18,7 @@ from src.infrastructure.db.models.proyecto import ProyectoFormativo
 from src.infrastructure.storage.document_storage import (
     build_programa_storage_prefix,
     build_proyecto_storage_prefix,
+    sanitize_directory_name,
 )
 
 
@@ -26,6 +27,15 @@ class DocumentStorageProtocol(Protocol):
 
     async def delete_by_prefix(self, *, prefix: str) -> None:
         """Remove all objects matching the prefix from the bucket."""
+
+
+def _planeaciones_storage_prefix(
+    *, nombre_programa: str, nombre_proyecto: str
+) -> str:
+    """Build the legible prefix that stores integrated planning workbooks."""
+    programa_dir = sanitize_directory_name(nombre_programa)
+    proyecto_dir = sanitize_directory_name(nombre_proyecto)
+    return f"planeaciones-pedagogicas/{programa_dir}/{proyecto_dir}/"
 
 
 class ProyectoCargueService:
@@ -110,6 +120,7 @@ class ProyectoCargueService:
 
         # 2. If we have programa_id, find the other draft and delete DB records
         if programa_id is not None:
+            programa_db = await self._session.get(ProgramaFormacion, programa_id)
             # Delete relational project formativo first (due to foreign key constraint)
             proj_db_statement = select(ProyectoFormativo).where(
                 ProyectoFormativo.programa_id == programa_id
@@ -122,10 +133,16 @@ class ProyectoCargueService:
                 await self._storage_service.delete_by_prefix(
                     prefix=f"planeaciones-pedagogicas/{programa_id}/{proyecto_db.id}/"
                 )
+                if programa_db is not None:
+                    await self._storage_service.delete_by_prefix(
+                        prefix=_planeaciones_storage_prefix(
+                            nombre_programa=programa_db.nombre_programa,
+                            nombre_proyecto=proyecto_db.nombre_proyecto,
+                        )
+                    )
                 await self._session.delete(proyecto_db)
 
             # Delete relational program
-            programa_db = await self._session.get(ProgramaFormacion, programa_id)
             if programa_db is not None:
                 nombre_prog = programa_db.nombre_programa
                 codigo_prog = programa_db.codigo_programa
@@ -264,6 +281,7 @@ class ProyectoCargueService:
 
         # 2. If we have programa_id, find the project in DB and delete it
         if programa_id is not None:
+            programa_db = await self._session.get(ProgramaFormacion, programa_id)
             proj_db_statement = select(ProyectoFormativo).where(
                 ProyectoFormativo.programa_id == programa_id
             )
@@ -276,6 +294,13 @@ class ProyectoCargueService:
                 await self._storage_service.delete_by_prefix(
                     prefix=f"planeaciones-pedagogicas/{programa_id}/{proyecto_db.id}/"
                 )
+                if programa_db is not None:
+                    await self._storage_service.delete_by_prefix(
+                        prefix=_planeaciones_storage_prefix(
+                            nombre_programa=programa_db.nombre_programa,
+                            nombre_proyecto=proyecto_db.nombre_proyecto,
+                        )
+                    )
                 await self._session.delete(proyecto_db)
             await self._session.flush()
 

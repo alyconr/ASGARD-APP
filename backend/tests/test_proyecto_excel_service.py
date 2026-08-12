@@ -15,11 +15,40 @@ from src.application.services.proyecto_excel import (
     InvalidProjectExcelUploadError,
     ProjectExcelDraftMissingError,
     ProjectExcelMissingPreviewError,
+    ProjectExcelValidationError,
     ProyectoExcelImportService,
 )
 from src.domain.shared.enums import EstadoBloque
+from src.infrastructure.db.models.curriculum import (
+    Competencia,
+    ProgramaFormacion,
+    ResultadoAprendizaje,
+)
 
 pytestmark = pytest.mark.anyio
+
+
+def _build_competencia(
+    *,
+    codigo_competencia: str,
+    nombre: str,
+    rap_codigos: list[str],
+) -> Competencia:
+    competencia = Competencia(
+        codigo_competencia=codigo_competencia,
+        nombre_competencia=nombre,
+    )
+    competencia.id = uuid.uuid4()
+    competencia.resultados = []
+    for rap_codigo in rap_codigos:
+        resultado = ResultadoAprendizaje(
+            codigo_resultado=rap_codigo,
+            descripcion=f"Resultado {rap_codigo}",
+        )
+        resultado.id = uuid.uuid4()
+        resultado.competencia_id = competencia.id
+        competencia.resultados.append(resultado)
+    return competencia
 
 
 class MockDraftRepository:
@@ -47,15 +76,32 @@ class MockAuditRepository:
 
 
 class MockSession:
-    def __init__(self):
+    def __init__(self, competencias=None):
         self.committed = False
         self.refreshed = False
+        self._competencias = competencias or []
+        self._programa = MagicMock(spec=ProgramaFormacion)
 
     async def commit(self):
         self.committed = True
 
     async def refresh(self, instance):
         self.refreshed = True
+
+    async def execute(self, statement):
+        entity = None
+        try:
+            entity = statement.column_descriptions[0].get("entity")
+        except Exception:
+            entity = None
+        result = MagicMock()
+        if entity is Competencia:
+            scalars = MagicMock()
+            scalars.unique.return_value.all.return_value = self._competencias
+            result.scalars.return_value = scalars
+        else:
+            result.scalar_one_or_none.return_value = self._programa
+        return result
 
 
 class MockStorageService:
@@ -81,11 +127,18 @@ class MockStorageService:
 
 
 class MockProjectRepository:
-    def __init__(self):
+    def __init__(
+        self,
+        existing_codigo_proyecto=None,
+        existing_nombre_proyecto=None,
+    ):
         self.created_proyectos = []
         self.created_fases = []
         self.created_actividades = []
+        self.created_asignaciones = []
         self.created_programa_ids = []
+        self.existing_codigo_proyecto = existing_codigo_proyecto
+        self.existing_nombre_proyecto = existing_nombre_proyecto
 
     async def create_proyecto(
         self,
@@ -113,8 +166,41 @@ class MockProjectRepository:
         self.created_actividades.append(a)
         return a
 
-    async def proyecto_exists(self, *, programa_id):
-        return False
+    async def create_asignacion_curricular(
+        self,
+        *,
+        proyecto_id,
+        actividad_proyecto_id,
+        competencia_id,
+        resultado_id,
+        tipo_resultado,
+        orden_resultado,
+        pagina_origen,
+        observaciones,
+    ):
+        asignacion = MagicMock(id=uuid.uuid4())
+        asignacion.proyecto_id = proyecto_id
+        asignacion.actividad_proyecto_id = actividad_proyecto_id
+        asignacion.competencia_id = competencia_id
+        asignacion.resultado_id = resultado_id
+        asignacion.tipo_resultado = tipo_resultado
+        asignacion.orden_resultado = orden_resultado
+        self.created_asignaciones.append(asignacion)
+        return asignacion
+
+    async def proyecto_exists_by_code_name(
+        self,
+        *,
+        programa_id,
+        codigo_proyecto,
+        nombre_proyecto,
+    ):
+        return (
+            self.existing_codigo_proyecto is not None
+            and self.existing_nombre_proyecto is not None
+            and self.existing_codigo_proyecto.lower() == codigo_proyecto.lower()
+            and self.existing_nombre_proyecto.lower() == nombre_proyecto.lower()
+        )
 
 
 def create_valid_workbook():
@@ -274,8 +360,24 @@ def draft_factory():
 
 
 @pytest.fixture
-def service(draft_factory):
-    session = MockSession()
+def default_competencias():
+    return [
+        _build_competencia(
+            codigo_competencia="240201050",
+            nombre="Competencia de prueba 1",
+            rap_codigos=["R1", "R2"],
+        ),
+        _build_competencia(
+            codigo_competencia="240201051",
+            nombre="Competencia de prueba 2",
+            rap_codigos=["R3"],
+        ),
+    ]
+
+
+@pytest.fixture
+def service(draft_factory, default_competencias):
+    session = MockSession(competencias=default_competencias)
     draft_repository = MockDraftRepository(draft_factory())
     audit_repository = MockAuditRepository()
     storage_service = MockStorageService()
@@ -399,6 +501,80 @@ class TestPreviewProjectExcel:
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 content=content.read(),
             )
+
+    async def test_preview_rejects_existing_project_with_same_code_and_name(
+        self,
+        draft_factory,
+    ):
+        session = MockSession()
+        draft_repository = MockDraftRepository(draft_factory())
+        audit_repository = MockAuditRepository()
+        storage_service = MockStorageService()
+        project_repository = MockProjectRepository(
+            existing_codigo_proyecto="PR-001",
+            existing_nombre_proyecto="Proyecto de prueba",
+        )
+        service = ProyectoExcelImportService(
+            session=session,
+            draft_repository=draft_repository,
+            audit_repository=audit_repository,
+            project_repository=project_repository,
+            storage_service=storage_service,
+        )
+        wb = create_valid_workbook()
+        content = io.BytesIO()
+        wb.save(content)
+        content.seek(0)
+
+        with pytest.raises(ProjectExcelValidationError, match="ya fue cargado"):
+            await service.preview_project_excel(
+                referencia_id=uuid.uuid4(),
+                filename="proyecto.xlsx",
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                content=content.read(),
+            )
+
+        assert project_repository.created_proyectos == []
+
+    async def test_preview_allows_new_project_when_code_and_name_differ(
+        self,
+        draft_factory,
+    ):
+        session = MockSession()
+        draft_repository = MockDraftRepository(draft_factory())
+        audit_repository = MockAuditRepository()
+        storage_service = MockStorageService()
+        project_repository = MockProjectRepository(
+            existing_codigo_proyecto="PR-999",
+            existing_nombre_proyecto="Proyecto anterior",
+        )
+        service = ProyectoExcelImportService(
+            session=session,
+            draft_repository=draft_repository,
+            audit_repository=audit_repository,
+            project_repository=project_repository,
+            storage_service=storage_service,
+        )
+        wb = create_valid_workbook()
+        content = io.BytesIO()
+        wb.save(content)
+        content.seek(0)
+
+        result = await service.preview_project_excel(
+            referencia_id=uuid.uuid4(),
+            filename="proyecto.xlsx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            content=content.read(),
+        )
+
+        assert result.valid is True
+        assert result.proyecto is not None
+        assert result.proyecto.codigo_proyecto == "PR-001"
 
     async def test_preview_persists_in_draft(self, service):
         wb = create_valid_workbook()
@@ -690,6 +866,7 @@ class TestConfirmProjectExcelImport:
 
         mock_execute_res = MagicMock()
         mock_execute_res.scalar_one_or_none.return_value = None
+        mock_execute_res.scalars.return_value.unique.return_value.all.return_value = []
 
         session = MockSession()
         session.execute = MagicMock(return_value=mock_execute_res)
@@ -727,3 +904,283 @@ class TestConfirmProjectExcelImport:
         assert proyecto_draft.payload_json["meta"]["programaId"] == str(
             correct_programa_id
         )
+
+
+_PLANEACION_HEADERS = [
+    "proyecto_id",
+    "fase_id",
+    "fase_proyecto",
+    "actividad_id",
+    "actividad_proyecto",
+    "tipo_resultado",
+    "competencia_id",
+    "codigo_competencia",
+    "nombre_competencia",
+    "rap_id",
+    "rap_numero",
+    "resultado_aprendizaje",
+    "orden_fase",
+    "orden_actividad",
+    "orden_resultado",
+    "pagina_origen",
+    "observaciones",
+]
+
+
+def _append_planeacion_row(sheet, *, actividad_id, actividad, tipo, codigo_comp, comp_id, rap_id, rap_num, rap_desc, orden_resultado):
+    sheet.append(
+        [
+            "PROJ-01",
+            "F1",
+            "Fase Analisis",
+            actividad_id,
+            actividad,
+            tipo,
+            comp_id,
+            codigo_comp,
+            f"Competencia {codigo_comp}",
+            rap_id,
+            rap_num,
+            rap_desc,
+            1,
+            1,
+            orden_resultado,
+            "10",
+            "",
+        ]
+    )
+
+
+def create_multicompetencia_workbook():
+    """One activity linked to two competencies; first competency has two RAPs."""
+
+    wb = Workbook()
+    proyecto_sheet = wb.active
+    proyecto_sheet.title = "Proyecto"
+    proyecto_sheet.append(
+        [
+            "proyecto_id",
+            "nombre_proyecto",
+            "codigo_proyecto_sofia",
+            "codigo_programa",
+            "nombre_programa",
+            "fuente_archivo",
+            "observaciones",
+        ],
+    )
+    proyecto_sheet.append(
+        [
+            "PROJ-01",
+            "Proyecto integrado",
+            "PR-002",
+            "prog-ref",
+            "Programa integrado",
+            "fuente.pdf",
+            "",
+        ]
+    )
+
+    planeacion_sheet = wb.create_sheet("Planeacion_Proyecto")
+    planeacion_sheet.append(_PLANEACION_HEADERS)
+    # Actividad unica con competencia tecnica (2 RAP) y transversal (1 RAP)
+    _append_planeacion_row(
+        planeacion_sheet,
+        actividad_id="A1",
+        actividad="Estructurar propuesta tecnica",
+        tipo="ESPECIFICO",
+        codigo_comp="220501094",
+        comp_id="C1",
+        rap_id="R10",
+        rap_num="1",
+        rap_desc="Definir especificaciones",
+        orden_resultado=1,
+    )
+    _append_planeacion_row(
+        planeacion_sheet,
+        actividad_id="A1",
+        actividad="Estructurar propuesta tecnica",
+        tipo="ESPECIFICO",
+        codigo_comp="220501094",
+        comp_id="C1",
+        rap_id="R11",
+        rap_num="3",
+        rap_desc="Validar condiciones",
+        orden_resultado=3,
+    )
+    _append_planeacion_row(
+        planeacion_sheet,
+        actividad_id="A1",
+        actividad="Estructurar propuesta tecnica",
+        tipo="TRANSVERSAL",
+        codigo_comp="240201524",
+        comp_id="C2",
+        rap_id="R20",
+        rap_num="3",
+        rap_desc="Relacionar procesos comunicativos",
+        orden_resultado=1,
+    )
+
+    validacion_sheet = wb.create_sheet("Validacion_Proyecto")
+    validacion_sheet.append(["tipo_validacion", "descripcion", "estado", "observaciones"])
+    validacion_sheet.append(["CURRICULAR", "Validacion", "OK", ""])
+
+    return wb
+
+
+class TestMaterializacionCurricular:
+    def _build_service(self, competencias):
+        draft = MagicMock(
+            id=uuid.uuid4(),
+            payload_json={
+                "meta": {
+                    "referenciaId": str(uuid.uuid4()),
+                    "programaId": "00000000-0000-0000-0000-000000000000",
+                    "touchedSteps": ["fuente-proyecto"],
+                    "lastInteractionAt": datetime.now(UTC).isoformat(),
+                },
+                "documental": {},
+            },
+            paso_actual="fuente-proyecto",
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        session = MockSession(competencias=competencias)
+        service = ProyectoExcelImportService(
+            session=session,
+            draft_repository=MockDraftRepository(draft),
+            audit_repository=MockAuditRepository(),
+            project_repository=MockProjectRepository(),
+            storage_service=MockStorageService(),
+        )
+        return service
+
+    async def _preview_and_confirm(self, service, workbook):
+        content = io.BytesIO()
+        workbook.save(content)
+        content.seek(0)
+        await service.preview_project_excel(
+            referencia_id=uuid.uuid4(),
+            filename="proyecto.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content=content.read(),
+        )
+        return await service.confirm_project_excel_import(referencia_id=uuid.uuid4())
+
+    async def test_actividad_links_multiple_competencias(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="220501094",
+                nombre="Estructurar propuesta",
+                rap_codigos=["R10", "R11"],
+            ),
+            _build_competencia(
+                codigo_competencia="240201524",
+                nombre="Comunicacion",
+                rap_codigos=["R20"],
+            ),
+        ]
+        service = self._build_service(competencias)
+        result = await self._preview_and_confirm(service, create_multicompetencia_workbook())
+
+        repo = service._project_repository
+        assert len(result.actividad_ids) == 1
+        actividad_id = result.actividad_ids[0]
+        actividad_asignaciones = [
+            a for a in repo.created_asignaciones if a.actividad_proyecto_id == actividad_id
+        ]
+        competencias_ids = {a.competencia_id for a in actividad_asignaciones}
+        assert len(competencias_ids) == 2
+        assert result.pendientes_resumen.asignaciones_materializadas == 3
+        assert result.pendientes_resumen.total == 0
+
+    async def test_competencia_links_multiple_raps(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="220501094",
+                nombre="Estructurar propuesta",
+                rap_codigos=["R10", "R11"],
+            ),
+            _build_competencia(
+                codigo_competencia="240201524",
+                nombre="Comunicacion",
+                rap_codigos=["R20"],
+            ),
+        ]
+        service = self._build_service(competencias)
+        await self._preview_and_confirm(service, create_multicompetencia_workbook())
+
+        repo = service._project_repository
+        comp_tecnica = competencias[0]
+        raps_tecnica = [
+            a for a in repo.created_asignaciones if a.competencia_id == comp_tecnica.id
+        ]
+        assert len(raps_tecnica) == 2
+        assert {a.resultado_id for a in raps_tecnica} == {
+            comp_tecnica.resultados[0].id,
+            comp_tecnica.resultados[1].id,
+        }
+
+    async def test_tipo_resultado_is_preserved(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="220501094",
+                nombre="Estructurar propuesta",
+                rap_codigos=["R10", "R11"],
+            ),
+            _build_competencia(
+                codigo_competencia="240201524",
+                nombre="Comunicacion",
+                rap_codigos=["R20"],
+            ),
+        ]
+        service = self._build_service(competencias)
+        await self._preview_and_confirm(service, create_multicompetencia_workbook())
+
+        repo = service._project_repository
+        tipos = sorted(a.tipo_resultado for a in repo.created_asignaciones)
+        assert tipos == ["ESPECIFICO", "ESPECIFICO", "TRANSVERSAL"]
+
+    async def test_unresolved_competencia_is_reported(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="999999999",
+                nombre="Otra competencia",
+                rap_codigos=["RX"],
+            ),
+        ]
+        service = self._build_service(competencias)
+        result = await self._preview_and_confirm(service, create_multicompetencia_workbook())
+
+        assert result.pendientes_resumen.asignaciones_sin_competencia == 3
+        assert result.pendientes_resumen.asignaciones_materializadas == 0
+        assert result.pendientes_resumen.total == 3
+
+    async def test_unresolved_resultado_is_reported(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="220501094",
+                nombre="Estructurar propuesta",
+                rap_codigos=["R10"],
+            ),
+            _build_competencia(
+                codigo_competencia="240201524",
+                nombre="Comunicacion",
+                rap_codigos=["R20"],
+            ),
+        ]
+        service = self._build_service(competencias)
+        result = await self._preview_and_confirm(service, create_multicompetencia_workbook())
+
+        repo = service._project_repository
+        # R11 no existe en la competencia tecnica: se reporta sin resultado
+        assert result.pendientes_resumen.asignaciones_sin_resultado == 1
+        sin_resultado = [a for a in repo.created_asignaciones if a.resultado_id is None]
+        assert len(sin_resultado) == 1
+
+    async def test_default_workbook_materializes_assignments(self, service):
+        workbook = create_valid_workbook()
+        result = await self._preview_and_confirm(service, workbook)
+
+        repo = service._project_repository
+        assert result.pendientes_resumen.asignaciones_materializadas == 3
+        assert result.pendientes_resumen.total == 0
+        assert len(repo.created_asignaciones) == 3

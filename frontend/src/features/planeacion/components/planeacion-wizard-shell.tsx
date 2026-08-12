@@ -28,7 +28,6 @@ import {
   type PlaneacionSaveRequest,
   type ContextoCompetencia,
   type ContextoFase,
-  type ContextoAsignacionProyecto,
   type ClasificacionInformacion,
   type FormatoOficialEstado,
   savePlaneacionBorrador,
@@ -325,8 +324,8 @@ export function PlaneacionWizardShell({
   const confirm = useConfirm();
   const [activeStep, setActiveStep] = useState<StepId>("dashboard");
   const [planningsList, setPlanningsList] = useState<PlaneacionListResponse[]>([]);
-  const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
-  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
+  const [selectedCompetenciaIds, setSelectedCompetenciaIds] = useState<string[]>([]);
+  const [selectedResultadoIds, setSelectedResultadoIds] = useState<string[]>([]);
   const [resultModalCompetenciaId, setResultModalCompetenciaId] = useState<string | null>(null);
   const [activePlanningId, setActivePlanningId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -353,7 +352,7 @@ export function PlaneacionWizardShell({
   const [faseId, setFaseId] = useState<string>("");
   const [actividadId, setActividadId] = useState<string>("");
   const [proyectoAsignaciones, setProyectoAsignaciones] = useState<
-    ContextoAsignacionProyecto[]
+    { fase_id: string; actividad_id: string }[]
   >([]);
   const [selectedConocimientos, setSelectedConocimientos] = useState<string[]>([]);
   const [selectedCriterios, setSelectedCriterios] = useState<string[]>([]);
@@ -385,13 +384,38 @@ export function PlaneacionWizardShell({
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Filter competencies based on code, name or learning results (RAP)
+  // Fases map
+  const faseMap = useMemo(() => {
+    const map = new Map<string, ContextoFase>();
+    contexto.fases.forEach((f) => map.set(f.id, f));
+    return map;
+  }, [contexto.fases]);
+
+  const selectedFase = faseId ? faseMap.get(faseId) ?? null : null;
+
+  const availableActividades = useMemo(() => {
+    return selectedFase?.actividades ?? [];
+  }, [selectedFase]);
+
+  const selectedActividad = useMemo(() => {
+    return availableActividades.find((a) => a.id === actividadId) ?? null;
+  }, [availableActividades, actividadId]);
+
+  // Competencies associated with the selected activity
+  const actividadCompetencias = useMemo(() => {
+    return selectedActividad?.competencias ?? [];
+  }, [selectedActividad]);
+
+  // Filter competencies based on search query
   const filteredCompetencias = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return contexto.competencias;
-    }
-    return contexto.competencias.filter((comp) => {
+    const list = actividadCompetencias.length > 0
+      ? actividadCompetencias
+      : contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias));
+    const uniqueList = Array.from(new Map(list.map((c) => [c.id, c])).values());
+
+    if (!query) return uniqueList;
+    return uniqueList.filter((comp) => {
       const matchCodigo = comp.codigo_competencia.toLowerCase().includes(query);
       const matchNombre = comp.nombre_competencia.toLowerCase().includes(query);
       const matchResultado = comp.resultados.some((res) =>
@@ -399,7 +423,49 @@ export function PlaneacionWizardShell({
       );
       return matchCodigo || matchNombre || matchResultado;
     });
-  }, [contexto.competencias, searchQuery]);
+  }, [actividadCompetencias, contexto.fases, searchQuery]);
+
+  // Selected competencies & results
+  const selectedCompetencias = useMemo(() => {
+    const allCompList = contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias));
+    const compMap = new Map(allCompList.map((c) => [c.id, c]));
+    return selectedCompetenciaIds
+      .map((id) => compMap.get(id))
+      .filter((c): c is ContextoCompetencia => Boolean(c));
+  }, [contexto.fases, selectedCompetenciaIds]);
+
+  const availableResultados = useMemo(() => {
+    return selectedCompetencias.flatMap((c) => c.resultados);
+  }, [selectedCompetencias]);
+
+  const selectedResultados = useMemo(() => {
+    return availableResultados.filter((r) => selectedResultadoIds.includes(r.id));
+  }, [availableResultados, selectedResultadoIds]);
+
+  const planningsByCompetencia = useMemo(() => {
+    const map = new Map<string, PlaneacionListResponse[]>();
+    planningsList.forEach((planning) => {
+      contexto.fases.flatMap((f) => f.actividades).forEach((act) => {
+        if (act.id === planning.actividad_id) {
+          act.competencias.forEach((comp) => {
+            const current = map.get(comp.id) ?? [];
+            current.push(planning);
+            map.set(comp.id, current);
+          });
+        }
+      });
+    });
+    return map;
+  }, [planningsList, contexto.fases]);
+
+  // Single object references for guides and previews
+  const selectedCompetencia = selectedCompetencias[0] ?? null;
+  const selectedResultado = selectedResultados[0] ?? null;
+  const modalCompetencia = resultModalCompetenciaId
+    ? contexto.fases
+        .flatMap((f) => f.actividades.flatMap((a) => a.competencias))
+        .find((c) => c.id === resultModalCompetenciaId) ?? null
+    : null;
 
   // Load existing plannings for this project
   const loadPlannings = useCallback(async () => {
@@ -425,13 +491,13 @@ export function PlaneacionWizardShell({
         config.clasificacion_informacion ?? "PUBLICA",
       );
       setEquipoGestionCurricular(
-        config.equipo_gestion_curricular.join("\n"),
+        (config.equipo_gestion_curricular ?? []).join(", "),
       );
       setRegional(config.regional ?? "");
       setCentroFormacion(config.centro_formacion ?? "");
       setConsolidatedStatus(status);
     } catch {
-      setConsolidatedStatus(null);
+      toast.error("Error al cargar la configuración del formato oficial");
     }
   }, [contexto.proyecto_id]);
 
@@ -446,41 +512,23 @@ export function PlaneacionWizardShell({
     }
   }, [activeStep]);
 
-  // Map competence map
-  const competenciasMap = useMemo(() => {
-    const map = new Map<string, ContextoCompetencia>();
-    contexto.competencias.forEach((c) => map.set(c.id, c));
-    return map;
-  }, [contexto.competencias]);
-
-  const selectedCompetencia = selectedCompId ? competenciasMap.get(selectedCompId) : null;
-  const modalCompetencia = resultModalCompetenciaId ? competenciasMap.get(resultModalCompetenciaId) : null;
-  const selectedResultado = useMemo(
-    () => selectedCompetencia?.resultados.find((resultado) => resultado.id === selectedResultId) ?? null,
-    [selectedCompetencia, selectedResultId],
+  // Select All toggles for conocimientos & criterios across all selected competencies
+  const allSaberIds = useMemo(
+    () => selectedCompetencias.flatMap((c) => c.conocimientos_saber.map((k) => k.id)),
+    [selectedCompetencias],
   );
-
-  const planningsByResultado = useMemo(() => {
-    const map = new Map<string, PlaneacionListResponse>();
-    planningsList.forEach((planning) => map.set(planning.resultado_id, planning));
-    return map;
-  }, [planningsList]);
-
-  const planningsByCompetencia = useMemo(() => {
-    const map = new Map<string, PlaneacionListResponse[]>();
-    planningsList.forEach((planning) => {
-      const current = map.get(planning.competencia_id) ?? [];
-      current.push(planning);
-      map.set(planning.competencia_id, current);
-    });
-    return map;
-  }, [planningsList]);
-
-  // Select All toggles
-  const allSaberIds = useMemo(() => selectedCompetencia?.conocimientos_saber.map((k) => k.id) ?? [], [selectedCompetencia]);
-  const allProcesoIds = useMemo(() => selectedCompetencia?.conocimientos_proceso.map((k) => k.id) ?? [], [selectedCompetencia]);
-  const allConocimientosIds = useMemo(() => [...allSaberIds, ...allProcesoIds], [allSaberIds, allProcesoIds]);
-  const allCriteriosIds = useMemo(() => selectedCompetencia?.criterios.map((cr) => cr.id) ?? [], [selectedCompetencia]);
+  const allProcesoIds = useMemo(
+    () => selectedCompetencias.flatMap((c) => c.conocimientos_proceso.map((k) => k.id)),
+    [selectedCompetencias],
+  );
+  const allConocimientosIds = useMemo(
+    () => [...allSaberIds, ...allProcesoIds],
+    [allSaberIds, allProcesoIds],
+  );
+  const allCriteriosIds = useMemo(
+    () => selectedCompetencias.flatMap((c) => c.criterios.map((cr) => cr.id)),
+    [selectedCompetencias],
+  );
 
   const totalSelectableCount = allConocimientosIds.length + allCriteriosIds.length;
   const totalSelectedCount = selectedConocimientos.length + selectedCriterios.length;
@@ -497,51 +545,13 @@ export function PlaneacionWizardShell({
     }
   };
 
-  const isAllSaberSelected = allSaberIds.length > 0 && allSaberIds.every((id) => selectedConocimientos.includes(id));
-  const handleToggleAllSaber = () => {
-    if (isAllSaberSelected) {
-      setSelectedConocimientos((prev) => prev.filter((id) => !allSaberIds.includes(id)));
-    } else {
-      setSelectedConocimientos((prev) => [...new Set([...prev, ...allSaberIds])]);
-    }
-  };
-
-  const isAllProcesoSelected = allProcesoIds.length > 0 && allProcesoIds.every((id) => selectedConocimientos.includes(id));
-  const handleToggleAllProceso = () => {
-    if (isAllProcesoSelected) {
-      setSelectedConocimientos((prev) => prev.filter((id) => !allProcesoIds.includes(id)));
-    } else {
-      setSelectedConocimientos((prev) => [...new Set([...prev, ...allProcesoIds])]);
-    }
-  };
-
-  const isAllCriteriosSelected = allCriteriosIds.length > 0 && selectedCriterios.length === allCriteriosIds.length;
-  const handleToggleAllCriterios = () => {
-    if (isAllCriteriosSelected) {
-      setSelectedCriterios([]);
-    } else {
-      setSelectedCriterios(allCriteriosIds);
-    }
-  };
-
-  // Filtered activities based on selected phase
-  const faseMap = useMemo(() => {
-    const map = new Map<string, ContextoFase>();
-    contexto.fases.forEach((f) => map.set(f.id, f));
-    return map;
-  }, [contexto.fases]);
-
-  const availableActividades = useMemo(() => {
-    if (!faseId) return [];
-    return faseMap.get(faseId)?.actividades ?? [];
-  }, [faseId, faseMap]);
-
   // Clean form state
   const resetForm = () => {
     setFaseId("");
     setActividadId("");
+    setSelectedCompetenciaIds([]);
+    setSelectedResultadoIds([]);
     setProyectoAsignaciones([]);
-    setSelectedResultId(null);
     setSelectedConocimientos([]);
     setSelectedCriterios([]);
     setActividadesAprendizaje("");
@@ -567,30 +577,16 @@ export function PlaneacionWizardShell({
 
   const loadPlanningDetails = async (
     planning: PlaneacionListResponse,
-    fallbackResultadoId: string,
   ) => {
     setIsLoadingDetails(true);
     try {
       const details = await fetchPlaneacionDetalle(planning.id);
-      const resultId = details.resultado_id ?? details.resultados_ids[0] ?? fallbackResultadoId;
-      const resultadoContexto = contexto.competencias
-        .flatMap((competencia) => competencia.resultados)
-        .find((resultado) => resultado.id === resultId);
-      const savedAssignments = Array.isArray(
-        details.datos_complementarios.asignaciones_proyecto,
-      )
-        ? (details.datos_complementarios
-            .asignaciones_proyecto as ContextoAsignacionProyecto[])
-        : [];
-      const assignments =
-        savedAssignments.length > 0
-          ? savedAssignments
-          : (resultadoContexto?.asignaciones_proyecto ?? []);
       setActivePlanningId(details.id);
-      setSelectedResultId(resultId);
-      setProyectoAsignaciones(assignments);
-      setFaseId(assignments[0]?.fase_id ?? details.fase_id ?? "");
-      setActividadId(assignments[0]?.actividad_id ?? details.actividad_id ?? "");
+      setFaseId(details.fase_id ?? "");
+      setActividadId(details.actividad_id ?? "");
+      setSelectedResultadoIds(details.resultados_ids);
+      const compIds = (details.competencias ?? []).map((c) => c.competencia_id);
+      setSelectedCompetenciaIds(compIds);
       setSelectedConocimientos(details.conocimientos_ids);
       setSelectedCriterios(details.criterios_ids);
 
@@ -632,33 +628,29 @@ export function PlaneacionWizardShell({
 
   const handleOpenResultadoModal = (competenciaId: string) => {
     resetForm();
-    setSelectedCompId(competenciaId);
+    setSelectedCompetenciaIds([competenciaId]);
     setResultModalCompetenciaId(competenciaId);
   };
 
   const handleSelectResultado = async (resultadoId: string) => {
-    if (!selectedCompId) return;
+    const allComps = contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias));
+    const parentComp = allComps.find((c) => c.resultados.some((r) => r.id === resultadoId));
+    const parentFase = contexto.fases.find((f) =>
+      f.actividades.some((a) => a.competencias.some((c) => c.resultados.some((r) => r.id === resultadoId)))
+    );
+    const parentActividad = parentFase?.actividades.find((a) =>
+      a.competencias.some((c) => c.resultados.some((r) => r.id === resultadoId))
+    );
 
-    const existing = planningsByResultado.get(resultadoId);
-    if (existing?.estado === "COMPLETO") {
-      toast.info("Este resultado ya tiene una planeacion completa.");
-      return;
-    }
-
-    resetForm();
-    setSelectedCompId(selectedCompId);
-    setSelectedResultId(resultadoId);
-    const resultado = contexto.competencias
-      .find((competencia) => competencia.id === selectedCompId)
-      ?.resultados.find((item) => item.id === resultadoId);
-    const assignments = resultado?.asignaciones_proyecto ?? [];
-    setProyectoAsignaciones(assignments);
-    setFaseId(assignments[0]?.fase_id ?? resultado?.fase_id ?? "");
-    setActividadId(assignments[0]?.actividad_id ?? resultado?.actividad_id ?? "");
+    if (parentFase) setFaseId(parentFase.id);
+    if (parentActividad) setActividadId(parentActividad.id);
+    if (parentComp) setSelectedCompetenciaIds([parentComp.id]);
+    setSelectedResultadoIds([resultadoId]);
     setResultModalCompetenciaId(null);
 
+    const existing = planningsList.find((p) => p.actividad_id === parentActividad?.id);
     if (existing) {
-      await loadPlanningDetails(existing, resultadoId);
+      await loadPlanningDetails(existing);
       return;
     }
 
@@ -667,19 +659,17 @@ export function PlaneacionWizardShell({
 
   // Save current step to DB as a draft
   const handleSaveDraft = async (silent = false): Promise<string | null> => {
-    if (!selectedCompId || !selectedResultId) {
-      toast.error("Selecciona un resultado de aprendizaje antes de guardar.");
+    if (!faseId || !actividadId || selectedResultadoIds.length === 0) {
+      toast.error("Selecciona la fase, actividad y al menos un resultado de aprendizaje antes de guardar.");
       return null;
     }
     
     setIsSaving(true);
     const payload: PlaneacionSaveRequest = {
       proyecto_id: contexto.proyecto_id,
-      competencia_id: selectedCompId,
-      resultado_id: selectedResultId,
-      fase_id: faseId || null,
-      actividad_id: actividadId || null,
-      resultados_ids: [selectedResultId],
+      fase_id: faseId,
+      actividad_id: actividadId,
+      resultados_ids: selectedResultadoIds,
       conocimientos_ids: selectedConocimientos,
       criterios_ids: selectedCriterios,
       datos_complementarios: {
@@ -989,11 +979,15 @@ export function PlaneacionWizardShell({
     }
   };
 
+  const totalCompetenciasCount = useMemo(() => {
+    return contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias)).length;
+  }, [contexto.fases]);
+
   // Sidebar step rendering
   const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === activeStep);
   const guide = buildPlaneacionWizardGuide({
     activeStep,
-    competenciasCount: contexto.competencias.length,
+    competenciasCount: totalCompetenciasCount,
     fasesCount: contexto.fases.length,
     selectedCompetencia: selectedCompetencia !== null,
     selectedResultado: selectedResultado !== null,
@@ -1047,6 +1041,89 @@ export function PlaneacionWizardShell({
       {/* DASHBOARD VIEW */}
       {activeStep === "dashboard" && (
         <section className="grid gap-6">
+          {/* Action Bar & Plannings List */}
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Planeaciones e Integraciones de Actividades de Aprendizaje</h2>
+              <p className="text-xs text-[var(--muted)] mt-0.5">
+                Gestión de planeaciones integradas por fase, actividad de proyecto y competencias.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setActiveStep("curricular");
+              }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Crear nueva planeación
+            </button>
+          </div>
+
+          {planningsList.length > 0 && (
+            <div className="grid gap-4">
+              {planningsList.map((planning) => (
+                <article
+                  key={planning.id}
+                  className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="grid gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                          planning.estado === "COMPLETO"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        )}>
+                          {planning.estado}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {planning.nombre_fase}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-900">
+                        {planning.descripcion_actividad}
+                      </h3>
+                      {planning.actividades_aprendizaje && (
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          {planning.actividades_aprendizaje}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 text-[11px] text-[var(--muted)] mt-1">
+                        <span>{planning.competencias_count} competencias</span>
+                        <span>•</span>
+                        <span>{planning.resultados_count} RAPs ({planning.resultados_especificos} espec., {planning.resultados_transversales} trans.)</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadPlanningDetails(planning)}
+                        className="inline-flex min-h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition"
+                      >
+                        Editar planeación
+                      </button>
+                      {planning.estado !== "COMPLETO" && (
+                        <button
+                          type="button"
+                          onClick={(e) => void handleDeletePlanning(planning.id, e)}
+                          title="Eliminar borrador"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
           <div
             id="planeacion-document-config"
             className="grid gap-5 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-sm"
@@ -1382,7 +1459,7 @@ export function PlaneacionWizardShell({
 
             <div className="grid gap-3 p-5">
               {modalCompetencia.resultados.map((resultado, index) => {
-                const planning = planningsByResultado.get(resultado.id);
+                const planning = planningsList.find((p) => p.actividades_aprendizaje?.includes(resultado.descripcion));
                 const isComplete = planning?.estado === "COMPLETO";
                 const isDraft = planning?.estado === "BORRADOR";
 
@@ -1454,7 +1531,7 @@ export function PlaneacionWizardShell({
       )}
 
       {/* WIZARD FLOW */}
-      {activeStep !== "dashboard" && selectedCompetencia && (
+      {activeStep !== "dashboard" && (
         <section className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
           {/* Sidebar */}
           <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6 w-full h-fit">
@@ -1499,15 +1576,26 @@ export function PlaneacionWizardShell({
             </div>
 
             <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4 text-xs leading-5">
-              <p className="font-semibold text-[var(--foreground)] uppercase tracking-wider mb-2">Competencia Seleccionada</p>
-              <p className="font-mono text-slate-800 font-bold mb-1">{selectedCompetencia.codigo_competencia}</p>
-              <p className="text-[var(--muted)] leading-relaxed">{selectedCompetencia.nombre_competencia}</p>
-              {selectedResultado && (
-                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                  <p className="mb-1 font-semibold uppercase tracking-wider text-slate-600">Resultado activo</p>
-                  <p className="text-slate-800">{selectedResultado.descripcion}</p>
+              <p className="font-semibold text-[var(--foreground)] uppercase tracking-wider mb-2">Resumen de Selección</p>
+              
+              <div className="grid gap-2">
+                <div>
+                  <span className="text-[var(--muted)] block">Fase:</span>
+                  <span className="font-medium text-slate-800">{selectedFase?.nombre_fase ?? "Sin seleccionar"}</span>
                 </div>
-              )}
+                <div>
+                  <span className="text-[var(--muted)] block">Actividad de Proyecto:</span>
+                  <span className="font-medium text-slate-800">{selectedActividad?.descripcion ?? "Sin seleccionar"}</span>
+                </div>
+                <div className="border-t border-slate-100 pt-2">
+                  <span className="text-[var(--muted)] block">Competencias seleccionadas:</span>
+                  <span className="font-semibold text-[var(--accent-strong)]">{selectedCompetencias.length}</span>
+                </div>
+                <div>
+                  <span className="text-[var(--muted)] block">RAPs seleccionados:</span>
+                  <span className="font-semibold text-emerald-700">{selectedResultados.length}</span>
+                </div>
+              </div>
             </div>
 
             <button
@@ -1544,301 +1632,476 @@ export function PlaneacionWizardShell({
                   </button>
                 </div>
                 
-                <div className="grid gap-5">
+                <div className="grid gap-6">
+                  {/* Step 1.1: Fase Selection */}
                   <div>
-                    <p className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Fases y actividades del proyecto
-                    </p>
-                    {proyectoAsignaciones.length > 0 ? (
-                      <div className="grid gap-3">
-                        {proyectoAsignaciones.map((assignment) => {
-                          const fase = faseMap.get(assignment.fase_id);
-                          const actividad = fase?.actividades.find(
-                            (item) => item.id === assignment.actividad_id,
-                          );
-                          return (
-                            <div
-                              key={`${assignment.fase_id}-${assignment.actividad_id}`}
-                              className="grid gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 sm:grid-cols-[12rem_1fr]"
-                            >
-                              <strong>{fase?.nombre_fase ?? "Fase no disponible"}</strong>
-                              <span>
-                                {actividad?.descripcion ?? "Actividad no disponible"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                        El RAP no tiene fases o actividades asociadas en la matriz del
-                        proyecto.
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--muted)]">
-                    La fase y la actividad se cargan automáticamente desde la matriz del
-                    proyecto al seleccionar el resultado de aprendizaje.
-                  </p>
-
-                  {/* Select All Toggle Control Bar */}
-                  <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
-                        Contenido Curricular de la Planeacion
-                      </h3>
-                      <p className="text-xs text-[var(--muted)] mt-0.5">
-                        El resultado de aprendizaje ya fue elegido. Agrega los conocimientos y criterios que se abordaran en esta planeacion.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleToggleSelectAll}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition shadow-sm cursor-pointer",
-                        isAllSelected
-                          ? "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 hover:border-rose-300"
-                          : "bg-[var(--accent-soft)] border-[color:var(--card-border)] text-[var(--accent-strong)] hover:bg-[var(--accent)] hover:text-white"
-                      )}
+                    <label htmlFor="fase-selector" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      1. Selecciona la Fase del Proyecto Formativo
+                    </label>
+                    <select
+                      id="fase-selector"
+                      value={faseId}
+                      onChange={(e) => {
+                        const newFaseId = e.target.value;
+                        setFaseId(newFaseId);
+                        setActividadId("");
+                        setSelectedCompetenciaIds([]);
+                        setSelectedResultadoIds([]);
+                        setSelectedConocimientos([]);
+                        setSelectedCriterios([]);
+                      }}
+                      className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
                     >
-                      {isAllSelected ? "Deseleccionar Todo" : "Seleccionar Todo"}
-                    </button>
-                  </div>
-
-                  <div className="border-t border-[var(--line)] pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Resultado de Aprendizaje activo</h3>
-                    <div className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)]/20 p-4">
-                      <p className="text-sm leading-6 text-slate-800">
-                        {selectedResultado?.descripcion ?? "Resultado no seleccionado"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Saberes Saber checklist */}
-                  <div className="border-t border-[var(--line)] pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Saberes: Conceptos y Principios</h3>
-                      <button
-                        type="button"
-                        onClick={handleToggleAllSaber}
-                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
-                      >
-                        {isAllSaberSelected ? "Deseleccionar todos" : "Seleccionar todos"}
-                      </button>
-                    </div>
-                    <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
-                      {selectedCompetencia.conocimientos_saber.map((k) => (
-                        <label
-                          key={k.id}
-                          className="flex items-start gap-3 py-1.5 cursor-pointer text-sm text-slate-700 hover:text-slate-900"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedConocimientos.includes(k.id)}
-                            onChange={() => {
-                              setSelectedConocimientos((prev) =>
-                                prev.includes(k.id) ? prev.filter((id) => id !== k.id) : [...prev, k.id]
-                              );
-                            }}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
-                          />
-                          <span>{k.descripcion}</span>
-                        </label>
+                      <option value="">-- Seleccionar Fase --</option>
+                      {contexto.fases.map((fase) => (
+                        <option key={fase.id} value={fase.id}>
+                          {fase.nombre_fase}
+                        </option>
                       ))}
-                    </div>
-                    <div className="mt-4">
-                      <label htmlFor="tematicas-saber" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                        Temáticas adicionales de conceptos y principios
+                    </select>
+                  </div>
+
+                  {/* Step 1.2: Actividad de Proyecto Selection */}
+                  {faseId && (
+                    <div>
+                      <label htmlFor="actividad-selector" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                        2. Selecciona la Actividad del Proyecto
                       </label>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                          id="tematicas-saber"
-                          value={nuevaTematicaSaber}
-                          onChange={(event) => setNuevaTematicaSaber(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              addTematica(
-                                nuevaTematicaSaber,
-                                setNuevaTematicaSaber,
-                                setTematicasSaber,
-                              );
-                            }
-                          }}
-                          placeholder="Escribe una temática complementaria."
-                          className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            addTematica(
-                              nuevaTematicaSaber,
-                              setNuevaTematicaSaber,
-                              setTematicasSaber,
-                            )
-                          }
-                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
-                        >
-                          <Plus className="h-4 w-4" />
-                          Adicionar temática
-                        </button>
+                      <select
+                        id="actividad-selector"
+                        value={actividadId}
+                        onChange={(e) => {
+                          const newActId = e.target.value;
+                          setActividadId(newActId);
+                          setSelectedCompetenciaIds([]);
+                          setSelectedResultadoIds([]);
+                          setSelectedConocimientos([]);
+                          setSelectedCriterios([]);
+                        }}
+                        className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                      >
+                        <option value="">-- Seleccionar Actividad de Proyecto --</option>
+                        {availableActividades.map((act) => (
+                          <option key={act.id} value={act.id}>
+                            {act.descripcion}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Step 1.3: Competencias Selection */}
+                  {actividadId && (
+                    <div className="border-t border-[var(--line)] pt-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
+                          3. Competencias Vinculadas a la Actividad ({actividadCompetencias.length})
+                        </h3>
+                        <span className="text-xs text-[var(--muted)]">
+                          Selecciona 1..N competencias
+                        </span>
                       </div>
-                      {tematicasSaber.length > 0 && (
-                        <ul className="mt-3 grid gap-2">
-                          {tematicasSaber.map((tematica) => (
-                            <li
-                              key={tematica}
-                              className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
-                            >
-                              <span>{tematica}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setTematicasSaber((items) =>
-                                    items.filter((item) => item !== tematica),
-                                  )
-                                }
-                                aria-label={`Eliminar temática ${tematica}`}
-                                className="text-emerald-700 hover:text-rose-700"
+
+                      {actividadCompetencias.length === 0 ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                          Esta actividad de proyecto no tiene competencias vinculadas en la matriz del proyecto.
+                        </div>
+                      ) : (
+                        <div className="grid gap-3">
+                          {actividadCompetencias.map((comp) => {
+                            const isSelected = selectedCompetenciaIds.includes(comp.id);
+                            const hasEspecifico = comp.resultados.some(
+                              (r) => r.tipo_resultado.toUpperCase() === "ESPECIFICO"
+                            );
+                            const hasTransversal = comp.resultados.some(
+                              (r) => r.tipo_resultado.toUpperCase() === "TRANSVERSAL"
+                            );
+
+                            return (
+                              <label
+                                key={comp.id}
+                                className={cn(
+                                  "flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition",
+                                  isSelected
+                                    ? "border-[var(--accent)] bg-[var(--accent-soft)]/30 shadow-sm"
+                                    : "border-[color:var(--card-border)] bg-white hover:border-slate-300"
+                                )}
                               >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    if (isSelected) {
+                                      const nextCompIds = selectedCompetenciaIds.filter((id) => id !== comp.id);
+                                      setSelectedCompetenciaIds(nextCompIds);
+                                      // Remove RAPs of this competency
+                                      const compRapIds = comp.resultados.map((r) => r.id);
+                                      setSelectedResultadoIds((prev) =>
+                                        prev.filter((id) => !compRapIds.includes(id))
+                                      );
+                                      // Remove conocimientos & criterios of this competency
+                                      const compKnowIds = [
+                                        ...comp.conocimientos_saber.map((k) => k.id),
+                                        ...comp.conocimientos_proceso.map((k) => k.id),
+                                      ];
+                                      setSelectedConocimientos((prev) =>
+                                        prev.filter((id) => !compKnowIds.includes(id))
+                                      );
+                                      const compCritIds = comp.criterios.map((cr) => cr.id);
+                                      setSelectedCriterios((prev) =>
+                                        prev.filter((id) => !compCritIds.includes(id))
+                                      );
+                                    } else {
+                                      setSelectedCompetenciaIds([...selectedCompetenciaIds, comp.id]);
+                                    }
+                                  }}
+                                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
+                                />
+                                <div className="grid gap-1 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-xs font-bold text-slate-800">
+                                      {comp.codigo_competencia}
+                                    </span>
+                                    {hasEspecifico && (
+                                      <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                                        Técnico / Específico
+                                      </span>
+                                    )}
+                                    {hasTransversal && (
+                                      <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-semibold text-purple-800">
+                                        Transversal
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-slate-700">{comp.nombre_competencia}</p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
-                  </div>
+                  )}
 
-                  {/* Saberes Proceso checklist */}
-                  <div className="border-t border-[var(--line)] pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Saberes de Proceso</h3>
-                      <button
-                        type="button"
-                        onClick={handleToggleAllProceso}
-                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
-                      >
-                        {isAllProcesoSelected ? "Deseleccionar todos" : "Seleccionar todos"}
-                      </button>
+                  {/* Step 1.4: Resultados de Aprendizaje (RAP) Selection */}
+                  {selectedCompetencias.length > 0 && (
+                    <div className="border-t border-[var(--line)] pt-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
+                          4. Resultados de Aprendizaje (RAP) a Desarrollar ({selectedResultados.length} seleccionados)
+                        </h3>
+                        <span className="text-xs text-[var(--muted)]">
+                          Selecciona 1..N RAPs de las competencias elegidas
+                        </span>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {selectedCompetencias.map((comp) => (
+                          <div key={comp.id} className="rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                              Competencia: {comp.codigo_competencia} — {comp.nombre_competencia}
+                            </p>
+                            <div className="grid gap-2">
+                              {comp.resultados.map((resultado) => {
+                                const isChecked = selectedResultadoIds.includes(resultado.id);
+                                return (
+                                  <label
+                                    key={resultado.id}
+                                    className={cn(
+                                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition",
+                                      isChecked
+                                        ? "border-emerald-500 bg-emerald-50/80 text-emerald-950 font-medium"
+                                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                                    )}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setSelectedResultadoIds((prev) =>
+                                            prev.filter((id) => id !== resultado.id)
+                                          );
+                                        } else {
+                                          setSelectedResultadoIds((prev) => [...prev, resultado.id]);
+                                        }
+                                      }}
+                                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        {resultado.codigo_resultado && (
+                                          <span className="font-mono text-xs font-bold text-slate-600">
+                                            {resultado.codigo_resultado}
+                                          </span>
+                                        )}
+                                        <span className={cn(
+                                          "rounded px-2 py-0.25 text-[10px] font-semibold uppercase",
+                                          resultado.tipo_resultado.toUpperCase() === "ESPECIFICO"
+                                            ? "bg-blue-100 text-blue-800"
+                                            : "bg-purple-100 text-purple-800"
+                                        )}>
+                                          {resultado.tipo_resultado}
+                                        </span>
+                                      </div>
+                                      <p>{resultado.descripcion}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
-                      {selectedCompetencia.conocimientos_proceso.map((k) => (
-                        <label
-                          key={k.id}
-                          className="flex items-start gap-3 py-1.5 cursor-pointer text-sm text-slate-700 hover:text-slate-900"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedConocimientos.includes(k.id)}
-                            onChange={() => {
-                              setSelectedConocimientos((prev) =>
-                                prev.includes(k.id) ? prev.filter((id) => id !== k.id) : [...prev, k.id]
-                              );
-                            }}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
-                          />
-                          <span>{k.descripcion}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-4">
-                      <label htmlFor="tematicas-proceso" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                        Temáticas adicionales de proceso
-                      </label>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                          id="tematicas-proceso"
-                          value={nuevaTematicaProceso}
-                          onChange={(event) => setNuevaTematicaProceso(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              addTematica(
-                                nuevaTematicaProceso,
-                                setNuevaTematicaProceso,
-                                setTematicasProceso,
-                              );
-                            }
-                          }}
-                          placeholder="Escribe una temática procedimental."
-                          className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                        />
+                  )}
+
+                  {/* Step 1.5: Saberes & Criterios Selection */}
+                  {selectedResultados.length > 0 && (
+                    <>
+                      {/* Select All Toggle Control Bar */}
+                      <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
+                            5. Saberes y Criterios por Competencia
+                          </h3>
+                          <p className="mt-0.5 text-xs text-[var(--muted)]">
+                            Selecciona los saberes de concepto, saberes de proceso y criterios de evaluación aplicables.
+                          </p>
+                        </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            addTematica(
-                              nuevaTematicaProceso,
-                              setNuevaTematicaProceso,
-                              setTematicasProceso,
-                            )
-                          }
-                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+                          onClick={handleToggleSelectAll}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-sm transition",
+                            isAllSelected
+                              ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100"
+                              : "border-[color:var(--card-border)] bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-[var(--accent)] hover:text-white"
+                          )}
                         >
-                          <Plus className="h-4 w-4" />
-                          Adicionar temática
+                          {isAllSelected ? "Deseleccionar Todo" : "Seleccionar Todo"}
                         </button>
                       </div>
-                      {tematicasProceso.length > 0 && (
-                        <ul className="mt-3 grid gap-2">
-                          {tematicasProceso.map((tematica) => (
-                            <li
-                              key={tematica}
-                              className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
-                            >
-                              <span>{tematica}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setTematicasProceso((items) =>
-                                    items.filter((item) => item !== tematica),
-                                  )
-                                }
-                                aria-label={`Eliminar temática ${tematica}`}
-                                className="text-emerald-700 hover:text-rose-700"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Criterios checklist */}
-                  <div className="border-t border-[var(--line)] pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">Criterios de Evaluación</h3>
-                      <button
-                        type="button"
-                        onClick={handleToggleAllCriterios}
-                        className="text-xs font-semibold text-[var(--accent-strong)] hover:underline cursor-pointer"
-                      >
-                        {isAllCriteriosSelected ? "Deseleccionar todos" : "Seleccionar todos"}
-                      </button>
-                    </div>
-                    <div className="grid gap-2 max-h-60 overflow-y-auto border border-slate-100 rounded-lg p-3">
-                      {selectedCompetencia.criterios.map((cr) => (
-                        <label
-                          key={cr.id}
-                          className="flex items-start gap-3 py-1.5 cursor-pointer text-sm text-slate-700 hover:text-slate-900"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedCriterios.includes(cr.id)}
-                            onChange={() => {
-                              setSelectedCriterios((prev) =>
-                                prev.includes(cr.id) ? prev.filter((id) => id !== cr.id) : [...prev, cr.id]
-                              );
-                            }}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
-                          />
-                          <span>{cr.descripcion}</span>
-                        </label>
+                      {selectedCompetencias.map((comp) => (
+                        <div key={`saberes-${comp.id}`} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--accent-strong)]">
+                            Competencia {comp.codigo_competencia} — {comp.nombre_competencia}
+                          </h4>
+
+                          {/* Saberes Saber checklist */}
+                          <div>
+                            <div className="mb-2 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-slate-700">Saberes: Conceptos y Principios</span>
+                            </div>
+                            <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/30 p-3">
+                              {comp.conocimientos_saber.map((k) => (
+                                <label
+                                  key={k.id}
+                                  className="flex cursor-pointer items-start gap-3 py-1 text-sm text-slate-700 hover:text-slate-900"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedConocimientos.includes(k.id)}
+                                    onChange={() => {
+                                      setSelectedConocimientos((prev) =>
+                                        prev.includes(k.id) ? prev.filter((id) => id !== k.id) : [...prev, k.id]
+                                      );
+                                    }}
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
+                                  />
+                                  <span>{k.descripcion}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Saberes Proceso checklist */}
+                          <div>
+                            <div className="mb-2 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-slate-700">Saberes de Proceso</span>
+                            </div>
+                            <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/30 p-3">
+                              {comp.conocimientos_proceso.map((k) => (
+                                <label
+                                  key={k.id}
+                                  className="flex cursor-pointer items-start gap-3 py-1 text-sm text-slate-700 hover:text-slate-900"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedConocimientos.includes(k.id)}
+                                    onChange={() => {
+                                      setSelectedConocimientos((prev) =>
+                                        prev.includes(k.id) ? prev.filter((id) => id !== k.id) : [...prev, k.id]
+                                      );
+                                    }}
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
+                                  />
+                                  <span>{k.descripcion}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Criterios checklist */}
+                          <div>
+                            <div className="mb-2 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-slate-700">Criterios de Evaluación</span>
+                            </div>
+                            <div className="grid max-h-48 gap-1.5 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/30 p-3">
+                              {comp.criterios.map((cr) => (
+                                <label
+                                  key={cr.id}
+                                  className="flex cursor-pointer items-start gap-3 py-1 text-sm text-slate-700 hover:text-slate-900"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCriterios.includes(cr.id)}
+                                    onChange={() => {
+                                      setSelectedCriterios((prev) =>
+                                        prev.includes(cr.id) ? prev.filter((id) => id !== cr.id) : [...prev, cr.id]
+                                      );
+                                    }}
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[var(--accent)] focus:ring-[var(--accent)]"
+                                  />
+                                  <span>{cr.descripcion}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </div>
-                  </div>
+
+                      {/* Temáticas Adicionales */}
+                      <div className="grid gap-4 border-t border-[var(--line)] pt-4">
+                        <div>
+                          <label htmlFor="tematicas-saber" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Temáticas adicionales de conceptos y principios
+                          </label>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <input
+                              id="tematicas-saber"
+                              value={nuevaTematicaSaber}
+                              onChange={(event) => setNuevaTematicaSaber(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  addTematica(
+                                    nuevaTematicaSaber,
+                                    setNuevaTematicaSaber,
+                                    setTematicasSaber,
+                                  );
+                                }
+                              }}
+                              placeholder="Escribe una temática complementaria."
+                              className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                addTematica(
+                                  nuevaTematicaSaber,
+                                  setNuevaTematicaSaber,
+                                  setTematicasSaber,
+                                )
+                              }
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Adicionar temática
+                            </button>
+                          </div>
+                          {tematicasSaber.length > 0 && (
+                            <ul className="mt-3 grid gap-2">
+                              {tematicasSaber.map((tematica) => (
+                                <li
+                                  key={tematica}
+                                  className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+                                >
+                                  <span>{tematica}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setTematicasSaber((items) =>
+                                        items.filter((item) => item !== tematica),
+                                      )
+                                    }
+                                    aria-label={`Eliminar temática ${tematica}`}
+                                    className="text-emerald-700 hover:text-rose-700"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div>
+                          <label htmlFor="tematicas-proceso" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Temáticas adicionales de proceso
+                          </label>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <input
+                              id="tematicas-proceso"
+                              value={nuevaTematicaProceso}
+                              onChange={(event) => setNuevaTematicaProceso(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  addTematica(
+                                    nuevaTematicaProceso,
+                                    setNuevaTematicaProceso,
+                                    setTematicasProceso,
+                                  );
+                                }
+                              }}
+                              placeholder="Escribe una temática procedimental."
+                              className="min-h-10 flex-1 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                addTematica(
+                                  nuevaTematicaProceso,
+                                  setNuevaTematicaProceso,
+                                  setTematicasProceso,
+                                )
+                              }
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)]"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Adicionar temática
+                            </button>
+                          </div>
+                          {tematicasProceso.length > 0 && (
+                            <ul className="mt-3 grid gap-2">
+                              {tematicasProceso.map((tematica) => (
+                                <li
+                                  key={tematica}
+                                  className="flex items-start justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+                                >
+                                  <span>{tematica}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setTematicasProceso((items) =>
+                                        items.filter((item) => item !== tematica),
+                                      )
+                                    }
+                                    aria-label={`Eliminar temática ${tematica}`}
+                                    className="text-emerald-700 hover:text-rose-700"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="mt-6 flex justify-end gap-3 border-t border-[var(--line)] pt-4">
@@ -2308,13 +2571,22 @@ export function PlaneacionWizardShell({
                         {/* Resultados de Aprendizaje */}
                         <div className="border-b border-slate-100 pb-4">
                           <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            Resultado de Aprendizaje Planeado
+                            Resultados de Aprendizaje Integrados ({confirmedPlanning.competencias.flatMap((c) => c.resultados).length})
                           </span>
-                          <p className="text-sm leading-6 text-slate-700">
-                            {selectedCompetencia.resultados.find((r) => r.id === confirmedPlanning.resultado_id)?.descripcion ??
-                              confirmedPlanning.resultado_descripcion ??
-                              "Resultado no disponible"}
-                          </p>
+                          <div className="grid gap-2">
+                            {confirmedPlanning.competencias.map((comp) => (
+                              <div key={comp.competencia_id} className="rounded-lg bg-slate-50 p-3">
+                                <p className="text-xs font-bold text-slate-600 mb-1">
+                                  {comp.codigo_competencia} — {comp.nombre_competencia}
+                                </p>
+                                <ul className="list-disc pl-5 text-sm text-slate-800 grid gap-1">
+                                  {comp.resultados.map((res) => (
+                                    <li key={res.id}>{res.descripcion}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Saberes */}

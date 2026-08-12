@@ -3,16 +3,35 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.infrastructure.db.models.curriculum import ResultadoAprendizaje
 from src.infrastructure.db.models.planeacion import (
     PlaneacionDocumentoConfig,
     PlaneacionPedagogica,
 )
-from src.infrastructure.db.models.proyecto import ProyectoFormativo
+from src.infrastructure.db.models.proyecto import (
+    ActividadProyecto,
+    FaseProyecto,
+    ProyectoFormativo,
+)
+
+_LIST_OPTIONS: tuple[Any, ...] = (
+    selectinload(PlaneacionPedagogica.resultados).selectinload(
+        ResultadoAprendizaje.competencia
+    ),
+    selectinload(PlaneacionPedagogica.conocimientos),
+    selectinload(PlaneacionPedagogica.criterios),
+    selectinload(PlaneacionPedagogica.proyecto).selectinload(
+        ProyectoFormativo.programa
+    ),
+    selectinload(PlaneacionPedagogica.fase),
+    selectinload(PlaneacionPedagogica.actividad),
+)
 
 
 class PlaneacionPedagogicaRepository:
@@ -27,41 +46,22 @@ class PlaneacionPedagogicaRepository:
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.id == planeacion_id)
-            .options(
-                selectinload(PlaneacionPedagogica.resultados),
-                selectinload(PlaneacionPedagogica.conocimientos),
-                selectinload(PlaneacionPedagogica.criterios),
-                selectinload(PlaneacionPedagogica.competencia),
-                selectinload(PlaneacionPedagogica.resultado),
-                selectinload(PlaneacionPedagogica.proyecto).selectinload(
-                    ProyectoFormativo.programa
-                ),
-                selectinload(PlaneacionPedagogica.fase),
-                selectinload(PlaneacionPedagogica.actividad),
-            )
+            .options(*_LIST_OPTIONS)
         )
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_by_proyecto_and_resultado(
+    async def get_by_proyecto_and_actividad(
         self,
         proyecto_id: uuid.UUID,
-        resultado_id: uuid.UUID,
+        actividad_id: uuid.UUID,
     ) -> PlaneacionPedagogica | None:
-        """Retrieve a pedagogical planning by project and learning result key."""
+        """Retrieve the integrated planning of one project activity."""
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
-            .where(PlaneacionPedagogica.resultado_id == resultado_id)
-            .options(
-                selectinload(PlaneacionPedagogica.resultados),
-                selectinload(PlaneacionPedagogica.conocimientos),
-                selectinload(PlaneacionPedagogica.criterios),
-                selectinload(PlaneacionPedagogica.competencia),
-                selectinload(PlaneacionPedagogica.resultado),
-                selectinload(PlaneacionPedagogica.fase),
-                selectinload(PlaneacionPedagogica.actividad),
-            )
+            .where(PlaneacionPedagogica.actividad_id == actividad_id)
+            .options(*_LIST_OPTIONS)
         )
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
@@ -70,18 +70,31 @@ class PlaneacionPedagogicaRepository:
         self,
         proyecto_id: uuid.UUID,
     ) -> list[PlaneacionPedagogica]:
-        """List all pedagogical planning summaries for a project."""
+        """List all integrated planning summaries for a project."""
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
             .options(
-                selectinload(PlaneacionPedagogica.competencia),
-                selectinload(PlaneacionPedagogica.resultado),
+                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlaneacionPedagogica.actividad),
             )
-            .order_by(PlaneacionPedagogica.fecha_actualizacion.desc())
+            .order_by(
+                FaseProyecto.orden.asc().nulls_last(),
+                ActividadProyecto.orden.asc().nulls_last(),
+                PlaneacionPedagogica.fecha_actualizacion.desc(),
+            )
+            .outerjoin(
+                FaseProyecto,
+                FaseProyecto.id == PlaneacionPedagogica.fase_id,
+            )
+            .outerjoin(
+                ActividadProyecto,
+                ActividadProyecto.id == PlaneacionPedagogica.actividad_id,
+            )
         )
         result = await self._session.execute(statement)
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
 
     async def list_full_by_proyecto(
         self,
@@ -91,18 +104,7 @@ class PlaneacionPedagogicaRepository:
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
-            .options(
-                selectinload(PlaneacionPedagogica.resultados),
-                selectinload(PlaneacionPedagogica.conocimientos),
-                selectinload(PlaneacionPedagogica.criterios),
-                selectinload(PlaneacionPedagogica.competencia),
-                selectinload(PlaneacionPedagogica.resultado),
-                selectinload(PlaneacionPedagogica.proyecto).selectinload(
-                    ProyectoFormativo.programa
-                ),
-                selectinload(PlaneacionPedagogica.fase),
-                selectinload(PlaneacionPedagogica.actividad),
-            )
+            .options(*_LIST_OPTIONS)
         )
         result = await self._session.execute(statement)
         return list(result.scalars().unique().all())

@@ -150,3 +150,115 @@ def test_generator_rejects_negative_hours() -> None:
             metadata=_metadata(),
             rows=[invalid],
         )
+
+
+def _block_row(
+    *,
+    resultado: str,
+    horas_directo: float | None,
+    horas_independiente: float | None,
+) -> FormatoPlaneacionRow:
+    base = _row()
+    return FormatoPlaneacionRow(
+        **{
+            **base.__dict__,
+            "resultado": resultado,
+            "horas_trabajo_directo": horas_directo,
+            "horas_trabajo_independiente": horas_independiente,
+        }
+    )
+
+
+def test_generator_multirap_block_writes_hours_once() -> None:
+    """A 20h learning activity split across 3 RAPs must not sum 60h.
+
+    The hours belong to the integrated activity, so only the first row of
+    the block carries them; the remaining RAP rows stay blank.
+    """
+    rows = [
+        _block_row(
+            resultado="RAP-01\nResultado tecnico uno",
+            horas_directo=12,
+            horas_independiente=8,
+        ),
+        _block_row(
+            resultado="RAP-02\nResultado tecnico dos",
+            horas_directo=None,
+            horas_independiente=None,
+        ),
+        _block_row(
+            resultado="RAP-03\nResultado transversal",
+            horas_directo=None,
+            horas_independiente=None,
+        ),
+    ]
+    result = PlaneacionFormatoExcelService().generar(
+        metadata=_metadata(),
+        rows=rows,
+    )
+    workbook = load_workbook(io.BytesIO(result.content))
+    sheet = workbook["FASE"]
+
+    first_row, second_row, third_row = 18, 19, 20
+    assert sheet.cell(first_row, 4).value == "RAP-01\nResultado tecnico uno"
+    assert sheet.cell(second_row, 4).value == "RAP-02\nResultado tecnico dos"
+    assert sheet.cell(third_row, 4).value == "RAP-03\nResultado transversal"
+
+    assert sheet.cell(first_row, 9).value == 12
+    assert sheet.cell(first_row, 10).value == 8
+    assert sheet.cell(second_row, 9).value is None
+    assert sheet.cell(second_row, 10).value is None
+    assert sheet.cell(third_row, 9).value is None
+    assert sheet.cell(third_row, 10).value is None
+
+    total_directo = sum(
+        value
+        for value in (
+            sheet.cell(first_row, 9).value,
+            sheet.cell(second_row, 9).value,
+            sheet.cell(third_row, 9).value,
+        )
+        if isinstance(value, (int, float))
+    )
+    total_independiente = sum(
+        value
+        for value in (
+            sheet.cell(first_row, 10).value,
+            sheet.cell(second_row, 10).value,
+            sheet.cell(third_row, 10).value,
+        )
+        if isinstance(value, (int, float))
+    )
+    assert total_directo == 12
+    assert total_independiente == 8
+    assert result.filas_generadas == 3
+
+
+def test_generator_multirap_block_keeps_shared_block_fields() -> None:
+    """Phase, activity and learning activity repeat across block rows."""
+    rows = [
+        _block_row(
+            resultado="RAP-01\nResultado tecnico",
+            horas_directo=4,
+            horas_independiente=2,
+        ),
+        _block_row(
+            resultado="RAP-02\nResultado transversal",
+            horas_directo=None,
+            horas_independiente=None,
+        ),
+    ]
+    result = PlaneacionFormatoExcelService().generar(
+        metadata=_metadata(),
+        rows=rows,
+    )
+    workbook = load_workbook(io.BytesIO(result.content))
+    sheet = workbook["FASE"]
+
+    assert sheet.cell(18, 1).value == sheet.cell(19, 1).value == "Fase 1"
+    assert sheet.cell(18, 2).value == sheet.cell(19, 2).value == "Actividad 1"
+    assert (
+        sheet.cell(18, 8).value
+        == sheet.cell(19, 8).value
+        == "Resolver un reto aplicado"
+    )

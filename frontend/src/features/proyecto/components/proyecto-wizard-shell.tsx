@@ -188,6 +188,13 @@ function StepWorkspace({
                 referenceId={payload.meta.referenciaId}
                 scope="proyecto"
               />
+              <ProyectoExcelImport
+                currentResult={payload.documental.fuente_estructurada}
+                onPreview={onExcelPreview}
+                onImported={onExcelImported}
+                planeacionHref={`/planeacion/${payload.meta.programaReferenciaId}`}
+                referenciaId={payload.meta.referenciaId}
+              />
               {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" ||
               docState?.proyecto_importado === true ? (
                 <ProyectoDocumentUpload
@@ -200,12 +207,6 @@ function StepWorkspace({
                   documentoExistente={docState?.proyecto_pdf}
                 />
               ) : null}
-              <ProyectoExcelImport
-                currentResult={payload.documental.fuente_estructurada}
-                onPreview={onExcelPreview}
-                onImported={onExcelImported}
-                referenciaId={payload.meta.referenciaId}
-              />
             </div>
 
           ) : payload !== null ? (

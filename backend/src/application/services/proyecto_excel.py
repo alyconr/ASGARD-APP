@@ -11,6 +11,7 @@ from typing import Protocol
 
 from openpyxl import load_workbook
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.proyecto_excel import (
@@ -27,10 +28,15 @@ from src.application.dto.proyecto_excel import (
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
-from src.infrastructure.db.models.curriculum import ProgramaFormacion
+from src.infrastructure.db.models.curriculum import (
+    Competencia,
+    ProgramaFormacion,
+    ResultadoAprendizaje,
+)
 from src.infrastructure.db.models.drafts import BorradorSesion
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
+    AsignacionCurricularProyecto,
     FaseProyecto,
     ProyectoFormativo,
 )
@@ -274,12 +280,28 @@ class ProjectRepositoryProtocol(Protocol):
     ) -> ActividadProyecto:
         """Create a project activity."""
 
-    async def proyecto_exists(
+    async def proyecto_exists_by_code_name(
         self,
         *,
         programa_id: uuid.UUID,
+        codigo_proyecto: str,
+        nombre_proyecto: str,
     ) -> bool:
-        """Return whether a project already exists for the training program."""
+        """Return whether the same project already exists for the program."""
+
+    async def create_asignacion_curricular(
+        self,
+        *,
+        proyecto_id: uuid.UUID,
+        actividad_proyecto_id: uuid.UUID,
+        competencia_id: uuid.UUID,
+        resultado_id: uuid.UUID | None,
+        tipo_resultado: str,
+        orden_resultado: int | None,
+        pagina_origen: str | None,
+        observaciones: str | None,
+    ) -> AsignacionCurricularProyecto:
+        """Persist one project activity ↔ competency ↔ result assignment."""
 
 
 class AsyncSessionProtocol(Protocol):
@@ -327,9 +349,20 @@ class ProyectoExcelImportService:
         """Store and validate a canonical Excel workbook without relational writes."""
         _validate_excel_upload(filename=filename, content=content)
         draft = await self._get_project_draft(referencia_id)
-        await self._resolve_programa_id(draft)
-        # Preview is allowed even if a project exists; confirmation overwrites it.
+        programa_id = await self._resolve_programa_id(draft)
         workbook = parse_canonical_workbook(content)
+        if workbook.is_valid and workbook.proyecto is not None:
+            if await self._project_repository.proyecto_exists_by_code_name(
+                programa_id=programa_id,
+                codigo_proyecto=workbook.proyecto.codigo_proyecto_sofia,
+                nombre_proyecto=workbook.proyecto.nombre_proyecto,
+            ):
+                raise ProjectExcelValidationError(
+                    "Este proyecto formativo ya fue cargado con el mismo "
+                    "codigo y nombre para el programa asociado. No se debe "
+                    "iniciar un nuevo wizard para duplicarlo; continua "
+                    "directamente con el wizard de planeacion pedagogica."
+                )
 
         stored_document: StoredDocumentDTO | None = None
 
@@ -382,26 +415,6 @@ class ProyectoExcelImportService:
         draft = await self._get_project_draft(referencia_id)
         preview_payload = _get_valid_excel_preview_payload(draft.payload_json)
         programa_id = await self._resolve_programa_id(draft)
-        # Existing project formativo rows for this program are replaced on import.
-        if hasattr(self._session, "execute"):
-            import inspect
-            from unittest.mock import Mock
-
-            existing_proj_stmt = select(ProyectoFormativo).where(
-                ProyectoFormativo.programa_id == programa_id
-            )
-            res = self._session.execute(existing_proj_stmt)
-            if inspect.isawaitable(res):
-                res = await res
-            if hasattr(res, "scalar_one_or_none"):
-                existing_proj = res.scalar_one_or_none()
-                if existing_proj is not None and not isinstance(existing_proj, Mock):
-                    delete_res = self._session.delete(existing_proj)
-                    if inspect.isawaitable(delete_res):
-                        await delete_res
-                    flush_res = self._session.flush()
-                    if inspect.isawaitable(flush_res):
-                        await flush_res
 
         document_payload = _as_record(preview_payload.get("documento"))
         storage_key = _read_string(document_payload or {}, "storage_key")
@@ -421,6 +434,17 @@ class ProyectoExcelImportService:
         if not workbook.is_valid or workbook.proyecto is None:
             raise ProjectExcelValidationError(
                 "El Excel canonico almacenado ya no supera la validacion",
+            )
+        if await self._project_repository.proyecto_exists_by_code_name(
+            programa_id=programa_id,
+            codigo_proyecto=workbook.proyecto.codigo_proyecto_sofia,
+            nombre_proyecto=workbook.proyecto.nombre_proyecto,
+        ):
+            raise ProjectExcelValidationError(
+                "Este proyecto formativo ya fue cargado con el mismo codigo "
+                "y nombre para el programa asociado. No se debe iniciar un "
+                "nuevo wizard para duplicarlo; continua directamente con el "
+                "wizard de planeacion pedagogica."
             )
 
         import_result = await self._materialize_workbook(
@@ -527,6 +551,7 @@ class ProyectoExcelImportService:
         await self._session.refresh(proyecto)
 
         fase_by_excel_id: dict[str, uuid.UUID] = {}
+        actividad_by_excel_id: dict[str, uuid.UUID] = {}
         fase_ids: list[uuid.UUID] = []
         actividad_ids: list[uuid.UUID] = []
 
@@ -570,7 +595,15 @@ class ProyectoExcelImportService:
                 orden=orden_actividad,
             )
             await self._session.refresh(actividad)
+            actividad_by_excel_id[aid] = actividad.id
             actividad_ids.append(actividad.id)
+
+        pendientes = await self._materialize_asignaciones_curriculares(
+            proyecto_id=proyecto.id,
+            programa_id=programa_id,
+            planeacion=workbook.planeacion,
+            actividad_by_excel_id=actividad_by_excel_id,
+        )
 
         return ProyectoExcelImportDTO(
             referencia_id=referencia_id,
@@ -578,8 +611,114 @@ class ProyectoExcelImportService:
             fase_ids=fase_ids,
             actividad_ids=actividad_ids,
             resumen=_build_summary(workbook),
-            pendientes_resumen=ExcelPendingSummaryDTO(total=0),
+            pendientes_resumen=pendientes,
         )
+
+    async def _materialize_asignaciones_curriculares(
+        self,
+        *,
+        proyecto_id: uuid.UUID,
+        programa_id: uuid.UUID,
+        planeacion: list[PlaneacionRow],
+        actividad_by_excel_id: dict[str, uuid.UUID],
+    ) -> ExcelPendingSummaryDTO:
+        """Materialize activity ↔ competency ↔ result links from the matrix.
+
+        External identifiers are reconciled against the curriculum already
+        imported for the training program; existing entities are never
+        duplicated. The authoritative ``tipo_resultado`` value is preserved.
+        """
+        competencias_by_codigo = await self._load_programa_competencias(programa_id)
+
+        materializadas = 0
+        sin_competencia = 0
+        sin_resultado = 0
+        seen: set[tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]] = set()
+
+        for row in planeacion:
+            actividad_db_id = actividad_by_excel_id.get(row.actividad_id)
+            if actividad_db_id is None:
+                continue
+
+            competencia = competencias_by_codigo.get(
+                row.codigo_competencia.strip().lower()
+            )
+            if competencia is None:
+                sin_competencia += 1
+                continue
+
+            resultado: ResultadoAprendizaje | None = None
+            rap_id = row.rap_id.strip()
+            if rap_id:
+                resultado = next(
+                    (
+                        item
+                        for item in competencia.resultados
+                        if (item.codigo_resultado or "").strip().lower()
+                        == rap_id.lower()
+                    ),
+                    None,
+                )
+                if resultado is None:
+                    sin_resultado += 1
+
+            key = (
+                actividad_db_id,
+                competencia.id,
+                resultado.id if resultado is not None else None,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+
+            observaciones = row.observaciones or ""
+            if rap_id and resultado is None:
+                observaciones = (
+                    f"rap_id '{rap_id}' no conciliado con el programa; "
+                    f"{observaciones}"
+                ).strip()
+
+            await self._project_repository.create_asignacion_curricular(
+                proyecto_id=proyecto_id,
+                actividad_proyecto_id=actividad_db_id,
+                competencia_id=competencia.id,
+                resultado_id=resultado.id if resultado is not None else None,
+                tipo_resultado=row.tipo_resultado.strip(),
+                orden_resultado=row.orden_resultado,
+                pagina_origen=row.pagina_origen,
+                observaciones=observaciones or None,
+            )
+            materializadas += 1
+
+        return ExcelPendingSummaryDTO(
+            total=sin_competencia + sin_resultado,
+            asignaciones_materializadas=materializadas,
+            asignaciones_sin_competencia=sin_competencia,
+            asignaciones_sin_resultado=sin_resultado,
+        )
+
+    async def _load_programa_competencias(
+        self, programa_id: uuid.UUID
+    ) -> dict[str, Competencia]:
+        """Index the imported program competencies by normalized code."""
+        if not hasattr(self._session, "execute"):
+            return {}
+        statement = (
+            select(Competencia)
+            .where(Competencia.programa_id == programa_id)
+            .options(selectinload(Competencia.resultados))
+        )
+        result = self._session.execute(statement)
+        if _is_awaitable(result):
+            result = await result
+        try:
+            competencias = list(result.scalars().unique().all())
+        except (TypeError, AttributeError):
+            return {}
+        return {
+            competencia.codigo_competencia.strip().lower(): competencia
+            for competencia in competencias
+        }
 
 
 def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
@@ -1283,6 +1422,12 @@ def _append_touched_step(steps: object, step_id: str) -> list[str]:
     if step_id not in result:
         result.append(step_id)
     return result
+
+
+def _is_awaitable(value: object) -> bool:
+    import inspect
+
+    return inspect.isawaitable(value)
 
 
 def _cell_to_string(value: object) -> str:

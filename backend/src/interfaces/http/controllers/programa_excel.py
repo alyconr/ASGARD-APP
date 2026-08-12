@@ -72,7 +72,7 @@ async def preview_program_excel(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-    except InvalidProgramaExcelUploadError as error:
+    except (InvalidProgramaExcelUploadError, ProgramaExcelValidationError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(error),

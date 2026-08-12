@@ -77,7 +77,13 @@ class FormatoPlaneacionMetadata:
 
 @dataclass(frozen=True)
 class FormatoPlaneacionRow:
-    """One official FASE row."""
+    """One official FASE row.
+
+    Hours belong to the integrated learning activity, not to each RAP.
+    When a planning block expands into several rows, only the first row
+    carries the hour values; the rest keep ``None`` so the official sheet
+    does not multiply the activity duration.
+    """
 
     fase: str
     actividad_proyecto: str
@@ -87,8 +93,8 @@ class FormatoPlaneacionRow:
     procesos: tuple[str, ...]
     criterios: tuple[str, ...]
     actividades_aprendizaje: str
-    horas_trabajo_directo: float
-    horas_trabajo_independiente: float
+    horas_trabajo_directo: float | None
+    horas_trabajo_independiente: float | None
     descripcion_evidencia: str
     estrategias_didacticas: str
     ambiente: tuple[str, ...]
@@ -194,7 +200,8 @@ class PlaneacionFormatoExcelService:
         if not rows:
             missing.append("al menos una fila exportable")
         for index, row in enumerate(rows, start=1):
-            if row.horas_trabajo_directo < 0 or row.horas_trabajo_independiente < 0:
+            horas = (row.horas_trabajo_directo, row.horas_trabajo_independiente)
+            if any(value is not None and value < 0 for value in horas):
                 missing.append(f"fila {index}: las horas no pueden ser negativas")
         if missing:
             raise PlaneacionFormatoValidationError(missing)
@@ -278,7 +285,7 @@ class PlaneacionFormatoExcelService:
 
         for row_index, row in enumerate(rows, start=data_start):
             self._copy_row_format(sheet, pattern_row, row_index)
-            values: tuple[str | float, ...] = (
+            values: tuple[str | float | None, ...] = (
                 row.fase,
                 row.actividad_proyecto,
                 row.competencia,

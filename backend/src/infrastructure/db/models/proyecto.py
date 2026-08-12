@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +34,10 @@ from src.infrastructure.db.models.curriculum import (
 from src.infrastructure.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from src.infrastructure.db.models.curriculum import (
+        Competencia,
+        ResultadoAprendizaje,
+    )
     from src.infrastructure.db.models.planeacion import PlaneacionDocumentoConfig
 
 
@@ -154,3 +159,85 @@ class ActividadProyecto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     fase: Mapped[FaseProyecto] = relationship(back_populates="actividades")
+    asignaciones_curriculares: Mapped[list["AsignacionCurricularProyecto"]] = (
+        relationship(
+            back_populates="actividad",
+            cascade="all, delete-orphan",
+        )
+    )
+
+
+class AsignacionCurricularProyecto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Relational materialization of one Planeacion_Proyecto matrix row.
+
+    Links a project activity with the competencies and learning results
+    assigned to it by the canonical project matrix, preserving the
+    authoritative ``tipo_resultado`` value from the source.
+    """
+
+    __tablename__ = "asignaciones_curriculares_proyecto"
+    __table_args__ = (
+        CheckConstraint(
+            "btrim(tipo_resultado) <> ''",
+            name="asignacion_curricular_tipo_resultado_not_blank",
+        ),
+        Index(
+            "uq_asignacion_curricular_act_comp_rap",
+            "actividad_proyecto_id",
+            "competencia_id",
+            "resultado_id",
+            unique=True,
+            postgresql_where=text("resultado_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_asignacion_curricular_act_comp_norap",
+            "actividad_proyecto_id",
+            "competencia_id",
+            unique=True,
+            postgresql_where=text("resultado_id IS NULL"),
+        ),
+        Index(
+            "ix_asignaciones_curriculares_proyecto_id",
+            "proyecto_id",
+        ),
+        Index(
+            "ix_asignaciones_curriculares_actividad_id",
+            "actividad_proyecto_id",
+        ),
+        Index(
+            "ix_asignaciones_curriculares_competencia_id",
+            "competencia_id",
+        ),
+        Index(
+            "ix_asignaciones_curriculares_resultado_id",
+            "resultado_id",
+        ),
+    )
+
+    proyecto_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("proyectos_formativos.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actividad_proyecto_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("actividades_proyecto.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    competencia_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("competencias.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    resultado_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    tipo_resultado: Mapped[str] = mapped_column(String(50), nullable=False)
+    orden_resultado: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pagina_origen: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    proyecto: Mapped[ProyectoFormativo] = relationship()
+    actividad: Mapped[ActividadProyecto] = relationship(
+        back_populates="asignaciones_curriculares",
+    )
+    competencia: Mapped["Competencia"] = relationship()
+    resultado: Mapped["ResultadoAprendizaje | None"] = relationship()

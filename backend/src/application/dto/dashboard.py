@@ -45,14 +45,23 @@ class ProyectoDashboardMetricsDTO:
 
 @dataclass(frozen=True)
 class PlaneacionDashboardMetricsDTO:
-    """Pedagogical planning progress counters."""
+    """Integrated pedagogical planning progress counters.
+
+    ``total``/``borrador``/``completas`` count planning aggregates (one per
+    learning activity), while the ``resultados_*`` counters count covered
+    learning results across those aggregates.
+    """
 
     estado: str
     total: int
     borrador: int
     completas: int
+    actividades_con_planeacion: int
     competencias_con_planeacion: int
     competencias_sin_planear: int
+    resultados_con_planeacion: int
+    resultados_especificos_con_planeacion: int
+    resultados_transversales_con_planeacion: int
 
 
 @dataclass(frozen=True)

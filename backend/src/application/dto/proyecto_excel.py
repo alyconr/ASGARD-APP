@@ -87,6 +87,9 @@ class ExcelPendingSummaryDTO:
     """Summary of post-import correction items."""
 
     total: int
+    asignaciones_materializadas: int = 0
+    asignaciones_sin_competencia: int = 0
+    asignaciones_sin_resultado: int = 0
 
 
 @dataclass(frozen=True)

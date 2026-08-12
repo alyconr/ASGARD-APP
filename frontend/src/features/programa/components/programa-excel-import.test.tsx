@@ -231,4 +231,36 @@ describe("ProgramaExcelImport", () => {
       expect(onImported).toHaveBeenCalledWith(imported);
     });
   });
+
+  it("shows already-loaded modal when the program was previously loaded", async () => {
+    mockPreviewProgramaExcel.mockRejectedValueOnce(
+      new Error(
+        "Este programa de formacion y su proyecto formativo ya han sido cargados. Continua directamente con el wizard de planeacion pedagogica.",
+      ),
+    );
+
+    render(
+      <ProgramaExcelImport
+        currentResult={null}
+        referenciaId="ref-123"
+        onImported={vi.fn()}
+        onPreviewed={vi.fn()}
+      />,
+    );
+
+    const input = document.querySelector("input[type='file']");
+    fireEvent.change(input as HTMLInputElement, {
+      target: {
+        files: [new File(["xlsx"], "programa.xlsx")],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /validar preview/i }));
+
+    expect(
+      await screen.findByRole("dialog", { name: /cargue ya registrado/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /ir a planeacion pedagogica/i }),
+    ).toHaveAttribute("href", "/planeacion/ref-123");
+  });
 });

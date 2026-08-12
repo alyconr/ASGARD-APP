@@ -270,6 +270,38 @@ describe("ProyectoExcelImport", () => {
     });
   });
 
+  it("shows already-loaded modal when the project was previously loaded", async () => {
+    const { uploadProjectExcelPreview } = await import(
+      "@/features/proyecto/excel-import-api"
+    );
+    vi.mocked(uploadProjectExcelPreview).mockRejectedValueOnce(
+      new Error(
+        "Este proyecto formativo ya fue cargado para el programa asociado. Continua directamente con el wizard de planeacion pedagogica.",
+      ),
+    );
+
+    render(
+      <ProyectoExcelImport
+        currentResult={null}
+        onPreview={mockOnPreview}
+        onImported={mockOnImported}
+        planeacionHref="/planeacion/program-ref"
+        referenciaId="test-ref"
+      />,
+    );
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [createFile()] } });
+    fireEvent.click(screen.getByRole("button", { name: /previsualizar/i }));
+
+    expect(
+      await screen.findByRole("dialog", { name: /cargue ya registrado/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /ir a planeacion pedagogica/i }),
+    ).toHaveAttribute("href", "/planeacion/program-ref");
+  });
+
   it("shows confirm import button when preview is valid", async () => {
     const { uploadProjectExcelPreview } = await import(
       "@/features/proyecto/excel-import-api"

@@ -380,6 +380,63 @@ class ProgramaExcelImportService:
         self._curriculum_repository = curriculum_repository
         self._storage_service = storage_service
 
+    async def _reject_existing_program_load(
+        self,
+        *,
+        draft: BorradorSesion,
+        row: ProgramaRow,
+    ) -> None:
+        """Prevent starting a new import for a program already loaded."""
+        draft_programa_id = _extract_programa_id(draft.payload_json)
+        if draft_programa_id is not None:
+            programa = await self._curriculum_repository.get_programa(
+                draft_programa_id,
+            )
+            if programa is not None and (
+                programa.codigo_programa.lower() == row.codigo_programa.lower()
+                and programa.version_programa == row.version_programa
+                and programa.nombre_programa.strip().lower()
+                == row.nombre_programa.strip().lower()
+            ):
+                if await self._curriculum_repository.has_project_formativo(
+                    programa.id
+                ):
+                    raise ProgramaExcelValidationError(
+                        "Este programa de formacion y su proyecto formativo "
+                        "ya han sido cargados. Continua directamente con el "
+                        "wizard de planeacion pedagogica."
+                    )
+                raise ProgramaExcelValidationError(
+                    "Este programa de formacion ya fue cargado con el mismo "
+                    "codigo y nombre. No se debe iniciar un nuevo wizard para "
+                    "duplicarlo."
+                )
+
+        programa = await self._curriculum_repository.get_programa_by_code_version(
+            row.codigo_programa,
+            row.version_programa,
+        )
+        if programa is not None:
+            if await self._curriculum_repository.has_project_formativo(programa.id):
+                raise ProgramaExcelValidationError(
+                    "Este programa de formacion y su proyecto formativo ya han "
+                    "sido cargados. Continua directamente con el wizard de "
+                    "planeacion pedagogica."
+                )
+            if (
+                programa.nombre_programa.strip().lower()
+                != row.nombre_programa.strip().lower()
+            ):
+                raise ProgramaExcelValidationError(
+                    "Ya existe un programa de formacion cargado con el mismo "
+                    "codigo y version, pero con un nombre diferente. Revisa el "
+                    "cargue existente antes de iniciar un nuevo wizard."
+                )
+            raise ProgramaExcelValidationError(
+                "Este programa de formacion ya fue cargado con el mismo codigo "
+                "y nombre. No se debe iniciar un nuevo wizard para duplicarlo."
+            )
+
     async def preview_program_excel(
         self,
         *,
@@ -407,6 +464,10 @@ class ProgramaExcelImportService:
 
         if workbook.is_valid:
             assert workbook.programa is not None
+            await self._reject_existing_program_load(
+                draft=draft,
+                row=workbook.programa,
+            )
             prefix = build_programa_storage_prefix(
                 nombre=workbook.programa.nombre_programa,
                 codigo=workbook.programa.codigo_programa,
@@ -486,6 +547,7 @@ class ProgramaExcelImportService:
             raise ProgramaExcelValidationError(
                 "El Excel canonico almacenado ya no supera la validacion",
             )
+        await self._reject_existing_program_load(draft=draft, row=workbook.programa)
 
         import_result = await self._materialize_workbook(
             referencia_id=referencia_id,

@@ -179,6 +179,11 @@ async def test_eliminar_cargue_proyecto_preserves_program() -> None:
     )
 
     # Configure session mocks
+    session.get.return_value = ProgramaFormacion(
+        codigo_programa="228118",
+        nombre_programa="Programa Test",
+        estado=EstadoBloque.COMPLETO,
+    )
     mock_execute_result_proj = MagicMock()
     mock_execute_result_proj.scalar_one_or_none.return_value = draft_proyecto
 

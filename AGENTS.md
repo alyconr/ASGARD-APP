@@ -49,6 +49,57 @@ A partir de este refactor integral:
 - el paso `datos-programa` desaparece por completo del wizard, tipos, navegacion, sidebar, tests y documentacion;
 - el wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y termina en `revision-programa`;
 - `origen-documental` conserva PDF como evidencia y Excel canonico como unica fuente estructurada;
+# AGENTS.md
+# SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
+
+# Importante
+Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
+
+NO vuelvas a leer archivos para los cuales codegraph_explore ya devolvió código fuente. Los fragmentos fuente son completos y autoritativos.
+
+Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes adicionales' si necesitas más detalle, o si codegraph no arrojó resultados.
+
+## Proyecto
+Aplicación web para construcción de guías de aprendizaje SENA
+
+## Fase activa
+Fase 1
+
+## Propósito operativo
+Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
+
+## Fuente estructurada unica
+A partir de TASK-08.5, la matriz Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto.
+El PDF queda exclusivamente como evidencia documental en MinIO.
+El carril manual ya no existe como fuente funcional de captura.
+
+## Decision funcional TASK-08.5
+A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF queda reemplazada para el programa de formacion por esta estrategia:
+
+- el PDF se carga, valida de forma basica, diagnostica y conserva solo como evidencia documental en MinIO;
+- el PDF no se usa como fuente activa para extraer ni prellenar informacion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para analizar, validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la organizacion curricular base de la importacion Excel es por competencia: Competencia -> Resultados, Competencia -> Conocimientos y Competencia -> Criterios;
+- conocimientos y criterios se asocian inicialmente a la competencia; `resultado_id` es opcional y secundario para uso posterior;
+- solo quedan pendientes de conciliacion los conocimientos o criterios que no puedan asociarse a una competencia de forma confiable;
+- la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
+
+## Decision funcional TASK-UNICO-CARRIL
+A partir de esta refactorizacion integral:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura para programa o proyecto;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base para TASK-19;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+A partir de este refactor integral:
+
+- el paso `datos-programa` desaparece por completo del wizard, tipos, navegacion, sidebar, tests y documentacion;
+- el wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y termina en `revision-programa`;
+- `origen-documental` conserva PDF como evidencia y Excel canonico como unica fuente estructurada;
 - tras confirmar Excel, el origen documental muestra solo un resumen compacto y la revision de competencias importadas se hace en una modal paginada;
 - `estructura-curricular` se trabaja con selector/filtro de competencia antes de renderizar resultados, conocimientos o criterios;
 - conocimientos y criterios se seleccionan progresivamente desde listas eficientes antes de renderizar sus contenedores;
@@ -60,12 +111,22 @@ A partir de este refactor integral:
 ## Decision funcional WIZARD-PLANEACION-PEDAGOGICA
 A partir de la implementación de la planeación pedagógica:
 
-- la planeación pedagógica se organiza *por competencia* asociada al programa de formación y vinculada a una fase y actividad del proyecto formativo;
+- la planeación pedagógica representa una actividad de aprendizaje integrada construida dentro de una actividad de proyecto formativo;
 - se implementa el modelo relacional `PlaneacionPedagogica` y tablas M2M de asociación para resultados (`planeacion_resultados`), conocimientos (`planeacion_conocimientos`), y criterios (`planeacion_criterios`);
 - los campos complementarios didácticos (estrategias didácticas, ambientes de aprendizaje, recursos y medios, duración en horas, e instructor responsable) se consolidan de forma flexible y extensible dentro de una columna JSONB `datos_complementarios`;
-- al confirmar la planeación de un resultado, se genera el workbook institucional `GPFI-F-134 V05` desde la plantilla canónica del backend y se almacena como `.xlsx` en MinIO bajo rutas legibles de programa, proyecto y resultado;
+- al confirmar la planeación de una actividad de aprendizaje, se genera el workbook institucional `GPFI-F-134 V05` desde la plantilla canónica del backend y se almacena como `.xlsx` en MinIO bajo rutas legibles de programa, proyecto y planeación;
 - la eliminación de una planeación elimina tanto el registro de base de datos como el archivo físico de MinIO;
-- completar la planeación para una competencia guarda de manera independiente el estado sin afectar o sobrescribir las demás competencias del proyecto.
+- completar la planeación para una actividad de aprendizaje guarda de manera independiente el estado sin afectar o sobrescribir las demás actividades del proyecto.
+
+## Decision funcional PLANEACION-INTEGRADA-MULTICOMPETENCIA-MULTIRAP
+A partir del refactor del módulo de planeación pedagógica:
+
+- la unidad funcional de la planeación deja de ser el resultado de aprendizaje singular y pasa a ser la **Planeación Integrada de Actividad de Aprendizaje** dentro de una actividad de proyecto;
+- la jerarquía de selección en el wizard es estrictamente: **Fase → Actividad de Proyecto → Competencias (1..N) → Resultados de Aprendizaje (1..N RAP)**;
+- una misma actividad de aprendizaje puede integrar 1..N competencias y 1..N RAPs pertenecientes a dichas competencias, incluyendo combinaciones de resultados técnicos/específicos y transversales;
+- la información estructurada del proyecto materializada relacionalmente en `AsignacionCurricularProyecto` desde la matriz Excel `Planeacion_Proyecto` es la fuente de verdad autoritativa para responder qué competencias y RAPs pertenecen a cada actividad;
+- en el exportador del workbook oficial `GPFI-F-134 V05`, el bloque de la planeación integrada se expande a N filas (una fila por cada RAP seleccionado), agrupando por competencia; las horas didácticas (directas e independientes) pertenecen a la actividad de aprendizaje y se escriben exclusivamente en la primera fila de cada bloque para evitar duplicidad o suma errónea de horas;
+- la identidad de la planeación en PostgreSQL es `(proyecto_id, actividad_id)`; `resultado_id` no constituye la fuente de verdad ni la identidad del agregado.
 
 ## Decision funcional FORMATO-OFICIAL-PLANEACION-GPFI-F-134-V05
 
@@ -73,15 +134,13 @@ A partir de la implementación de la planeación pedagógica:
 - la plantilla binaria canónica vive en `backend/src/infrastructure/templates/planeacion/GPFI-F-134V05.xlsx` y nunca se sobrescribe;
 - `Instrucciones` permanece intacta y los datos se escriben exclusivamente en `FASE`;
 - `modalidad_formacion` pertenece al programa; fecha, clasificación, equipo de gestión curricular, regional y centro se persisten una sola vez por proyecto en `PlaneacionDocumentoConfig`;
-- la exportación individual genera una fila por cada asignación fase/actividad del RAP;
+- la exportación individual genera un bloque de filas por cada RAP seleccionado en la planeación integrada;
 - la exportación consolidada incluye únicamente planeaciones `COMPLETO`, excluye borradores y ordena por fase, actividad, competencia y resultado;
 - antes de generar se validan pertenencias curriculares, coherencia fase/actividad, metadata institucional y la igualdad entre duración total y horas directas más independientes;
 - los Excel se guardan y leen desde MinIO con `save_excel` y `read_excel`; la descarga siempre transmite el archivo real desde backend.
 
 ## Decision funcional REFACTOR-FLUJO-DOCUMENTAL-RESTRICCION-REHIDRATACION
 A partir del refactor del flujo documental de programa y proyecto:
-
-- el cargue de PDFs de evidencia para programa y proyecto se bloquea en frontend y backend hasta que ambas matrices Excel (programa y proyecto) se encuentren en estado `IMPORTADO`;
 - el backend expone un endpoint de rehidratación `GET /api/v1/drafts/{referencia_id}/estado-documental` para consultar y reconstruir el estado completo y metadatos de los archivos del wizard;
 - al confirmarse ambas matrices Excel, se habilita una acción "Habilitar cargue de documentos PDF" que guarda el flag `cargue_pdf_habilitado` en la sección `documental` del borrador del proyecto formativo, lo que desbloquea visual y operativamente la carga de PDFs;
 - todos los archivos subidos a MinIO se guardan en rutas legibles y normalizadas bajo los prefijos de negocio `programas/{nombre_programa_sanitizado}-{codigo_programa}-{version_programa}/` y `proyectos-formativos/{nombre_proyecto_sanitizado}-{codigo_proyecto_sofia}/`, removiendo carpetas con UUIDs aleatorios de la estructura de MinIO.

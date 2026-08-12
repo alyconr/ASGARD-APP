@@ -16,12 +16,14 @@ from src.infrastructure.db.models.planeacion import (
 )
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
+    AsignacionCurricularProyecto,
     FaseProyecto,
     ProyectoFormativo,
 )
 
 __all__ = [
     "ActividadProyecto",
+    "AsignacionCurricularProyecto",
     "BorradorSesion",
     "Competencia",
     "Conocimiento",

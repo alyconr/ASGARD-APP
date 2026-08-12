@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 
+import { AlreadyLoadedModal } from "@/components/wizard/already-loaded-modal";
 import { notify } from "@/components/feedback/notifications";
 import { useConfirm } from "@/components/feedback/confirm-context";
 import { eliminarCargueCompleto } from "@/features/proyecto/cargue-api";
@@ -57,6 +58,15 @@ function validateExcelFile(file: File | null): string | null {
     return "El Excel seleccionado esta vacio.";
   }
   return null;
+}
+
+function isAlreadyLoadedMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("ya fue cargado") ||
+    normalized.includes("ya han sido cargados") ||
+    normalized.includes("planeacion pedagogica")
+  );
 }
 
 function PreviewPanel({
@@ -359,12 +369,14 @@ export function ProgramaExcelImport({
   onImported,
   onBeforePreview,
   onPreviewed,
+  planeacionHref,
   referenciaId,
 }: Readonly<{
   currentResult: ProgramaExcelImportState | null;
   onImported: (result: ProgramaExcelImportResponse) => void;
   onBeforePreview?: () => Promise<boolean>;
   onPreviewed: (result: ProgramaExcelPreviewResponse) => void;
+  planeacionHref?: string;
   referenciaId: string;
 }>): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -372,6 +384,9 @@ export function ProgramaExcelImport({
   const [state, setState] = useState<ExcelState>("idle");
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [alreadyLoadedMessage, setAlreadyLoadedMessage] = useState<
+    string | null
+  >(null);
 
   const [isCompetenciasModalOpen, setIsCompetenciasModalOpen] =
     useState(false);
@@ -458,6 +473,9 @@ export function ProgramaExcelImport({
       const detail = getErrorMessage(error);
       setState("error");
       setMessage(detail);
+      if (isAlreadyLoadedMessage(detail)) {
+        setAlreadyLoadedMessage(detail);
+      }
       notify.error("No fue posible validar el Excel", { description: detail });
     }
   };
@@ -478,12 +496,23 @@ export function ProgramaExcelImport({
       const detail = getErrorMessage(error);
       setState("error");
       setMessage(detail);
+      if (isAlreadyLoadedMessage(detail)) {
+        setAlreadyLoadedMessage(detail);
+      }
       notify.error("No fue posible importar el Excel", { description: detail });
     }
   };
 
   return (
     <section className="grid gap-4">
+      {alreadyLoadedMessage !== null ? (
+        <AlreadyLoadedModal
+          message={alreadyLoadedMessage}
+          onClose={() => setAlreadyLoadedMessage(null)}
+          planeacionHref={planeacionHref ?? `/planeacion/${referenciaId}`}
+        />
+      ) : null}
+
       <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">

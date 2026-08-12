@@ -326,16 +326,16 @@ export function buildPlaneacionWizardGuide({
       wizard: "planeacion",
       severity: "success",
       eyebrow: "Planeacion aprobada",
-      title: "Resultado planificado",
+      title: "Actividad de aprendizaje planificada",
       message:
-        "La planeacion quedo confirmada y el archivo estructurado fue almacenado.",
+        "La planeacion integrada quedo confirmada y el formato oficial fue almacenado.",
       checklist: [
         item("curricular", "Vinculacion curricular completa", true),
         item("complementario", "Campos didacticos definidos", true),
         item("confirmacion", "Aprobacion generada", true),
       ],
       primaryAction: {
-        label: "Planificar otro resultado",
+        label: "Planificar otra actividad",
         targetId: "planeacion-step-workspace",
       },
     };
@@ -354,28 +354,29 @@ export function buildPlaneacionWizardGuide({
       title:
         officialMissing.length > 0
           ? "Prepara el formato oficial"
-          : "Elige una competencia y RAP",
+          : "Selecciona fase y actividad",
       message:
         officialMissing[0] ??
-        "Selecciona una competencia y luego un resultado de aprendizaje para construir la planeacion.",
+        "Selecciona la fase y la actividad del proyecto para integrar sus competencias y RAP.",
       checklist: [
-        item("competencias", "Competencias disponibles", competenciasCount > 0, true),
-        item("fases", "Fases del proyecto disponibles", fasesCount > 0),
-        item("resultado", "Resultado de aprendizaje elegido", selectedResultado),
+        item("fases", "Fases del proyecto disponibles", fasesCount > 0, true),
+        item("fase", "Fase seleccionada", faseSelected),
+        item("actividad", "Actividad seleccionada", actividadSelected),
+        item("resultado", "Resultados de aprendizaje elegidos", selectedResultado),
         ...officialMissing.slice(0, 3).map((label, index) =>
           item(`official-${index}`, label, false),
         ),
       ],
-      primaryAction: { label: "Elegir resultado", targetId: "planeacion-step-workspace" },
+      primaryAction: { label: "Crear planeacion", targetId: "planeacion-step-workspace" },
     };
   }
 
   if (activeStep === "curricular") {
     const curricularReady =
-      selectedCompetencia &&
-      selectedResultado &&
       faseSelected &&
       actividadSelected &&
+      selectedCompetencia &&
+      selectedResultado &&
       conocimientosSelected > 0 &&
       criteriosSelected > 0;
     return {
@@ -385,13 +386,14 @@ export function buildPlaneacionWizardGuide({
       title: curricularReady ? "Seleccion curricular lista" : "Completa la vinculacion",
       message: curricularReady
         ? "Ya puedes guardar el borrador y pasar a campos complementarios."
-        : "Faltan selecciones curriculares antes de una previsualizacion confiable.",
+        : "Selecciona la fase, actividad, competencias, RAPs, saberes y criterios.",
       checklist: [
-        item("resultado", "RAP seleccionado", selectedResultado, !selectedResultado),
-        item("fase", "Fase seleccionada", faseSelected, selectedResultado && !faseSelected),
-        item("actividad", "Actividad seleccionada", actividadSelected, faseSelected && !actividadSelected),
-        item("saberes", "Saberes seleccionados", conocimientosSelected > 0),
-        item("criterios", "Criterios seleccionados", criteriosSelected > 0),
+        item("fase", "1. Fase seleccionada", faseSelected, !faseSelected),
+        item("actividad", "2. Actividad de proyecto seleccionada", actividadSelected, faseSelected && !actividadSelected),
+        item("competencias", "3. Competencias seleccionadas", selectedCompetencia, actividadSelected && !selectedCompetencia),
+        item("resultado", "4. Resultados (RAP) seleccionados", selectedResultado, selectedCompetencia && !selectedResultado),
+        item("saberes", "5. Saberes seleccionados", conocimientosSelected > 0),
+        item("criterios", "6. Criterios seleccionados", criteriosSelected > 0),
       ],
       primaryAction: { label: "Guardar borrador", targetId: "planeacion-step-workspace" },
     };
@@ -451,7 +453,7 @@ export function buildPlaneacionWizardGuide({
     eyebrow: "Vista previa",
     title: "Revisa antes de aprobar",
     message:
-      "Confirma que la fase, actividad, RAP, saberes, criterios y campos didacticos son correctos.",
+      "Confirma la integración de competencias, RAP, saberes, criterios y campos didácticos.",
     checklist: [
       item("curricular", "Seleccion curricular revisada", true),
       item("complementario", "Campos didacticos revisados", true),

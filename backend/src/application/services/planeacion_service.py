@@ -1,4 +1,10 @@
-"""Application service for Pedagogical Planning management."""
+"""Application service for integrated Pedagogical Planning management.
+
+A pedagogical planning is an integrated learning activity built on top of
+one project phase/activity pair. Its learning results (RAP) are the source
+of truth; competencies are always derived from those results through the
+project curricular structure materialized in PostgreSQL.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +18,6 @@ from sqlalchemy.orm import selectinload
 
 from src.application.dto.planeacion import (
     ContextoActividadDTO,
-    ContextoAsignacionProyectoDTO,
     ContextoCompetenciaDTO,
     ContextoConocimientoDTO,
     ContextoCriterioDTO,
@@ -21,11 +26,13 @@ from src.application.dto.planeacion import (
     FormatoOficialEstadoDTO,
     FormatoOficialFaltanteDTO,
     FormatoOficialGeneradoDTO,
+    PlaneacionCompetenciaResumenDTO,
     PlaneacionContextoDTO,
     PlaneacionDocumentoConfigDTO,
     PlaneacionDocumentoConfigUpdateDTO,
     PlaneacionListDTO,
     PlaneacionResponseDTO,
+    PlaneacionResultadoResumenDTO,
     PlaneacionSaveDTO,
 )
 from src.application.services.planeacion_formato_excel import (
@@ -52,11 +59,14 @@ from src.infrastructure.db.models.planeacion import (
 )
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
+    AsignacionCurricularProyecto,
     FaseProyecto,
     ProyectoFormativo,
 )
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
 from src.infrastructure.storage.document_storage import sanitize_directory_name
+
+_SEGMENT_MAX_LENGTH = 80
 
 
 class PlaneacionAccessError(Exception):
@@ -79,10 +89,13 @@ class DocumentStorageProtocol(Protocol):
     async def read_excel(self, *, key: str) -> bytes:
         """Read an official Excel workbook from the store."""
 
+    async def delete_by_prefix(self, *, prefix: str) -> None:
+        """Remove stored artifacts under the given prefix."""
+
 
 class PlaneacionPedagogicaService:
     """Orchestrate CRUD, state transitions, and file generations
-    for Pedagogical Planning.
+    for integrated Pedagogical Planning.
     """
 
     def __init__(
@@ -101,41 +114,19 @@ class PlaneacionPedagogicaService:
         )
 
     async def obtener_contexto(self, referencia_id: uuid.UUID) -> PlaneacionContextoDTO:
-        """Verify program/project status and construct the active curriculum tree."""
-        # Retrieve program draft
-        draft_stmt = select(BorradorSesion).where(
-            BorradorSesion.referencia_id == referencia_id,
-            BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA,
-        )
-        draft_res = await self._session.execute(draft_stmt)
-        draft_prog = draft_res.scalar_one_or_none()
-        if draft_prog is None:
-            raise ValueError(
-                f"No existe sesión de borrador para la referencia {referencia_id}"
-            )
+        """Verify program/project status and build the navigable curricular tree.
 
-        # Extract programa_id
-        programa_id = None
-        curr = draft_prog.payload_json.get("curricular")
-        if isinstance(curr, dict):
-            raw_id = curr.get("programa_formacion_id")
-            if raw_id:
-                programa_id = uuid.UUID(str(raw_id))
+        The tree is derived entirely from PostgreSQL:
+        fase -> actividad -> competencias -> resultados, using the
+        AsignacionCurricularProyecto rows materialized from the project
+        matrix. No draft JSON is used as source of truth.
+        """
+        programa_id = await self._resolve_programa_id(referencia_id)
 
-        if programa_id is None:
-            raise ValueError(
-                "El programa de formación no ha sido importado/materializado "
-                "en la sesión"
-            )
-
-        # Load program & project
         programa = await self._session.get(
             ProgramaFormacion,
             programa_id,
             options=[
-                selectinload(ProgramaFormacion.competencias).selectinload(
-                    Competencia.resultados
-                ),
                 selectinload(ProgramaFormacion.competencias).selectinload(
                     Competencia.conocimientos
                 ),
@@ -153,159 +144,40 @@ class PlaneacionPedagogicaService:
                 "La planeacion pedagogica requiere el programa en estado COMPLETO"
             )
 
-        # Check if project exists and is not blocked
-        proj_stmt = (
-            select(ProyectoFormativo)
-            .where(ProyectoFormativo.programa_id == programa_id)
-            .options(
-                selectinload(ProyectoFormativo.fases).selectinload(
-                    FaseProyecto.actividades
-                )
-            )
-        )
-        proj_res = await self._session.execute(proj_stmt)
-        proyecto = proj_res.scalar_one_or_none()
-        if proyecto is None:
-            raise ValueError(
-                "No se ha importado el proyecto formativo para este programa"
-            )
-
+        proyecto = await self._get_project_for_program(programa_id)
         if proyecto.estado != EstadoBloque.COMPLETO:
             raise PlaneacionAccessError(
                 "La planeacion pedagogica requiere el proyecto formativo "
                 "en estado COMPLETO"
             )
 
-        project_draft_stmt = select(BorradorSesion).where(
-            BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROYECTO,
-        )
-        project_draft_res = await self._session.execute(project_draft_stmt)
-        project_draft = None
-        for draft in project_draft_res.scalars().all():
-            project_payload = draft.payload_json.get("proyecto")
-            if not isinstance(project_payload, dict):
-                continue
-            if (
-                project_payload.get("codigo_proyecto")
-                == proyecto.codigo_proyecto
-                and project_payload.get("nombre_proyecto")
-                == proyecto.nombre_proyecto
-            ):
-                project_draft = draft
-                break
+        competencias_by_id = {c.id: c for c in programa.competencias}
+        asignaciones_by_actividad = await self._load_asignaciones(proyecto.id)
 
-        phase_by_name = {fase.nombre_fase: fase for fase in proyecto.fases}
-        project_rap_links: dict[str, list[tuple[uuid.UUID, uuid.UUID]]] = {}
-        if project_draft is not None:
-            documental = project_draft.payload_json.get("documental", {})
-            fuente = (
-                documental.get("fuente_estructurada", {})
-                if isinstance(documental, dict)
-                else {}
-            )
-            preview = fuente.get("preview", {}) if isinstance(fuente, dict) else {}
-            preview_fases = (
-                preview.get("fases", []) if isinstance(preview, dict) else []
-            )
-            for preview_fase in preview_fases:
-                if not isinstance(preview_fase, dict):
-                    continue
-                preview_phase_name = preview_fase.get("nombre_fase")
-                if not isinstance(preview_phase_name, str):
-                    continue
-                fase = phase_by_name.get(preview_phase_name)
-                if fase is None:
-                    continue
-                activity_by_description = {
-                    actividad.descripcion: actividad for actividad in fase.actividades
-                }
-                for preview_actividad in preview_fase.get("actividades", []):
-                    if not isinstance(preview_actividad, dict):
-                        continue
-                    preview_activity_description = preview_actividad.get(
-                        "descripcion"
-                    )
-                    if not isinstance(preview_activity_description, str):
-                        continue
-                    actividad = activity_by_description.get(
-                        preview_activity_description
-                    )
-                    if actividad is None:
-                        continue
-                    for competencia in preview_actividad.get("competencias", []):
-                        if not isinstance(competencia, dict):
-                            continue
-                        for resultado in competencia.get("resultados", []):
-                            if isinstance(resultado, dict) and resultado.get("rap_id"):
-                                link = (
-                                    fase.id,
-                                    actividad.id,
-                                )
-                                links = project_rap_links.setdefault(
-                                    str(resultado["rap_id"]), []
-                                )
-                                if link not in links:
-                                    links.append(link)
-
-        # Format Fases & Actividades
         fase_dtos: list[ContextoFaseDTO] = []
-        for f in proyecto.fases:
-            act_dtos = [
-                ContextoActividadDTO(id=a.id, descripcion=a.descripcion)
-                for a in f.actividades
+        ordered_fases = sorted(
+            proyecto.fases,
+            key=lambda f: (f.orden is None, f.orden or 0, f.nombre_fase),
+        )
+        for fase in ordered_fases:
+            ordered_actividades = sorted(
+                fase.actividades,
+                key=lambda a: (a.orden is None, a.orden or 0, a.descripcion),
+            )
+            actividad_dtos = [
+                self._actividad_contexto(
+                    actividad,
+                    asignaciones_by_actividad.get(actividad.id, []),
+                    competencias_by_id,
+                )
+                for actividad in ordered_actividades
             ]
             fase_dtos.append(
                 ContextoFaseDTO(
-                    id=f.id, nombre_fase=f.nombre_fase, actividades=act_dtos
-                )
-            )
-
-        # Format Competencias, outcomes, knowledge
-        # (separated by saber/proceso), and criteria
-        comp_dtos: list[ContextoCompetenciaDTO] = []
-        for c in programa.competencias:
-            res_dtos = []
-            for r in c.resultados:
-                links = project_rap_links.get(r.codigo_resultado or "", [])
-                res_dtos.append(
-                    ContextoResultadoDTO(
-                        id=r.id,
-                        descripcion=r.descripcion,
-                        fase_id=links[0][0] if links else None,
-                        actividad_id=links[0][1] if links else None,
-                        asignaciones_proyecto=[
-                            ContextoAsignacionProyectoDTO(
-                                fase_id=fase_id,
-                                actividad_id=actividad_id,
-                            )
-                            for fase_id, actividad_id in links
-                        ],
-                    )
-                )
-            saberes_conceptos = [
-                ContextoConocimientoDTO(id=k.id, descripcion=k.descripcion)
-                for k in c.conocimientos
-                if k.tipo == TipoConocimiento.SABER
-            ]
-            saberes_proceso = [
-                ContextoConocimientoDTO(id=k.id, descripcion=k.descripcion)
-                for k in c.conocimientos
-                if k.tipo == TipoConocimiento.PROCESO
-            ]
-            crit_dtos = [
-                ContextoCriterioDTO(id=cr.id, descripcion=cr.descripcion)
-                for cr in c.criterios
-            ]
-
-            comp_dtos.append(
-                ContextoCompetenciaDTO(
-                    id=c.id,
-                    codigo_competencia=c.codigo_competencia,
-                    nombre_competencia=c.nombre_competencia,
-                    resultados=res_dtos,
-                    conocimientos_saber=saberes_conceptos,
-                    conocimientos_proceso=saberes_proceso,
-                    criterios=crit_dtos,
+                    id=fase.id,
+                    nombre_fase=fase.nombre_fase,
+                    orden=fase.orden,
+                    actividades=actividad_dtos,
                 )
             )
 
@@ -318,29 +190,133 @@ class PlaneacionPedagogicaService:
             codigo_proyecto=proyecto.codigo_proyecto,
             nombre_proyecto=proyecto.nombre_proyecto,
             version_proyecto=proyecto.version_proyecto,
-            competencias=comp_dtos,
             fases=fase_dtos,
+        )
+
+    def _actividad_contexto(
+        self,
+        actividad: ActividadProyecto,
+        asignaciones: list[AsignacionCurricularProyecto],
+        competencias_by_id: dict[uuid.UUID, Competencia],
+    ) -> ContextoActividadDTO:
+        """Build the competency/RAP context of one project activity."""
+        grupos: dict[uuid.UUID, list[ContextoResultadoDTO]] = {}
+        seen_resultados: set[tuple[uuid.UUID, uuid.UUID]] = set()
+        for asignacion in sorted(
+            asignaciones,
+            key=lambda item: (item.orden_resultado is None, item.orden_resultado or 0),
+        ):
+            competencia = competencias_by_id.get(asignacion.competencia_id)
+            if competencia is None:
+                continue
+            if asignacion.resultado is None:
+                grupos.setdefault(competencia.id, [])
+                continue
+            pair = (competencia.id, asignacion.resultado.id)
+            if pair in seen_resultados:
+                continue
+            seen_resultados.add(pair)
+            grupos.setdefault(competencia.id, []).append(
+                ContextoResultadoDTO(
+                    id=asignacion.resultado.id,
+                    codigo_resultado=asignacion.resultado.codigo_resultado,
+                    descripcion=asignacion.resultado.descripcion,
+                    tipo_resultado=asignacion.tipo_resultado,
+                    orden_resultado=asignacion.orden_resultado,
+                )
+            )
+
+        def _competencia_order(item: tuple[uuid.UUID, list[ContextoResultadoDTO]]) -> (
+            tuple[bool, int, str]
+        ):
+            competencia = competencias_by_id.get(item[0])
+            return (
+                competencia.orden is None if competencia else True,
+                (competencia.orden or 0) if competencia else 0,
+                competencia.codigo_competencia if competencia else "",
+            )
+
+        competencia_dtos: list[ContextoCompetenciaDTO] = []
+        for competencia_id, resultados in sorted(
+            grupos.items(), key=_competencia_order
+        ):
+            competencia = competencias_by_id.get(competencia_id)
+            if competencia is None:
+                continue
+            competencia_dtos.append(
+                ContextoCompetenciaDTO(
+                    id=competencia.id,
+                    codigo_competencia=competencia.codigo_competencia,
+                    nombre_competencia=competencia.nombre_competencia,
+                    resultados=resultados,
+                    conocimientos_saber=[
+                        ContextoConocimientoDTO(id=k.id, descripcion=k.descripcion)
+                        for k in competencia.conocimientos
+                        if k.tipo == TipoConocimiento.SABER
+                    ],
+                    conocimientos_proceso=[
+                        ContextoConocimientoDTO(id=k.id, descripcion=k.descripcion)
+                        for k in competencia.conocimientos
+                        if k.tipo == TipoConocimiento.PROCESO
+                    ],
+                    criterios=[
+                        ContextoCriterioDTO(id=cr.id, descripcion=cr.descripcion)
+                        for cr in competencia.criterios
+                    ],
+                )
+            )
+        return ContextoActividadDTO(
+            id=actividad.id,
+            descripcion=actividad.descripcion,
+            orden=actividad.orden,
+            competencias=competencia_dtos,
         )
 
     async def listar_planeaciones(
         self, proyecto_id: uuid.UUID
     ) -> list[PlaneacionListDTO]:
-        """List all pedagogical planning summaries for a project."""
+        """List integrated planning summaries for a project."""
         entities = await self._repository.list_by_proyecto(proyecto_id)
-        return [
-            PlaneacionListDTO(
-                id=e.id,
-                proyecto_id=e.proyecto_id,
-                competencia_id=e.competencia_id,
-                resultado_id=e.resultado_id,
-                resultado_descripcion=e.resultado.descripcion,
-                codigo_competencia=e.competencia.codigo_competencia,
-                nombre_competencia=e.competencia.nombre_competencia,
-                estado=e.estado.value,
-                fecha_actualizacion=e.fecha_actualizacion,
+        tipo_by_pair = await self._load_tipos_resultado(proyecto_id)
+        dtos: list[PlaneacionListDTO] = []
+        for entity in entities:
+            tipos: list[str] = []
+            competencias: set[uuid.UUID] = set()
+            for resultado in entity.resultados:
+                competencias.add(resultado.competencia_id)
+                tipo = tipo_by_pair.get((entity.actividad_id, resultado.id))
+                if tipo:
+                    tipos.append(tipo.strip().upper())
+            datos = entity.datos_complementarios
+            actividades_aprendizaje = datos.get("actividades_aprendizaje")
+            dtos.append(
+                PlaneacionListDTO(
+                    id=entity.id,
+                    proyecto_id=entity.proyecto_id,
+                    fase_id=entity.fase_id,
+                    actividad_id=entity.actividad_id,
+                    nombre_fase=entity.fase.nombre_fase if entity.fase else None,
+                    descripcion_actividad=(
+                        entity.actividad.descripcion if entity.actividad else None
+                    ),
+                    actividades_aprendizaje=(
+                        actividades_aprendizaje
+                        if isinstance(actividades_aprendizaje, str)
+                        else None
+                    ),
+                    estado=entity.estado.value,
+                    competencias_count=len(competencias),
+                    resultados_count=len(entity.resultados),
+                    resultados_especificos=sum(
+                        1 for tipo in tipos if tipo == "ESPECIFICO"
+                    ),
+                    resultados_transversales=sum(
+                        1 for tipo in tipos if tipo == "TRANSVERSAL"
+                    ),
+                    fecha_actualizacion=entity.fecha_actualizacion,
+                )
             )
-            for e in entities
-        ]
+        return dtos
 
     async def obtener_detalle(
         self, planeacion_id: uuid.UUID
@@ -349,73 +325,139 @@ class PlaneacionPedagogicaService:
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             return None
-        return self._map_to_response_dto(entity)
+        return await self._map_to_response_dto(entity)
 
     async def guardar_borrador(self, dto: PlaneacionSaveDTO) -> PlaneacionResponseDTO:
-        """Create or update a pedagogical planning draft in the database."""
+        """Create or update an integrated pedagogical planning draft.
+
+        The backend never trusts the frontend: every curricular membership
+        (fase -> actividad -> competencia -> resultado) is re-verified here.
+        """
         await self._ensure_project_complete(dto.proyecto_id)
-        resultado = await self._session.get(ResultadoAprendizaje, dto.resultado_id)
-        if resultado is None:
+
+        proyecto = await self._session.get(ProyectoFormativo, dto.proyecto_id)
+        assert proyecto is not None
+
+        fase = await self._session.get(FaseProyecto, dto.fase_id)
+        if fase is None or fase.proyecto_id != dto.proyecto_id:
             raise ValueError(
-                f"No existe el resultado de aprendizaje {dto.resultado_id}"
+                "La fase seleccionada no pertenece al proyecto formativo"
             )
-        if resultado.competencia_id != dto.competencia_id:
+        actividad = await self._session.get(ActividadProyecto, dto.actividad_id)
+        if actividad is None or actividad.fase_id != dto.fase_id:
             raise ValueError(
-                "El resultado seleccionado no pertenece a la competencia indicada"
+                "La actividad seleccionada no pertenece a la fase indicada"
             )
 
-        entity = await self._repository.get_by_proyecto_and_resultado(
-            dto.proyecto_id,
-            dto.resultado_id,
+        asignaciones = await self._load_asignaciones_for_actividad(dto.actividad_id)
+        resultado_ids_validos = {
+            asignacion.resultado_id
+            for asignacion in asignaciones
+            if asignacion.resultado_id is not None
+        }
+        programas_por_resultado = {
+            asignacion.resultado_id: asignacion.competencia.programa_id
+            for asignacion in asignaciones
+            if asignacion.resultado_id is not None
+        }
+
+        selected_resultado_ids = list(dict.fromkeys(dto.resultados_ids))
+        if not selected_resultado_ids:
+            raise ValueError(
+                "Selecciona al menos un resultado de aprendizaje para la "
+                "actividad de aprendizaje"
+            )
+        for resultado_id in selected_resultado_ids:
+            if resultado_id not in resultado_ids_validos:
+                raise ValueError(
+                    "Uno de los resultados seleccionados no esta asociado a "
+                    "la actividad de proyecto indicada"
+                )
+            if programas_por_resultado.get(resultado_id) != proyecto.programa_id:
+                raise ValueError(
+                    "Uno de los resultados seleccionados pertenece a otro "
+                    "programa de formacion"
+                )
+
+        statement = select(ResultadoAprendizaje).where(
+            ResultadoAprendizaje.id.in_(selected_resultado_ids)
         )
-        if entity is None:
-            entity = PlaneacionPedagogica(
-                proyecto_id=dto.proyecto_id,
-                competencia_id=dto.competencia_id,
-                resultado_id=dto.resultado_id,
+        result = await self._session.execute(statement)
+        resultados = list(result.scalars().all())
+        if len(resultados) != len(selected_resultado_ids):
+            raise ValueError(
+                "Uno de los resultados seleccionados no existe en el programa"
             )
-        else:
-            entity.competencia_id = dto.competencia_id
-            entity.resultado_id = dto.resultado_id
 
-        entity.fase_id = dto.fase_id
-        entity.actividad_id = dto.actividad_id
-        entity.estado = EstadoBloque.BORRADOR
-        entity.datos_complementarios = dto.datos_complementarios
+        competencias_involucradas = {r.competencia_id for r in resultados}
 
-        entity.resultados = [resultado]
-
+        conocimientos: list[Conocimiento] = []
         if dto.conocimientos_ids:
             k_stmt = select(Conocimiento).where(
                 Conocimiento.id.in_(dto.conocimientos_ids)
             )
             k_query = await self._session.execute(k_stmt)
-            entity.conocimientos = list(k_query.scalars().all())
-        else:
-            entity.conocimientos = []
+            conocimientos = list(k_query.scalars().all())
+        if len(conocimientos) != len(set(dto.conocimientos_ids)):
+            raise ValueError(
+                "Uno de los saberes seleccionados no existe en el programa"
+            )
+        for conocimiento in conocimientos:
+            if conocimiento.competencia_id not in competencias_involucradas:
+                raise ValueError(
+                    "Hay saberes que no pertenecen a ninguna de las "
+                    "competencias involucradas en la planeacion"
+                )
 
+        criterios: list[CriterioEvaluacion] = []
         if dto.criterios_ids:
             cr_stmt = select(CriterioEvaluacion).where(
                 CriterioEvaluacion.id.in_(dto.criterios_ids)
             )
             cr_query = await self._session.execute(cr_stmt)
-            entity.criterios = list(cr_query.scalars().all())
-        else:
-            entity.criterios = []
+            criterios = list(cr_query.scalars().all())
+        if len(criterios) != len(set(dto.criterios_ids)):
+            raise ValueError(
+                "Uno de los criterios seleccionados no existe en el programa"
+            )
+        for criterio in criterios:
+            if criterio.competencia_id not in competencias_involucradas:
+                raise ValueError(
+                    "Hay criterios que no pertenecen a ninguna de las "
+                    "competencias involucradas en la planeacion"
+                )
+
+        entity = await self._repository.get_by_proyecto_and_actividad(
+            dto.proyecto_id,
+            dto.actividad_id,
+        )
+        if entity is None:
+            entity = PlaneacionPedagogica(
+                proyecto_id=dto.proyecto_id,
+                fase_id=dto.fase_id,
+                actividad_id=dto.actividad_id,
+            )
+        entity.fase_id = dto.fase_id
+        entity.actividad_id = dto.actividad_id
+        entity.estado = EstadoBloque.BORRADOR
+        datos = dict(dto.datos_complementarios)
+        datos.pop("asignaciones_proyecto", None)
+        entity.datos_complementarios = datos
+        entity.resultados = resultados
+        entity.conocimientos = conocimientos
+        entity.criterios = criterios
 
         await self._repository.save(entity)
 
-        # Re-fetch to ensure all properties (competencia details, fase, etc)
-        # are loaded for response
         refetched = await self._repository.get_by_id(entity.id)
         if refetched is None:
             raise ValueError("Error al guardar y recuperar el borrador")
-        return self._map_to_response_dto(refetched)
+        return await self._map_to_response_dto(refetched)
 
     async def confirmar_y_generar(
         self, planeacion_id: uuid.UUID
     ) -> PlaneacionResponseDTO:
-        """Complete one planning row and generate its official workbook."""
+        """Complete one integrated planning and generate its official workbook."""
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             raise ValueError(
@@ -430,7 +472,7 @@ class PlaneacionPedagogicaService:
         entity.estado = EstadoBloque.COMPLETO
         await self._generate_individual(entity)
         await self._repository.save(entity)
-        return self._map_to_response_dto(entity)
+        return await self._map_to_response_dto(entity)
 
     async def obtener_configuracion_documento(
         self,
@@ -638,6 +680,112 @@ class PlaneacionPedagogicaService:
         content = await self._storage_service.read_excel(key=config.storage_key)
         return content, config.file_name or OFFICIAL_FILE_NAME
 
+    async def eliminar_planeacion(self, planeacion_id: uuid.UUID) -> None:
+        """Remove the planning record from DB and its workbook from MinIO."""
+        entity = await self._repository.get_by_id(planeacion_id)
+        if entity is None:
+            return
+        if entity.storage_key:
+            await self._storage_service.delete_by_prefix(prefix=entity.storage_key)
+        await self._repository.delete(entity)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    async def _resolve_programa_id(self, referencia_id: uuid.UUID) -> uuid.UUID:
+        draft_stmt = select(BorradorSesion).where(
+            BorradorSesion.referencia_id == referencia_id,
+            BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA,
+        )
+        draft_res = await self._session.execute(draft_stmt)
+        draft_prog = draft_res.scalar_one_or_none()
+        if draft_prog is None:
+            raise ValueError(
+                f"No existe sesión de borrador para la referencia {referencia_id}"
+            )
+        curr = draft_prog.payload_json.get("curricular")
+        programa_id: uuid.UUID | None = None
+        if isinstance(curr, dict):
+            raw_id = curr.get("programa_formacion_id")
+            if raw_id:
+                programa_id = uuid.UUID(str(raw_id))
+        if programa_id is None:
+            raise ValueError(
+                "El programa de formación no ha sido importado/materializado "
+                "en la sesión"
+            )
+        return programa_id
+
+    async def _get_project_for_program(
+        self, programa_id: uuid.UUID
+    ) -> ProyectoFormativo:
+        proj_stmt = (
+            select(ProyectoFormativo)
+            .where(ProyectoFormativo.programa_id == programa_id)
+            .options(
+                selectinload(ProyectoFormativo.fases).selectinload(
+                    FaseProyecto.actividades
+                )
+            )
+        )
+        proj_res = await self._session.execute(proj_stmt)
+        proyecto = proj_res.scalar_one_or_none()
+        if proyecto is None:
+            raise ValueError(
+                "No se ha importado el proyecto formativo para este programa"
+            )
+        return proyecto
+
+    async def _load_asignaciones(
+        self, proyecto_id: uuid.UUID
+    ) -> dict[uuid.UUID, list[AsignacionCurricularProyecto]]:
+        statement = (
+            select(AsignacionCurricularProyecto)
+            .where(AsignacionCurricularProyecto.proyecto_id == proyecto_id)
+            .options(
+                selectinload(AsignacionCurricularProyecto.competencia),
+                selectinload(AsignacionCurricularProyecto.resultado),
+            )
+        )
+        result = await self._session.execute(statement)
+        asignaciones = list(result.scalars().unique().all())
+        grouped: dict[uuid.UUID, list[AsignacionCurricularProyecto]] = {}
+        for asignacion in asignaciones:
+            grouped.setdefault(asignacion.actividad_proyecto_id, []).append(
+                asignacion
+            )
+        return grouped
+
+    async def _load_asignaciones_for_actividad(
+        self, actividad_id: uuid.UUID
+    ) -> list[AsignacionCurricularProyecto]:
+        statement = (
+            select(AsignacionCurricularProyecto)
+            .where(AsignacionCurricularProyecto.actividad_proyecto_id == actividad_id)
+            .options(
+                selectinload(AsignacionCurricularProyecto.competencia),
+                selectinload(AsignacionCurricularProyecto.resultado),
+            )
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().unique().all())
+
+    async def _load_tipos_resultado(
+        self, proyecto_id: uuid.UUID
+    ) -> dict[tuple[uuid.UUID | None, uuid.UUID | None], str]:
+        statement = select(AsignacionCurricularProyecto).where(
+            AsignacionCurricularProyecto.proyecto_id == proyecto_id
+        )
+        result = await self._session.execute(statement)
+        return {
+            (asignacion.actividad_proyecto_id, asignacion.resultado_id): (
+                asignacion.tipo_resultado
+            )
+            for asignacion in result.scalars().all()
+            if asignacion.resultado_id is not None
+        }
+
     async def _generate_individual(
         self,
         entity: PlaneacionPedagogica,
@@ -646,18 +794,8 @@ class PlaneacionPedagogicaService:
         metadata = self._build_metadata(entity.proyecto, config)
         rows = await self._build_rows([entity])
         result = self._formato_excel_service.generar(metadata=metadata, rows=rows)
-        programa_dir = sanitize_directory_name(
-            entity.proyecto.programa.nombre_programa
-        )
-        proyecto_dir = sanitize_directory_name(entity.proyecto.nombre_proyecto)
-        resultado_dir = sanitize_directory_name(
-            entity.resultado.codigo_resultado or "resultado-sin-codigo"
-        )
+        storage_key = self._build_individual_storage_key(entity)
         file_name = "GPFI-F-134V05-planeacion.xlsx"
-        storage_key = (
-            f"planeaciones-pedagogicas/{programa_dir}/{proyecto_dir}/"
-            f"resultados/{resultado_dir}/{file_name}"
-        )
         await self._storage_service.save_excel(
             key=storage_key,
             content=result.content,
@@ -681,6 +819,32 @@ class PlaneacionPedagogicaService:
             filas_generadas=result.filas_generadas,
             planeaciones_incluidas=1,
         )
+
+    def _build_individual_storage_key(self, entity: PlaneacionPedagogica) -> str:
+        """Build a business-legible deterministic MinIO key for the workbook."""
+        programa_dir = self._segment(entity.proyecto.programa.nombre_programa)
+        proyecto_dir = self._segment(entity.proyecto.nombre_proyecto)
+        fase_dir = self._segment(
+            entity.fase.nombre_fase if entity.fase else "fase-sin-datos"
+        )
+        actividad_dir = self._segment(
+            entity.actividad.descripcion
+            if entity.actividad
+            else "actividad-sin-datos"
+        )
+        collision_suffix = str(entity.id).replace("-", "")[:8]
+        return (
+            f"planeaciones-pedagogicas/{programa_dir}/{proyecto_dir}/"
+            f"{fase_dir}/{actividad_dir}-{collision_suffix}/"
+            "GPFI-F-134V05-planeacion.xlsx"
+        )
+
+    @staticmethod
+    def _segment(value: str) -> str:
+        segment = sanitize_directory_name(value)
+        if len(segment) > _SEGMENT_MAX_LENGTH:
+            segment = segment[:_SEGMENT_MAX_LENGTH].rstrip("-")
+        return segment or "sin-datos"
 
     async def _collect_gaps(
         self,
@@ -717,17 +881,61 @@ class PlaneacionPedagogicaService:
                     "confirmacion",
                 )
             )
-        if (
-            entity.resultado is None
-            or entity.resultado.competencia_id != entity.competencia_id
-        ):
+
+        if not entity.resultados:
             gaps.append(
                 self._gap(
-                    "RESULTADO_INVALIDO",
-                    "El resultado no pertenece a la competencia seleccionada.",
+                    "RESULTADOS_FALTANTES",
+                    "Selecciona al menos un resultado de aprendizaje.",
                     "curricular",
                 )
             )
+
+        competencias_involucradas = {
+            resultado.competencia_id for resultado in entity.resultados
+        }
+
+        if entity.actividad_id is None or entity.fase_id is None:
+            gaps.append(
+                self._gap(
+                    "ASIGNACION_FALTANTE",
+                    "Selecciona una fase y actividad del proyecto.",
+                    "curricular",
+                )
+            )
+        else:
+            phase_map, activity_map = await self._project_structure(proyecto.id)
+            phase = phase_map.get(entity.fase_id)
+            activity = activity_map.get(entity.actividad_id)
+            if phase is None or activity is None or activity.fase_id != phase.id:
+                gaps.append(
+                    self._gap(
+                        "ASIGNACION_INCONSISTENTE",
+                        "La actividad seleccionada no pertenece a la fase indicada.",
+                        "curricular",
+                    )
+                )
+            else:
+                asignaciones = await self._load_asignaciones_for_actividad(
+                    entity.actividad_id
+                )
+                resultado_ids_asignados = {
+                    asignacion.resultado_id
+                    for asignacion in asignaciones
+                    if asignacion.resultado_id is not None
+                }
+                for resultado in entity.resultados:
+                    if resultado.id not in resultado_ids_asignados:
+                        gaps.append(
+                            self._gap(
+                                "RESULTADO_NO_ASIGNADO",
+                                "Hay resultados que no estan asociados a la "
+                                "actividad de proyecto seleccionada.",
+                                "curricular",
+                            )
+                        )
+                        break
+
         if not entity.conocimientos:
             gaps.append(
                 self._gap(
@@ -737,13 +945,14 @@ class PlaneacionPedagogicaService:
                 )
             )
         elif any(
-            knowledge.competencia_id != entity.competencia_id
+            knowledge.competencia_id not in competencias_involucradas
             for knowledge in entity.conocimientos
         ):
             gaps.append(
                 self._gap(
                     "SABERES_INCONSISTENTES",
-                    "Hay saberes que no pertenecen a la competencia.",
+                    "Hay saberes que no pertenecen a las competencias "
+                    "involucradas.",
                     "curricular",
                 )
             )
@@ -756,43 +965,17 @@ class PlaneacionPedagogicaService:
                 )
             )
         elif any(
-            criterion.competencia_id != entity.competencia_id
+            criterion.competencia_id not in competencias_involucradas
             for criterion in entity.criterios
         ):
             gaps.append(
                 self._gap(
                     "CRITERIOS_INCONSISTENTES",
-                    "Hay criterios que no pertenecen a la competencia.",
+                    "Hay criterios que no pertenecen a las competencias "
+                    "involucradas.",
                     "curricular",
                 )
             )
-
-        phase_map, activity_map = await self._project_structure(proyecto.id)
-        assignments = self._assignment_pairs(entity)
-        if not assignments:
-            gaps.append(
-                self._gap(
-                    "ASIGNACION_FALTANTE",
-                    "Selecciona una fase y actividad del proyecto.",
-                    "curricular",
-                )
-            )
-        for phase_id, activity_id in assignments:
-            phase = phase_map.get(phase_id)
-            activity = activity_map.get(activity_id)
-            if (
-                phase is None
-                or activity is None
-                or activity.fase_id != phase.id
-            ):
-                gaps.append(
-                    self._gap(
-                        "ASIGNACION_INCONSISTENTE",
-                        "La actividad seleccionada no pertenece a la fase indicada.",
-                        "curricular",
-                    )
-                )
-                break
 
         data = entity.datos_complementarios
         required_text = (
@@ -922,53 +1105,23 @@ class PlaneacionPedagogicaService:
         self,
         entities: list[PlaneacionPedagogica],
     ) -> list[FormatoPlaneacionRow]:
+        """Build official rows: one per RAP, grouped by competency.
+
+        Hours belong to the integrated learning activity, so they are only
+        written on the first row of each planning block to avoid summing
+        them once per RAP.
+        """
         if not entities:
             return []
         phase_map, activity_map = await self._project_structure(
             entities[0].proyecto_id
         )
+
         sortable: list[
-            tuple[tuple[int, int, int, int, str], FormatoPlaneacionRow]
+            tuple[tuple[int, int, str, int], FormatoPlaneacionRow]
         ] = []
         for entity in entities:
             data = entity.datos_complementarios
-            selected = sorted(
-                entity.conocimientos,
-                key=lambda item: (
-                    item.orden is None,
-                    item.orden or 0,
-                    item.descripcion,
-                ),
-            )
-            saberes = self._stable_unique(
-                [
-                    item.descripcion
-                    for item in selected
-                    if item.tipo == TipoConocimiento.SABER
-                ]
-                + self._string_list(data.get("tematicas_saber"))
-            )
-            procesos = self._stable_unique(
-                [
-                    item.descripcion
-                    for item in selected
-                    if item.tipo == TipoConocimiento.PROCESO
-                ]
-                + self._string_list(data.get("tematicas_proceso"))
-            )
-            criterios = self._stable_unique(
-                [
-                    item.descripcion
-                    for item in sorted(
-                        entity.criterios,
-                        key=lambda item: (
-                            item.orden is None,
-                            item.orden or 0,
-                            item.descripcion,
-                        ),
-                    )
-                ]
-            )
             ambientes = self._stable_unique(
                 self._text_items(data.get("ambientes_tipificados"))
                 + self._text_items(
@@ -979,70 +1132,189 @@ class PlaneacionPedagogicaService:
             independent = (
                 self._number(data.get("horas_trabajo_independiente")) or 0.0
             )
-            for phase_id, activity_id in self._assignment_pairs(entity):
-                phase = phase_map[phase_id]
-                activity = activity_map[activity_id]
-                row = FormatoPlaneacionRow(
-                    fase=phase.nombre_fase,
-                    actividad_proyecto=activity.descripcion,
-                    competencia=(
-                        f"{entity.competencia.codigo_competencia}\n"
-                        f"{entity.competencia.nombre_competencia}"
-                    ),
-                    resultado="\n".join(
-                        value
-                        for value in (
-                            entity.resultado.codigo_resultado,
-                            entity.resultado.descripcion,
-                        )
-                        if value
-                    ),
-                    saberes=tuple(saberes),
-                    procesos=tuple(procesos),
-                    criterios=tuple(criterios),
-                    actividades_aprendizaje=str(
-                        data.get("actividades_aprendizaje") or ""
-                    ).strip(),
-                    horas_trabajo_directo=direct,
-                    horas_trabajo_independiente=independent,
-                    descripcion_evidencia=str(
-                        data.get("descripcion_evidencia_aprendizaje") or ""
-                    ).strip(),
-                    estrategias_didacticas=str(
-                        data.get("estrategias_didacticas") or ""
-                    ).strip(),
-                    ambiente=tuple(ambientes),
-                    materiales_formacion=str(
-                        data.get("materiales_formacion")
-                        or data.get("recursos_didacticos")
-                        or ""
-                    ).strip(),
-                    instructores=str(
-                        data.get("instructores")
-                        or data.get("instructor_responsable")
-                        or ""
-                    ).strip(),
-                    observaciones=str(data.get("observaciones") or "").strip(),
+            actividad_aprendizaje = str(
+                data.get("actividades_aprendizaje") or ""
+            ).strip()
+            descripcion_evidencia = str(
+                data.get("descripcion_evidencia_aprendizaje") or ""
+            ).strip()
+            estrategias = str(data.get("estrategias_didacticas") or "").strip()
+            materiales = str(
+                data.get("materiales_formacion")
+                or data.get("recursos_didacticos")
+                or ""
+            ).strip()
+            instructores_text = str(
+                data.get("instructores")
+                or data.get("instructor_responsable")
+                or ""
+            ).strip()
+            observaciones = str(data.get("observaciones") or "").strip()
+            tematicas_saber = self._stable_unique(
+                self._string_list(data.get("tematicas_saber"))
+            )
+            tematicas_proceso = self._stable_unique(
+                self._string_list(data.get("tematicas_proceso"))
+            )
+
+            grupos = self._group_results_by_competencia(entity)
+            fase = (
+                phase_map.get(entity.fase_id) if entity.fase_id is not None else None
+            )
+            activity = (
+                activity_map.get(entity.actividad_id)
+                if entity.actividad_id is not None
+                else None
+            )
+            fase_nombre = fase.nombre_fase if fase else "Fase sin asignar"
+            actividad_nombre = (
+                activity.descripcion if activity else "Actividad sin asignar"
+            )
+            phase_orden = fase.orden if fase and fase.orden is not None else 10**9
+            activity_orden = (
+                activity.orden
+                if activity and activity.orden is not None
+                else 10**9
+            )
+
+            first_row_of_block = True
+            local_index = 0
+            for competencia, resultados in grupos:
+                saberes_competencia = self._competencia_knowledge(
+                    entity, competencia.id, TipoConocimiento.SABER
                 )
-                sortable.append(
-                    (
-                        (
-                            phase.orden if phase.orden is not None else 10**9,
-                            activity.orden
-                            if activity.orden is not None
-                            else 10**9,
-                            entity.competencia.orden
-                            if entity.competencia.orden is not None
-                            else 10**9,
-                            entity.resultado.orden
-                            if entity.resultado.orden is not None
-                            else 10**9,
-                            str(entity.id),
-                        ),
-                        row,
+                procesos_competencia = self._competencia_knowledge(
+                    entity, competencia.id, TipoConocimiento.PROCESO
+                )
+                criterios_competencia = self._competencia_criteria(
+                    entity, competencia.id
+                )
+                for resultado in resultados:
+                    saberes = self._stable_unique(
+                        saberes_competencia
+                        + (tematicas_saber if first_row_of_block else [])
                     )
-                )
+                    procesos = self._stable_unique(
+                        procesos_competencia
+                        + (tematicas_proceso if first_row_of_block else [])
+                    )
+                    row = FormatoPlaneacionRow(
+                        fase=fase_nombre,
+                        actividad_proyecto=actividad_nombre,
+                        competencia=(
+                            f"{competencia.codigo_competencia}\n"
+                            f"{competencia.nombre_competencia}"
+                        ),
+                        resultado="\n".join(
+                            value
+                            for value in (
+                                resultado.codigo_resultado,
+                                resultado.descripcion,
+                            )
+                            if value
+                        ),
+                        saberes=tuple(saberes),
+                        procesos=tuple(procesos),
+                        criterios=tuple(criterios_competencia),
+                        actividades_aprendizaje=actividad_aprendizaje,
+                        horas_trabajo_directo=(
+                            direct if first_row_of_block else None
+                        ),
+                        horas_trabajo_independiente=(
+                            independent if first_row_of_block else None
+                        ),
+                        descripcion_evidencia=descripcion_evidencia,
+                        estrategias_didacticas=estrategias,
+                        ambiente=tuple(ambientes),
+                        materiales_formacion=materiales,
+                        instructores=instructores_text,
+                        observaciones=observaciones,
+                    )
+                    sortable.append(
+                        (
+                            (
+                                phase_orden,
+                                activity_orden,
+                                str(entity.actividad_id or entity.id),
+                                local_index,
+                            ),
+                            row,
+                        )
+                    )
+                    first_row_of_block = False
+                    local_index += 1
         return [row for _, row in sorted(sortable, key=lambda item: item[0])]
+
+    @staticmethod
+    def _group_results_by_competencia(
+        entity: PlaneacionPedagogica,
+    ) -> list[tuple[Competencia, list[ResultadoAprendizaje]]]:
+        grupos: dict[uuid.UUID, tuple[Competencia, list[ResultadoAprendizaje]]] = {}
+        for resultado in entity.resultados:
+            competencia = resultado.competencia
+            entry = grupos.setdefault(competencia.id, (competencia, []))
+            entry[1].append(resultado)
+        ordered = sorted(
+            grupos.values(),
+            key=lambda item: (
+                item[0].orden is None,
+                item[0].orden or 0,
+                item[0].codigo_competencia,
+            ),
+        )
+        return [
+            (
+                competencia,
+                sorted(
+                    resultados,
+                    key=lambda resultado: (
+                        resultado.orden is None,
+                        resultado.orden or 0,
+                        resultado.codigo_resultado or "",
+                    ),
+                ),
+            )
+            for competencia, resultados in ordered
+        ]
+
+    @staticmethod
+    def _competencia_knowledge(
+        entity: PlaneacionPedagogica,
+        competencia_id: uuid.UUID,
+        tipo: TipoConocimiento,
+    ) -> list[str]:
+        selected = sorted(
+            (
+                item
+                for item in entity.conocimientos
+                if item.competencia_id == competencia_id and item.tipo == tipo
+            ),
+            key=lambda item: (
+                item.orden is None,
+                item.orden or 0,
+                item.descripcion,
+            ),
+        )
+        return [item.descripcion for item in selected]
+
+    @staticmethod
+    def _competencia_criteria(
+        entity: PlaneacionPedagogica,
+        competencia_id: uuid.UUID,
+    ) -> list[str]:
+        selected = sorted(
+            (
+                item
+                for item in entity.criterios
+                if item.competencia_id == competencia_id
+            ),
+            key=lambda item: (
+                item.orden is None,
+                item.orden or 0,
+                item.descripcion,
+            ),
+        )
+        return [item.descripcion for item in selected]
 
     async def _project_structure(
         self,
@@ -1066,29 +1338,6 @@ class PlaneacionPedagogicaService:
                 for activity in phase.actividades
             },
         )
-
-    @staticmethod
-    def _assignment_pairs(
-        entity: PlaneacionPedagogica,
-    ) -> list[tuple[uuid.UUID, uuid.UUID]]:
-        pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
-        raw_assignments = entity.datos_complementarios.get("asignaciones_proyecto")
-        if isinstance(raw_assignments, list):
-            for raw in raw_assignments:
-                if not isinstance(raw, dict):
-                    continue
-                try:
-                    pair = (
-                        uuid.UUID(str(raw.get("fase_id"))),
-                        uuid.UUID(str(raw.get("actividad_id"))),
-                    )
-                except (TypeError, ValueError):
-                    continue
-                if pair not in pairs:
-                    pairs.append(pair)
-        if not pairs and entity.fase_id and entity.actividad_id:
-            pairs.append((entity.fase_id, entity.actividad_id))
-        return pairs
 
     async def _get_project_with_program(
         self,
@@ -1168,6 +1417,59 @@ class PlaneacionPedagogicaService:
             version=config.version if config else 1,
         )
 
+    async def _map_to_response_dto(
+        self, entity: PlaneacionPedagogica
+    ) -> PlaneacionResponseDTO:
+        """Map PlaneacionPedagogica ORM model to PlaneacionResponseDTO."""
+        tipos: dict[uuid.UUID, str] = {}
+        if entity.actividad_id is not None:
+            asignaciones = await self._load_asignaciones_for_actividad(
+                entity.actividad_id
+            )
+            tipos = {
+                asignacion.resultado_id: asignacion.tipo_resultado
+                for asignacion in asignaciones
+                if asignacion.resultado_id is not None
+            }
+        grupos: dict[uuid.UUID, PlaneacionCompetenciaResumenDTO] = {}
+        for resultado in entity.resultados:
+            competencia = resultado.competencia
+            resumen = grupos.setdefault(
+                competencia.id,
+                PlaneacionCompetenciaResumenDTO(
+                    competencia_id=competencia.id,
+                    codigo_competencia=competencia.codigo_competencia,
+                    nombre_competencia=competencia.nombre_competencia,
+                    tipo_resultado=tipos.get(resultado.id, ""),
+                ),
+            )
+            resumen.resultados.append(
+                PlaneacionResultadoResumenDTO(
+                    id=resultado.id,
+                    codigo_resultado=resultado.codigo_resultado,
+                    descripcion=resultado.descripcion,
+                    tipo_resultado=tipos.get(resultado.id, ""),
+                )
+            )
+        return PlaneacionResponseDTO(
+            id=entity.id,
+            proyecto_id=entity.proyecto_id,
+            fase_id=entity.fase_id,
+            actividad_id=entity.actividad_id,
+            estado=entity.estado.value,
+            datos_complementarios=entity.datos_complementarios,
+            resultados_ids=[r.id for r in entity.resultados],
+            conocimientos_ids=[k.id for k in entity.conocimientos],
+            criterios_ids=[cr.id for cr in entity.criterios],
+            competencias=list(grupos.values()),
+            storage_key=entity.storage_key,
+            file_name=entity.file_name,
+            content_type=entity.content_type,
+            checksum_sha256=entity.checksum_sha256,
+            fecha_generacion=entity.fecha_generacion,
+            version=entity.version,
+        )
+
     @staticmethod
     def _gap(
         code: str,
@@ -1223,15 +1525,6 @@ class PlaneacionPedagogicaService:
     def _stable_unique(values: list[str]) -> list[str]:
         return list(dict.fromkeys(value.strip() for value in values if value.strip()))
 
-    async def eliminar_planeacion(self, planeacion_id: uuid.UUID) -> None:
-        """Remove planning record from DB and its file from MinIO."""
-        entity = await self._repository.get_by_id(planeacion_id)
-        if entity is None:
-            return
-
-        # Delete database record
-        await self._repository.delete(entity)
-
     async def _ensure_project_complete(self, proyecto_id: uuid.UUID) -> None:
         proyecto = await self._session.get(ProyectoFormativo, proyecto_id)
         if proyecto is None:
@@ -1241,30 +1534,3 @@ class PlaneacionPedagogicaService:
                 "La planeacion pedagogica solo puede iniciarse cuando "
                 "el proyecto esta COMPLETO"
             )
-
-    def _map_to_response_dto(
-        self, entity: PlaneacionPedagogica
-    ) -> PlaneacionResponseDTO:
-        """Map PlaneacionPedagogica ORM model to PlaneacionResponseDTO."""
-        return PlaneacionResponseDTO(
-            id=entity.id,
-            proyecto_id=entity.proyecto_id,
-            competencia_id=entity.competencia_id,
-            resultado_id=entity.resultado_id,
-            resultado_descripcion=entity.resultado.descripcion
-            if entity.resultado
-            else None,
-            fase_id=entity.fase_id,
-            actividad_id=entity.actividad_id,
-            estado=entity.estado.value,
-            datos_complementarios=entity.datos_complementarios,
-            resultados_ids=[r.id for r in entity.resultados],
-            conocimientos_ids=[k.id for k in entity.conocimientos],
-            criterios_ids=[cr.id for cr in entity.criterios],
-            storage_key=entity.storage_key,
-            file_name=entity.file_name,
-            content_type=entity.content_type,
-            checksum_sha256=entity.checksum_sha256,
-            fecha_generacion=entity.fecha_generacion,
-            version=entity.version,
-        )

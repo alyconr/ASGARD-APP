@@ -18,6 +18,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import (
     Enum as SqlEnum,
@@ -28,7 +29,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.base import Base
 from src.infrastructure.db.models.curriculum import (
-    Competencia,
     Conocimiento,
     CriterioEvaluacion,
     ResultadoAprendizaje,
@@ -103,33 +103,29 @@ planeacion_criterios = Table(
 
 
 class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """Pedagogical planning created for a specific competence in a format project."""
+    """Integrated pedagogical planning for one project activity.
+
+    The planning identity is the learning activity built on top of a
+    project phase/activity pair. Competencies are derived from the many
+    to many learning results, which are the real source of truth.
+    """
 
     __tablename__ = "planeaciones_pedagogicas"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_planeacion_proyecto_actividad",
             "proyecto_id",
-            "resultado_id",
-            name="uq_planeacion_proyecto_resultado",
+            "actividad_id",
+            unique=True,
+            postgresql_where=text("actividad_id IS NOT NULL"),
         ),
         Index("ix_planeaciones_pedagogicas_proyecto_id", "proyecto_id"),
-        Index("ix_planeaciones_pedagogicas_competencia_id", "competencia_id"),
-        Index("ix_planeaciones_pedagogicas_resultado_id", "resultado_id"),
+        Index("ix_planeaciones_pedagogicas_actividad_id", "actividad_id"),
     )
 
     proyecto_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("proyectos_formativos.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    competencia_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("competencias.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    resultado_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
         nullable=False,
     )
     fase_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -167,10 +163,6 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # Relationships
     proyecto: Mapped[ProyectoFormativo] = relationship()
-    competencia: Mapped[Competencia] = relationship()
-    resultado: Mapped[ResultadoAprendizaje] = relationship(
-        foreign_keys=[resultado_id],
-    )
     fase: Mapped[FaseProyecto | None] = relationship()
     actividad: Mapped[ActividadProyecto | None] = relationship()
 

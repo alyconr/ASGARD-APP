@@ -326,6 +326,15 @@ export function useProyectoWizard({
           programaReferenciaId,
           programaId,
         );
+        const recoveredSnapshot = buildSnapshot(
+          draft.referencia_id,
+          nextStepId,
+          nextPayload,
+          draft.estado_borrador,
+        );
+        const normalizedPayloadChanged =
+          JSON.stringify(toDraftPayloadRecord(nextPayload)) !==
+          JSON.stringify(draft.payload_json);
 
         if (nextPayload.meta.programaReferenciaId !== programaReferenciaId) {
           throw new Error(
@@ -347,19 +356,17 @@ export function useProyectoWizard({
         });
 
         setActiveProyectoDraftReference(draft.referencia_id);
-        lastPersistedSnapshotRef.current = serializeSnapshot(
-          buildSnapshot(
-            draft.referencia_id,
-            nextStepId,
-            nextPayload,
-            draft.estado_borrador,
-          ),
-        );
+        lastPersistedSnapshotRef.current = normalizedPayloadChanged
+          ? null
+          : serializeSnapshot(recoveredSnapshot);
         setKnownDrafts(
           rememberProyectoDraft(
             buildSummaryFromDraftResponse(draft, nextPayload),
           ),
         );
+        if (normalizedPayloadChanged) {
+          await persistSnapshot(recoveredSnapshot, { force: true });
+        }
         if (!silent) {
           notify.success("Borrador del proyecto recuperado", {
             description: "Puedes continuar desde el ultimo paso guardado.",

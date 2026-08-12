@@ -17,6 +17,7 @@ import {
   confirmProjectExcelImport,
   uploadProjectExcelPreview,
 } from "@/features/proyecto/excel-import-api";
+import { AlreadyLoadedModal } from "@/components/wizard/already-loaded-modal";
 import { eliminarCargueProyecto } from "@/features/proyecto/cargue-api";
 import { notify } from "@/components/feedback/notifications";
 import { useConfirm } from "@/components/feedback/confirm-context";
@@ -72,6 +73,15 @@ function validateExcelFile(file: File | null): string | null {
   }
 
   return null;
+}
+
+function isAlreadyLoadedMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("ya fue cargado") ||
+    normalized.includes("ya han sido cargados") ||
+    normalized.includes("planeacion pedagogica")
+  );
 }
 
 interface CurriculumFasesModalProps {
@@ -494,11 +504,13 @@ export function ProyectoExcelImport({
   currentResult,
   onPreview,
   onImported,
+  planeacionHref,
   referenciaId,
 }: Readonly<{
   currentResult: ProyectoExcelPreviewState | null;
   onPreview: (result: ProyectoExcelPreviewState) => void;
   onImported: (result: ProyectoExcelPreviewState) => void;
+  planeacionHref?: string;
   referenciaId: string;
 }>): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -509,6 +521,9 @@ export function ProyectoExcelImport({
     useState<ProyectoExcelPreviewState | null>(currentResult);
   const [state, setState] = useState<UploadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [alreadyLoadedMessage, setAlreadyLoadedMessage] = useState<
+    string | null
+  >(null);
   const [isFasesModalOpen, setIsFasesModalOpen] = useState<boolean>(false);
   const effectiveResult = localResult ?? currentResult;
 
@@ -595,6 +610,9 @@ export function ProyectoExcelImport({
       const errorMessage = getErrorMessage(error);
       setState("error");
       setMessage(errorMessage);
+      if (isAlreadyLoadedMessage(errorMessage)) {
+        setAlreadyLoadedMessage(errorMessage);
+      }
       notify.error("No fue posible procesar el Excel", {
         description: errorMessage,
       });
@@ -635,6 +653,9 @@ export function ProyectoExcelImport({
       const errorMessage = getErrorMessage(error);
       setState("error");
       setMessage(errorMessage);
+      if (isAlreadyLoadedMessage(errorMessage)) {
+        setAlreadyLoadedMessage(errorMessage);
+      }
       notify.error("No fue posible confirmar la importacion", {
         description: errorMessage,
       });
@@ -649,6 +670,14 @@ export function ProyectoExcelImport({
 
   return (
     <section aria-label="Cargue Excel del proyecto" className="grid gap-4">
+      {alreadyLoadedMessage !== null ? (
+        <AlreadyLoadedModal
+          message={alreadyLoadedMessage}
+          onClose={() => setAlreadyLoadedMessage(null)}
+          planeacionHref={planeacionHref ?? `/planeacion/${referenciaId}`}
+        />
+      ) : null}
+
       <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">

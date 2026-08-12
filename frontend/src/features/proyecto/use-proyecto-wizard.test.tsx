@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProyectoWizard } from "./use-proyecto-wizard";
 import { getDraft, saveDraft } from "@/features/drafts/api";
 import type { DraftResponse, DraftSaveRequest } from "@/features/drafts/types";
-import type { ProyectoWizardPayload } from "@/features/proyecto/types";
+import type { ProyectoWizardPayload as DraftPayloadProyecto } from "@/features/proyecto/types";
 
 vi.mock("@/components/feedback/notifications", () => ({
   notify: {
@@ -220,7 +220,7 @@ describe("useProyectoWizard", () => {
           confirmed_at: "2026-05-16T10:00:00.000Z",
           proyecto_id: "some-id",
         },
-      } as any;
+      } as unknown as DraftPayloadProyecto;
       payload.documental.proyecto_pdf = {
         documento: {
           original_filename: "proyecto.pdf",
@@ -232,10 +232,10 @@ describe("useProyectoWizard", () => {
         },
         uso: "EVIDENCIA_DOCUMENTAL",
         updated_at: "2026-05-16T10:00:00.000Z",
-      } as any;
+      } as unknown as NonNullable<DraftPayloadProyecto["documental"]["proyecto_pdf"]>;
       return buildDraftResponse({
         paso_actual: "fuente-proyecto",
-        payload_json: payload as any,
+        payload_json: payload as unknown as Record<string, unknown>,
         estado_borrador: "BORRADOR",
       });
     });
@@ -270,7 +270,7 @@ describe("useProyectoWizard", () => {
           confirmed_at: "2026-05-16T10:00:00.000Z",
           proyecto_id: "some-id",
         },
-      } as any);
+      } as unknown as Parameters<typeof result.current.updateProyectoExcelImport>[0]);
       result.current.updateProyectoPdfResult({
         documento: {
           original_filename: "proyecto.pdf",
@@ -282,7 +282,7 @@ describe("useProyectoWizard", () => {
         },
         uso: "EVIDENCIA_DOCUMENTAL",
         updated_at: "2026-05-16T10:00:00.000Z",
-      } as any);
+      } as unknown as Parameters<typeof result.current.updateProyectoPdfResult>[0]);
     });
 
     act(() => {

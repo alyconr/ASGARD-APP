@@ -155,6 +155,7 @@ class FakeProgramaExcelRepository:
         self.conocimientos: dict[uuid.UUID, Conocimiento] = {}
         self.criterios: dict[uuid.UUID, CriterioEvaluacion] = {}
         self.pendientes: dict[uuid.UUID, ElementoCurricularPendiente] = {}
+        self.programas_con_proyecto: set[uuid.UUID] = set()
 
     async def get_programa(self, programa_id: uuid.UUID) -> ProgramaFormacion | None:
         """Return a program by id."""
@@ -430,7 +431,7 @@ class FakeProgramaExcelRepository:
 
     async def has_project_formativo(self, programa_id: uuid.UUID) -> bool:
         """Return whether the program already has an imported project."""
-        return False
+        return programa_id in self.programas_con_proyecto
 
 
 def build_draft(referencia_id: uuid.UUID) -> BorradorSesion:
@@ -603,6 +604,32 @@ async def test_preview_valid_canonical_workbook_updates_same_draft() -> None:
         is True
     )
     assert session.commits == 1
+
+
+@pytest.mark.anyio
+async def test_preview_rejects_program_already_loaded_by_code_and_name() -> None:
+    """A program with the same code, version and name cannot start another load."""
+    service, _, drafts, repo, storage = build_service()
+    programa = ProgramaFormacion(
+        id=uuid.uuid4(),
+        codigo_programa="228118",
+        nombre_programa="Analisis y desarrollo de software",
+        version_programa="1",
+    )
+    repo.programas[programa.id] = programa
+    repo.programas_con_proyecto.add(programa.id)
+
+    with pytest.raises(ProgramaExcelValidationError, match="ya han sido cargados"):
+        await service.preview_program_excel(
+            referencia_id=drafts.draft.referencia_id,
+            filename="programa.xlsx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            content=build_workbook_bytes(),
+        )
+
+    assert storage.objects == {}
 
 
 @pytest.mark.anyio
@@ -1001,10 +1028,10 @@ async def test_confirm_import_persists_resultado_id_correctly() -> None:
 
 
 @pytest.mark.anyio
-async def test_confirm_clears_existing_curriculum_before_import() -> None:
-    """Confirming a re-import should clear previous curriculum rows."""
+async def test_preview_rejects_reimport_for_same_program_reference() -> None:
+    """A draft already tied to the same program cannot start another load."""
     workbook_bytes = build_workbook_bytes()
-    service, session, drafts, repo, _ = build_service()
+    service, _, drafts, repo, _ = build_service()
     referencia_id = drafts.draft.referencia_id
 
     now = datetime.now(UTC)
@@ -1028,18 +1055,18 @@ async def test_confirm_clears_existing_curriculum_before_import() -> None:
     )
     repo.competencias[existing_competencia.id] = existing_competencia
 
-    preview = await service.preview_program_excel(
-        referencia_id=referencia_id,
-        filename="test.xlsx",
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        content=workbook_bytes,
+    drafts.draft.payload_json["curricular"]["programa_formacion_id"] = str(
+        referencia_id,
     )
 
-    assert preview.resumen.competencias == 1
+    with pytest.raises(ProgramaExcelValidationError, match="ya fue cargado"):
+        await service.preview_program_excel(
+            referencia_id=referencia_id,
+            filename="test.xlsx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            content=workbook_bytes,
+        )
 
-    import_result = await service.confirm_program_excel_import(
-        referencia_id=referencia_id,
-    )
-
-    assert import_result.resumen.competencias == 1
     assert len(repo.competencias) == 1

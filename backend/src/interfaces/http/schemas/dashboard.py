@@ -54,8 +54,12 @@ class PlaneacionDashboardMetricsResponse(BaseModel):
     total: int
     borrador: int
     completas: int
+    actividades_con_planeacion: int
     competencias_con_planeacion: int
     competencias_sin_planear: int
+    resultados_con_planeacion: int
+    resultados_especificos_con_planeacion: int
+    resultados_transversales_con_planeacion: int
 
     model_config = {"from_attributes": True}
 

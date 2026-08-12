@@ -9,28 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-# Context retrieval DTOs
-class ContextoAsignacionProyectoDTO(BaseModel):
-    """Project phase and activity assigned to a learning result."""
-
-    fase_id: uuid.UUID
-    actividad_id: uuid.UUID
-
-
-class ContextoResultadoDTO(BaseModel):
-    """Learning result context metadata."""
-
-    id: uuid.UUID
-    descripcion: str
-    fase_id: uuid.UUID | None = None
-    actividad_id: uuid.UUID | None = None
-    asignaciones_proyecto: list[ContextoAsignacionProyectoDTO] = Field(
-        default_factory=list
-    )
-
-    model_config = {"from_attributes": True}
-
-
+# Context retrieval DTOs (project curricular structure tree)
 class ContextoConocimientoDTO(BaseModel):
     """Knowledge item context metadata."""
 
@@ -49,8 +28,20 @@ class ContextoCriterioDTO(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ContextoResultadoDTO(BaseModel):
+    """Learning result assigned to a project activity."""
+
+    id: uuid.UUID
+    codigo_resultado: str | None = None
+    descripcion: str
+    tipo_resultado: str
+    orden_resultado: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ContextoCompetenciaDTO(BaseModel):
-    """Competence context tree."""
+    """Competence context scoped to one project activity."""
 
     id: uuid.UUID
     codigo_competencia: str
@@ -64,10 +55,12 @@ class ContextoCompetenciaDTO(BaseModel):
 
 
 class ContextoActividadDTO(BaseModel):
-    """Project activity context metadata."""
+    """Project activity with its assigned competencies."""
 
     id: uuid.UUID
     descripcion: str
+    orden: int | None = None
+    competencias: list[ContextoCompetenciaDTO] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -77,13 +70,14 @@ class ContextoFaseDTO(BaseModel):
 
     id: uuid.UUID
     nombre_fase: str
+    orden: int | None = None
     actividades: list[ContextoActividadDTO]
 
     model_config = {"from_attributes": True}
 
 
 class PlaneacionContextoDTO(BaseModel):
-    """Global context containing curriculum program and project structure."""
+    """Navigable project curricular structure used to build planning."""
 
     programa_id: uuid.UUID
     codigo_programa: str
@@ -93,7 +87,6 @@ class PlaneacionContextoDTO(BaseModel):
     codigo_proyecto: str
     nombre_proyecto: str
     version_proyecto: str | None = None
-    competencias: list[ContextoCompetenciaDTO]
     fases: list[ContextoFaseDTO]
 
     model_config = {"from_attributes": True}
@@ -101,28 +94,46 @@ class PlaneacionContextoDTO(BaseModel):
 
 # Create / Update requests
 class PlaneacionSaveDTO(BaseModel):
-    """Save payload for pedagogical planning draft or completion."""
+    """Save payload for an integrated pedagogical planning draft."""
 
     proyecto_id: uuid.UUID
-    competencia_id: uuid.UUID
-    resultado_id: uuid.UUID
-    fase_id: uuid.UUID | None = None
-    actividad_id: uuid.UUID | None = None
-    resultados_ids: list[uuid.UUID] = Field(default_factory=list)
+    fase_id: uuid.UUID
+    actividad_id: uuid.UUID
+    resultados_ids: list[uuid.UUID] = Field(min_length=1)
     conocimientos_ids: list[uuid.UUID] = Field(default_factory=list)
     criterios_ids: list[uuid.UUID] = Field(default_factory=list)
     datos_complementarios: dict[str, object] = Field(default_factory=dict)
 
 
 # Responses
+class PlaneacionResultadoResumenDTO(BaseModel):
+    """One learning result inside an integrated planning."""
+
+    id: uuid.UUID
+    codigo_resultado: str | None = None
+    descripcion: str
+    tipo_resultado: str
+
+    model_config = {"from_attributes": True}
+
+
+class PlaneacionCompetenciaResumenDTO(BaseModel):
+    """One competency grouped with its selected learning results."""
+
+    competencia_id: uuid.UUID
+    codigo_competencia: str
+    nombre_competencia: str
+    tipo_resultado: str
+    resultados: list[PlaneacionResultadoResumenDTO] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
 class PlaneacionResponseDTO(BaseModel):
-    """Pedagogical planning representation."""
+    """Integrated pedagogical planning representation."""
 
     id: uuid.UUID
     proyecto_id: uuid.UUID
-    competencia_id: uuid.UUID
-    resultado_id: uuid.UUID
-    resultado_descripcion: str | None = None
     fase_id: uuid.UUID | None = None
     actividad_id: uuid.UUID | None = None
     estado: str
@@ -130,6 +141,7 @@ class PlaneacionResponseDTO(BaseModel):
     resultados_ids: list[uuid.UUID]
     conocimientos_ids: list[uuid.UUID]
     criterios_ids: list[uuid.UUID]
+    competencias: list[PlaneacionCompetenciaResumenDTO] = Field(default_factory=list)
     storage_key: str | None = None
     file_name: str | None = None
     content_type: str | None = None
@@ -141,16 +153,20 @@ class PlaneacionResponseDTO(BaseModel):
 
 
 class PlaneacionListDTO(BaseModel):
-    """Summary item of a planning for dashboard views."""
+    """Summary item of an integrated planning for dashboard views."""
 
     id: uuid.UUID
     proyecto_id: uuid.UUID
-    competencia_id: uuid.UUID
-    resultado_id: uuid.UUID
-    resultado_descripcion: str
-    codigo_competencia: str
-    nombre_competencia: str
+    fase_id: uuid.UUID | None = None
+    actividad_id: uuid.UUID | None = None
+    nombre_fase: str | None = None
+    descripcion_actividad: str | None = None
+    actividades_aprendizaje: str | None = None
     estado: str
+    competencias_count: int = 0
+    resultados_count: int = 0
+    resultados_especificos: int = 0
+    resultados_transversales: int = 0
     fecha_actualizacion: datetime
 
     model_config = {"from_attributes": True}

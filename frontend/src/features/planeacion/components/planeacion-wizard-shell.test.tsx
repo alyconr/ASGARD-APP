@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlaneacionWizardShell } from "./planeacion-wizard-shell";
-import type { PlaneacionContextoResponse, PlaneacionListResponse, PlaneacionResponse } from "../planeacion-api";
+import type { ContextoCompetencia, PlaneacionContextoResponse, PlaneacionListResponse, PlaneacionResponse } from "../planeacion-api";
 import * as api from "../planeacion-api";
 
 // Mock the API client
@@ -21,6 +21,38 @@ vi.mock("../planeacion-api", () => ({
   downloadFormatoOficialConsolidado: vi.fn(),
 }));
 
+const mockCompetencia: ContextoCompetencia = {
+  id: "comp-1",
+  codigo_competencia: "220501001",
+  nombre_competencia: "Diseñar la arquitectura del software",
+  resultados: [
+    {
+      id: "rap-1",
+      codigo_resultado: "220501001-01",
+      descripcion: "Resultado 1: Identificar requisitos técnicos",
+      tipo_resultado: "ESPECIFICO",
+    },
+  ],
+  conocimientos_saber: [
+    {
+      id: "know-saber-1",
+      descripcion: "Concepto 1: Fundamentos de bases de datos",
+    },
+  ],
+  conocimientos_proceso: [
+    {
+      id: "know-proc-1",
+      descripcion: "Proceso 1: Aplicar diagramas UML",
+    },
+  ],
+  criterios: [
+    {
+      id: "crit-1",
+      descripcion: "Criterio 1: Elabora el modelo conceptual",
+    },
+  ],
+};
+
 const mockContexto: PlaneacionContextoResponse = {
   programa_id: "prog-1",
   codigo_programa: "220501",
@@ -38,49 +70,12 @@ const mockContexto: PlaneacionContextoResponse = {
         {
           id: "act-1",
           descripcion: "Actividad 1: Levantar requerimientos",
+          competencias: [mockCompetencia],
         },
         {
           id: "act-2",
           descripcion: "Actividad 2: Diseñar arquitectura",
-        },
-      ],
-    },
-  ],
-  competencias: [
-    {
-      id: "comp-1",
-      codigo_competencia: "220501001",
-      nombre_competencia: "Diseñar la arquitectura del software",
-      resultados: [
-        {
-          id: "rap-1",
-          descripcion: "Resultado 1: Identificar requisitos técnicos",
-          fase_id: "fase-1",
-          actividad_id: "act-1",
-          asignaciones_proyecto: [
-            {
-              fase_id: "fase-1",
-              actividad_id: "act-1",
-            },
-          ],
-        },
-      ],
-      conocimientos_saber: [
-        {
-          id: "know-saber-1",
-          descripcion: "Concepto 1: Fundamentos de bases de datos",
-        },
-      ],
-      conocimientos_proceso: [
-        {
-          id: "know-proc-1",
-          descripcion: "Proceso 1: Aplicar diagramas UML",
-        },
-      ],
-      criterios: [
-        {
-          id: "crit-1",
-          descripcion: "Criterio 1: Elabora el modelo conceptual",
+          competencias: [],
         },
       ],
     },
@@ -91,12 +86,16 @@ const mockPlanningsList: PlaneacionListResponse[] = [
   {
     id: "plan-1",
     proyecto_id: "proj-1",
-    competencia_id: "comp-1",
-    resultado_id: "rap-1",
-    resultado_descripcion: "Resultado 1: Identificar requisitos técnicos",
-    codigo_competencia: "220501001",
-    nombre_competencia: "Diseñar la arquitectura del software",
+    fase_id: "fase-1",
+    actividad_id: "act-1",
+    nombre_fase: "Fase 1: Análisis",
+    descripcion_actividad: "Actividad 1: Levantar requerimientos",
+    actividades_aprendizaje: "Determinar requerimientos de software",
     estado: "BORRADOR",
+    competencias_count: 1,
+    resultados_count: 1,
+    resultados_especificos: 1,
+    resultados_transversales: 0,
     fecha_actualizacion: "2026-05-27T10:00:00Z",
   },
 ];
@@ -104,13 +103,11 @@ const mockPlanningsList: PlaneacionListResponse[] = [
 const mockPlanningDetail: PlaneacionResponse = {
   id: "plan-1",
   proyecto_id: "proj-1",
-  competencia_id: "comp-1",
-  resultado_id: "rap-1",
-  resultado_descripcion: "Resultado 1: Identificar requisitos técnicos",
   fase_id: "fase-1",
   actividad_id: "act-1",
   estado: "BORRADOR",
   datos_complementarios: {
+    actividades_aprendizaje: "Determinar requerimientos de software",
     estrategias_didacticas: "Talleres prácticos",
     ambientes_aprendizaje: "Laboratorio 305",
     recursos_didacticos: "Computadores, guías de aprendizaje",
@@ -120,6 +117,22 @@ const mockPlanningDetail: PlaneacionResponse = {
   resultados_ids: ["rap-1"],
   conocimientos_ids: ["know-saber-1", "know-proc-1"],
   criterios_ids: ["crit-1"],
+  competencias: [
+    {
+      competencia_id: "comp-1",
+      codigo_competencia: "220501001",
+      nombre_competencia: "Diseñar la arquitectura del software",
+      tipo_resultado: "ESPECIFICO",
+      resultados: [
+        {
+          id: "rap-1",
+          codigo_resultado: "220501001-01",
+          descripcion: "Resultado 1: Identificar requisitos técnicos",
+          tipo_resultado: "ESPECIFICO",
+        },
+      ],
+    },
+  ],
   storage_key: null,
   file_name: null,
   content_type: null,
@@ -132,6 +145,7 @@ describe("PlaneacionWizardShell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue([]);
+    vi.spyOn(api, "fetchPlaneacionDetalle").mockResolvedValue(mockPlanningDetail);
     vi.spyOn(api, "fetchPlaneacionDocumentoConfig").mockResolvedValue({
       proyecto_id: "proj-1",
       fecha_elaboracion: "2026-07-29",
@@ -216,41 +230,48 @@ describe("PlaneacionWizardShell", () => {
     });
   });
 
-  it("renders the dashboard list of competencies correctly", async () => {
+  it("renders the dashboard list of competencies and activities correctly", async () => {
+    vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue(mockPlanningsList);
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    expect(screen.getByText("Listado de Competencias del Programa")).toBeInTheDocument();
-    expect(screen.getByText("Diseñar la arquitectura del software")).toBeInTheDocument();
-    expect(screen.getByText("220501001")).toBeInTheDocument();
-    expect(screen.getByText("SIN PLANIFICAR")).toBeInTheDocument();
-    expect(screen.getByText("1 RAP")).toBeInTheDocument();
+    expect(await screen.findByText("Planeaciones e Integraciones de Actividades de Aprendizaje")).toBeInTheDocument();
+    expect(screen.getByText("Determinar requerimientos de software")).toBeInTheDocument();
+    expect(screen.getByText("Fase 1: Análisis")).toBeInTheDocument();
+    expect(screen.getByText("Actividad 1: Levantar requerimientos")).toBeInTheDocument();
   });
 
   it("navigates to curricular wizard step when starting a new planning", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByText("Elegir Resultado"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Elegir resultado de aprendizaje")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Iniciar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(
-        screen.getByText(/Vamos a iniciar la planeación pedagógica específica/i),
-      ).toBeInTheDocument();
+
+    // Step 1: select phase
+    fireEvent.change(screen.getByLabelText("1. Selecciona la Fase del Proyecto Formativo"), {
+      target: { value: "fase-1" },
     });
 
-    // Check that the active result is fixed and the user can select related items.
-    expect(screen.getAllByText("Resultado 1: Identificar requisitos técnicos").length).toBeGreaterThan(0);
-    expect(screen.getByText("Concepto 1: Fundamentos de bases de datos")).toBeInTheDocument();
-    expect(screen.getByText("Proceso 1: Aplicar diagramas UML")).toBeInTheDocument();
-    expect(screen.getByText("Criterio 1: Elabora el modelo conceptual")).toBeInTheDocument();
+    // Step 2: select activity
+    fireEvent.change(await screen.findByLabelText("2. Selecciona la Actividad del Proyecto"), {
+      target: { value: "act-1" },
+    });
+
+    // Step 3: check competency
+    const compCheckbox = await screen.findByRole("checkbox", { name: /220501001/i });
+    fireEvent.click(compCheckbox);
+
+    // Step 4: check RAP
+    const rapCheckbox = await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i });
+    fireEvent.click(rapCheckbox);
+
+    await waitFor(() => {
+      expect(screen.getByText("Concepto 1: Fundamentos de bases de datos")).toBeInTheDocument();
+      expect(screen.getByText("Proceso 1: Aplicar diagramas UML")).toBeInTheDocument();
+      expect(screen.getByText("Criterio 1: Elabora el modelo conceptual")).toBeInTheDocument();
+    });
   });
 
   it("loads existing draft details when editing a draft", async () => {
@@ -260,16 +281,10 @@ describe("PlaneacionWizardShell", () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
     await waitFor(() => {
-      expect(screen.getByText("CON BORRADOR")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Elegir Resultado"));
-
-    await waitFor(() => {
       expect(screen.getByText("BORRADOR")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Editar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Editar planeación/i }));
 
     await waitFor(() => {
       expect(api.fetchPlaneacionDetalle).toHaveBeenCalledWith("plan-1");
@@ -277,9 +292,6 @@ describe("PlaneacionWizardShell", () => {
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
-      // Check that options are selected
-      expect(screen.getByText("Fase 1: Análisis")).toBeInTheDocument();
-      expect(screen.getByText("Actividad 1: Levantar requerimientos")).toBeInTheDocument();
     });
   });
 
@@ -291,31 +303,27 @@ describe("PlaneacionWizardShell", () => {
 
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByText("Elegir Resultado"));
-    fireEvent.click(await screen.findByRole("button", { name: /Iniciar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(screen.getByText(/Vamos a iniciar la planeación pedagógica específica/i)).toBeInTheDocument();
+
+    // Select phase, activity, comp, rap
+    fireEvent.change(screen.getByLabelText("1. Selecciona la Fase del Proyecto Formativo"), {
+      target: { value: "fase-1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
-    fireEvent.click(screen.getByRole("button", { name: "Instrucciones" }));
-    expect(screen.getByText(/No comiences por una lista de temas/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
+    fireEvent.change(await screen.findByLabelText("2. Selecciona la Actividad del Proyecto"), {
+      target: { value: "act-1" },
+    });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /220501001/i }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i }));
 
     fireEvent.change(screen.getByLabelText("Temáticas adicionales de conceptos y principios"), {
       target: { value: "Arquitectura limpia" },
     });
     fireEvent.click(
       screen.getAllByRole("button", { name: "Adicionar temática" })[0],
-    );
-    fireEvent.change(screen.getByLabelText("Temáticas adicionales de proceso"), {
-      target: { value: "Modelado colaborativo" },
-    });
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "Adicionar temática" })[1],
     );
 
     // Save draft
@@ -327,19 +335,11 @@ describe("PlaneacionWizardShell", () => {
     });
     expect(api.savePlaneacionBorrador).toHaveBeenCalledWith(
       expect.objectContaining({
-        resultado_id: "rap-1",
-        resultados_ids: ["rap-1"],
         fase_id: "fase-1",
         actividad_id: "act-1",
+        resultados_ids: ["rap-1"],
         datos_complementarios: expect.objectContaining({
-          asignaciones_proyecto: [
-            {
-              fase_id: "fase-1",
-              actividad_id: "act-1",
-            },
-          ],
           tematicas_saber: ["Arquitectura limpia"],
-          tematicas_proceso: ["Modelado colaborativo"],
         }),
       }),
     );
@@ -351,33 +351,27 @@ describe("PlaneacionWizardShell", () => {
     await waitFor(() => {
       expect(screen.getByText("2. Campos Complementarios")).toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: /Instrucciones antes de agregar información/i })).toBeInTheDocument();
-    });
-    expect(screen.getByText(/Llegamos a los campos que convierten/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
-
-    const actividadAprendizajeInput = screen.getByLabelText(
-      "Actividades de aprendizaje a desarrollar",
-    );
-    expect(actividadAprendizajeInput).toBeDisabled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Leer instrucción" })[0]);
-    expect(screen.getByText(/verbo en infinitivo/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Entendido" }));
-    expect(actividadAprendizajeInput).toBeEnabled();
   });
 
   it("toggles all checkboxes when using the Select All button", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByText("Elegir Resultado"));
-    fireEvent.click(await screen.findByRole("button", { name: /Iniciar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
     });
 
-    const selectAllBtn = screen.getByRole("button", { name: "Seleccionar Todo" });
+    fireEvent.change(screen.getByLabelText("1. Selecciona la Fase del Proyecto Formativo"), {
+      target: { value: "fase-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("2. Selecciona la Actividad del Proyecto"), {
+      target: { value: "act-1" },
+    });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /220501001/i }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i }));
+
+    const selectAllBtn = await screen.findByRole("button", { name: "Seleccionar Todo" });
     const knowSaberCheckbox = screen.getByLabelText("Concepto 1: Fundamentos de bases de datos");
     const knowProcCheckbox = screen.getByLabelText("Proceso 1: Aplicar diagramas UML");
     const critCheckbox = screen.getByLabelText("Criterio 1: Elabora el modelo conceptual");
@@ -412,10 +406,8 @@ describe("PlaneacionWizardShell", () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
     await waitFor(() => {
-      expect(screen.getByText("CON BORRADOR")).toBeInTheDocument();
+      expect(screen.getByText("BORRADOR")).toBeInTheDocument();
     });
-
-    fireEvent.click(screen.getByText("Elegir Resultado"));
 
     const deleteBtn = await screen.findByTitle("Eliminar borrador");
     fireEvent.click(deleteBtn);
@@ -424,38 +416,5 @@ describe("PlaneacionWizardShell", () => {
       expect(api.deletePlaneacion).toHaveBeenCalledWith("plan-1");
     });
   });
-
-  it("disables a completed result to avoid duplicate planning", async () => {
-    const mockCompletedPlanning: PlaneacionListResponse[] = [
-      {
-        ...mockPlanningsList[0],
-        estado: "COMPLETO",
-      },
-    ];
-    const mockCompletedDetail: PlaneacionResponse = {
-      ...mockPlanningDetail,
-      estado: "COMPLETO",
-      storage_key:
-        "planeaciones-pedagogicas/programa/proyecto/resultados/rap-1/GPFI-F-134V05-planeacion.xlsx",
-      file_name: "GPFI-F-134V05-planeacion.xlsx",
-      content_type:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      fecha_generacion: "2026-05-27T12:00:00Z",
-    };
-
-    vi.spyOn(api, "listPlaneacionesProyecto").mockResolvedValue(mockCompletedPlanning);
-    vi.spyOn(api, "fetchPlaneacionDetalle").mockResolvedValue(mockCompletedDetail);
-
-    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("COMPLETA")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Elegir Resultado"));
-
-    const blockedButton = await screen.findByRole("button", { name: /Bloqueado/i });
-    expect(blockedButton).toBeDisabled();
-    expect(api.fetchPlaneacionDetalle).not.toHaveBeenCalled();
-  });
 });
+

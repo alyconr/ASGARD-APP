@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -24,10 +23,21 @@ from src.application.dto.dashboard import (
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque, TipoConocimiento
-from src.infrastructure.db.models.curriculum import Competencia, ProgramaFormacion
+from src.infrastructure.db.models.curriculum import (
+    Competencia,
+    ProgramaFormacion,
+    ResultadoAprendizaje,
+)
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
-from src.infrastructure.db.models.proyecto import FaseProyecto, ProyectoFormativo
+from src.infrastructure.db.models.planeacion import (
+    PlaneacionPedagogica,
+    planeacion_resultados,
+)
+from src.infrastructure.db.models.proyecto import (
+    AsignacionCurricularProyecto,
+    FaseProyecto,
+    ProyectoFormativo,
+)
 
 
 class DashboardDraftNotFoundError(Exception):
@@ -43,10 +53,14 @@ class ProgramaCleanupProtocol(Protocol):
 
 @dataclass(frozen=True)
 class DashboardPlaneacionRow:
-    """Minimal planning row required for dashboard metrics."""
+    """Minimal planning/result row required for dashboard metrics."""
 
+    planeacion_id: uuid.UUID
     estado: EstadoBloque | str | None
-    competencia_id: uuid.UUID
+    actividad_id: uuid.UUID | None
+    resultado_id: uuid.UUID | None
+    competencia_id: uuid.UUID | None
+    tipo_resultado: str | None
 
 
 class DashboardService:
@@ -257,17 +271,51 @@ class DashboardService:
     async def _get_planeaciones(
         self, proyecto_id: uuid.UUID
     ) -> list[DashboardPlaneacionRow]:
-        statement = select(
-            PlaneacionPedagogica.estado.label("estado"),
-            PlaneacionPedagogica.competencia_id.label("competencia_id"),
-        ).where(
-            PlaneacionPedagogica.proyecto_id == proyecto_id,
+        """Return one row per planning/result with derived competency data."""
+        statement = (
+            select(
+                PlaneacionPedagogica.id.label("planeacion_id"),
+                PlaneacionPedagogica.estado.label("estado"),
+                PlaneacionPedagogica.actividad_id.label("actividad_id"),
+                ResultadoAprendizaje.id.label("resultado_id"),
+                ResultadoAprendizaje.competencia_id.label("competencia_id"),
+                AsignacionCurricularProyecto.tipo_resultado.label(
+                    "tipo_resultado"
+                ),
+            )
+            .outerjoin(
+                planeacion_resultados,
+                planeacion_resultados.c.planeacion_id == PlaneacionPedagogica.id,
+            )
+            .outerjoin(
+                ResultadoAprendizaje,
+                ResultadoAprendizaje.id
+                == planeacion_resultados.c.resultado_id,
+            )
+            .outerjoin(
+                AsignacionCurricularProyecto,
+                (
+                    AsignacionCurricularProyecto.actividad_proyecto_id
+                    == PlaneacionPedagogica.actividad_id
+                )
+                & (
+                    AsignacionCurricularProyecto.resultado_id
+                    == ResultadoAprendizaje.id
+                ),
+            )
+            .where(
+                PlaneacionPedagogica.proyecto_id == proyecto_id,
+            )
         )
         result = await self._session.execute(statement)
         return [
             DashboardPlaneacionRow(
+                planeacion_id=row["planeacion_id"],
                 estado=row["estado"],
+                actividad_id=row["actividad_id"],
+                resultado_id=row["resultado_id"],
                 competencia_id=row["competencia_id"],
+                tipo_resultado=row["tipo_resultado"],
             )
             for row in result.mappings().all()
         ]
@@ -288,13 +336,38 @@ def _build_metrics(
         for competencia in competencias
         for conocimiento in competencia.conocimientos
     ]
-    planeaciones_completas = [
-        item for item in planeaciones if item.estado == EstadoBloque.COMPLETO
-    ]
-    planeaciones_borrador = [
-        item for item in planeaciones if item.estado == EstadoBloque.BORRADOR
-    ]
-    competencias_planeadas = {item.competencia_id for item in planeaciones}
+    planeacion_ids = {item.planeacion_id for item in planeaciones}
+    planeaciones_completas = {
+        item.planeacion_id
+        for item in planeaciones
+        if item.estado == EstadoBloque.COMPLETO
+    }
+    planeaciones_borrador = {
+        item.planeacion_id
+        for item in planeaciones
+        if item.estado == EstadoBloque.BORRADOR
+    }
+    actividades_con_planeacion = {
+        item.actividad_id for item in planeaciones if item.actividad_id is not None
+    }
+    competencias_planeadas = {
+        item.competencia_id for item in planeaciones if item.competencia_id is not None
+    }
+    resultados_planeados = {
+        item.resultado_id for item in planeaciones if item.resultado_id is not None
+    }
+    resultados_especificos = {
+        item.resultado_id
+        for item in planeaciones
+        if item.resultado_id is not None
+        and (item.tipo_resultado or "").strip().upper() == "ESPECIFICO"
+    }
+    resultados_transversales = {
+        item.resultado_id
+        for item in planeaciones
+        if item.resultado_id is not None
+        and (item.tipo_resultado or "").strip().upper() == "TRANSVERSAL"
+    }
     fases = proyecto.fases if proyecto is not None else []
     actividades = [actividad for fase in fases for actividad in fase.actividades]
 
@@ -319,14 +392,18 @@ def _build_metrics(
         ),
         planeacion=PlaneacionDashboardMetricsDTO(
             estado="DISPONIBLE" if planeacion_disponible else "BLOQUEADO",
-            total=len(planeaciones),
+            total=len(planeacion_ids),
             borrador=len(planeaciones_borrador),
             completas=len(planeaciones_completas),
+            actividades_con_planeacion=len(actividades_con_planeacion),
             competencias_con_planeacion=len(competencias_planeadas),
             competencias_sin_planear=max(
                 len(competencias) - len(competencias_planeadas),
                 0,
             ),
+            resultados_con_planeacion=len(resultados_planeados),
+            resultados_especificos_con_planeacion=len(resultados_especificos),
+            resultados_transversales_con_planeacion=len(resultados_transversales),
         ),
     )
 
@@ -384,11 +461,13 @@ def _build_modules(
                 "PROYECTO_NO_COMPLETO" if programa_completo else "PROGRAMA_NO_COMPLETO"
             ),
             accion_requerida=(
-                "Crear planeaciones por resultado de aprendizaje."
+                "Crear planeaciones integradas por actividad de aprendizaje."
                 if planeacion_disponible
                 else "Cerrar el proyecto como COMPLETO."
             ),
-            descripcion="Planeaciones por RAP asociadas a fases y actividades.",
+            descripcion=(
+                "Planeaciones integradas por fase, actividad, competencias y RAP."
+            ),
             avance_porcentaje=(
                 100
                 if metricas.planeacion.total > 0

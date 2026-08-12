@@ -222,6 +222,13 @@ describe("ProyectoWizardShell", () => {
 
     render(<ProyectoWizardShell availability={availability} />);
 
+    const excelHeading = screen.getByText("Matriz Excel del proyecto formativo");
+    const pdfHeading = screen.getByText("PDF del proyecto formativo");
+
+    expect(
+      excelHeading.compareDocumentPosition(pdfHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText("PDF del proyecto formativo")).toBeInTheDocument();
     expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
   });

@@ -147,7 +147,11 @@ async def test_dashboard_habilita_planeacion_solo_con_proyecto_completo() -> Non
     proyecto = _proyecto(programa.id, EstadoBloque.COMPLETO)
     draft = _program_draft(referencia_id, programa.id, EstadoBloque.COMPLETO)
     planeacion = {
+        "planeacion_id": uuid.uuid4(),
         "competencia_id": programa.competencias[0].id,
+        "resultado_id": programa.competencias[0].resultados[0].id,
+        "actividad_id": proyecto.fases[0].actividades[0].id,
+        "tipo_resultado": "ESPECIFICO",
         "estado": EstadoBloque.COMPLETO,
     }
 

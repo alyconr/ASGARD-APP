@@ -19,6 +19,7 @@ from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
+    AsignacionCurricularProyecto,
     FaseProyecto,
     ProyectoFormativo,
 )
@@ -91,18 +92,52 @@ class ProjectRepository:
         await self._session.flush()
         return actividad
 
-    async def proyecto_exists(
+    async def proyecto_exists_by_code_name(
         self,
         *,
         programa_id: uuid.UUID,
+        codigo_proyecto: str,
+        nombre_proyecto: str,
     ) -> bool:
-        from sqlalchemy import select
+        from sqlalchemy import func, select
 
         statement = select(ProyectoFormativo.id).where(
             ProyectoFormativo.programa_id == programa_id
+        ).where(
+            func.lower(ProyectoFormativo.codigo_proyecto)
+            == codigo_proyecto.lower()
+        ).where(
+            func.lower(ProyectoFormativo.nombre_proyecto)
+            == nombre_proyecto.lower()
         )
         result = await self._session.execute(statement)
         return result.scalar_one_or_none() is not None
+
+    async def create_asignacion_curricular(
+        self,
+        *,
+        proyecto_id: uuid.UUID,
+        actividad_proyecto_id: uuid.UUID,
+        competencia_id: uuid.UUID,
+        resultado_id: uuid.UUID | None,
+        tipo_resultado: str,
+        orden_resultado: int | None,
+        pagina_origen: str | None,
+        observaciones: str | None,
+    ) -> AsignacionCurricularProyecto:
+        asignacion = AsignacionCurricularProyecto(
+            proyecto_id=proyecto_id,
+            actividad_proyecto_id=actividad_proyecto_id,
+            competencia_id=competencia_id,
+            resultado_id=resultado_id,
+            tipo_resultado=tipo_resultado,
+            orden_resultado=orden_resultado,
+            pagina_origen=pagina_origen,
+            observaciones=observaciones,
+        )
+        self._session.add(asignacion)
+        await self._session.flush()
+        return asignacion
 
 
 def get_proyecto_excel_service(

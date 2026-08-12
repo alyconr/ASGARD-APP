@@ -2,15 +2,10 @@ import { getApiBaseUrl } from "@/lib/api";
 
 export interface ContextoResultado {
   id: string;
+  codigo_resultado?: string | null;
   descripcion: string;
-  fase_id?: string | null;
-  actividad_id?: string | null;
-  asignaciones_proyecto?: ContextoAsignacionProyecto[];
-}
-
-export interface ContextoAsignacionProyecto {
-  fase_id: string;
-  actividad_id: string;
+  tipo_resultado: string;
+  orden_resultado?: number | null;
 }
 
 export interface ContextoConocimiento {
@@ -36,11 +31,14 @@ export interface ContextoCompetencia {
 export interface ContextoActividad {
   id: string;
   descripcion: string;
+  orden?: number | null;
+  competencias: ContextoCompetencia[];
 }
 
 export interface ContextoFase {
   id: string;
   nombre_fase: string;
+  orden?: number | null;
   actividades: ContextoActividad[];
 }
 
@@ -53,28 +51,37 @@ export interface PlaneacionContextoResponse {
   codigo_proyecto: string;
   nombre_proyecto: string;
   version_proyecto?: string | null;
-  competencias: ContextoCompetencia[];
   fases: ContextoFase[];
 }
 
 export interface PlaneacionSaveRequest {
   proyecto_id: string;
-  competencia_id: string;
-  resultado_id: string;
-  fase_id?: string | null;
-  actividad_id?: string | null;
+  fase_id: string;
+  actividad_id: string;
   resultados_ids: string[];
   conocimientos_ids: string[];
   criterios_ids: string[];
   datos_complementarios: Record<string, unknown>;
 }
 
+export interface PlaneacionResultadoResumen {
+  id: string;
+  codigo_resultado?: string | null;
+  descripcion: string;
+  tipo_resultado: string;
+}
+
+export interface PlaneacionCompetenciaResumen {
+  competencia_id: string;
+  codigo_competencia: string;
+  nombre_competencia: string;
+  tipo_resultado: string;
+  resultados: PlaneacionResultadoResumen[];
+}
+
 export interface PlaneacionResponse {
   id: string;
   proyecto_id: string;
-  competencia_id: string;
-  resultado_id: string;
-  resultado_descripcion: string | null;
   fase_id: string | null;
   actividad_id: string | null;
   estado: string;
@@ -82,6 +89,7 @@ export interface PlaneacionResponse {
   resultados_ids: string[];
   conocimientos_ids: string[];
   criterios_ids: string[];
+  competencias: PlaneacionCompetenciaResumen[];
   storage_key: string | null;
   file_name: string | null;
   content_type: string | null;
@@ -93,12 +101,16 @@ export interface PlaneacionResponse {
 export interface PlaneacionListResponse {
   id: string;
   proyecto_id: string;
-  competencia_id: string;
-  resultado_id: string;
-  resultado_descripcion: string;
-  codigo_competencia: string;
-  nombre_competencia: string;
+  fase_id?: string | null;
+  actividad_id?: string | null;
+  nombre_fase?: string | null;
+  descripcion_actividad?: string | null;
+  actividades_aprendizaje?: string | null;
   estado: string;
+  competencias_count: number;
+  resultados_count: number;
+  resultados_especificos: number;
+  resultados_transversales: number;
   fecha_actualizacion: string;
 }
 

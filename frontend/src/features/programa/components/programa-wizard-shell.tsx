@@ -195,6 +195,13 @@ function StepWorkspace({
                 referenceId={referenceId}
                 scope="programa"
               />
+              <ProgramaExcelImport
+                currentResult={programaExcelResult}
+                referenciaId={referenceId}
+                onBeforePreview={onPersistDraftBeforeExcelPreview}
+                onImported={onProgramaExcelImported}
+                onPreviewed={onProgramaExcelPreviewed}
+              />
               {programaExcelImportado ? (
                 <ProgramaDocumentUpload
                   currentResult={programaPdfResult}
@@ -205,13 +212,6 @@ function StepWorkspace({
                   documentoExistente={docState?.programa_pdf}
                 />
               ) : null}
-              <ProgramaExcelImport
-                currentResult={programaExcelResult}
-                referenciaId={referenceId}
-                onBeforePreview={onPersistDraftBeforeExcelPreview}
-                onImported={onProgramaExcelImported}
-                onPreviewed={onProgramaExcelPreviewed}
-              />
             </div>
           ) : (
             <ProgramaConsolidadoRevision
