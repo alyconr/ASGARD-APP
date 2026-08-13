@@ -1132,7 +1132,7 @@ def build_fase_previews(planeacion: list[PlaneacionRow]) -> list[ExcelFasePrevie
                             rap_id=res.rap_id,
                             rap_numero=res.rap_numero,
                             resultado_aprendizaje=res.resultado_aprendizaje,
-                            tipo_resultado=res.tipo_resultado,
+                            tipo_resultado=TipoResultadoProyecto(res.tipo_resultado),
                             orden_resultado=res.orden_resultado,
                             pagina_origen=res.pagina_origen,
                             observaciones=res.observaciones,

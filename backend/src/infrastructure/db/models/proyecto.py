@@ -178,8 +178,8 @@ class AsignacionCurricularProyecto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asignaciones_curriculares_proyecto"
     __table_args__ = (
         CheckConstraint(
-            "btrim(tipo_resultado) <> ''",
-            name="asignacion_curricular_tipo_resultado_not_blank",
+            "tipo_resultado IN ('ESPECIFICO', 'TRANSVERSAL')",
+            name="asignacion_curricular_tipo_resultado_enum",
         ),
         Index(
             "uq_asignacion_curricular_act_comp_rap",

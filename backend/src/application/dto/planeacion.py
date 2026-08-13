@@ -36,7 +36,7 @@ class ContextoResultadoDTO(BaseModel):
     id: uuid.UUID
     codigo_resultado: str | None = None
     descripcion: str
-    tipo_resultado: TipoResultadoProyecto | str
+    tipo_resultado: TipoResultadoProyecto
     orden_resultado: int | None = None
 
     model_config = {"from_attributes": True}
@@ -115,7 +115,7 @@ class PlaneacionResultadoResumenDTO(BaseModel):
     id: uuid.UUID
     codigo_resultado: str | None = None
     descripcion: str
-    tipo_resultado: TipoResultadoProyecto | str
+    tipo_resultado: TipoResultadoProyecto
 
     model_config = {"from_attributes": True}
 
@@ -126,7 +126,7 @@ class PlaneacionCompetenciaResumenDTO(BaseModel):
     competencia_id: uuid.UUID
     codigo_competencia: str
     nombre_competencia: str
-    tipo_resultado: TipoResultadoProyecto | str
+    tipo_resultado: TipoResultadoProyecto
     resultados: list[PlaneacionResultadoResumenDTO] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

@@ -45,7 +45,11 @@ from src.application.services.planeacion_formato_excel import (
     PlaneacionFormatoValidationError,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque, TipoConocimiento
+from src.domain.shared.enums import (
+    EstadoBloque,
+    TipoConocimiento,
+    TipoResultadoProyecto,
+)
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
@@ -222,7 +226,7 @@ class PlaneacionPedagogicaService:
                     id=asignacion.resultado.id,
                     codigo_resultado=asignacion.resultado.codigo_resultado,
                     descripcion=asignacion.resultado.descripcion,
-                    tipo_resultado=asignacion.tipo_resultado,
+                    tipo_resultado=TipoResultadoProyecto(asignacion.tipo_resultado),
                     orden_resultado=asignacion.orden_resultado,
                 )
             )
@@ -1467,7 +1471,9 @@ class PlaneacionPedagogicaService:
                     competencia_id=competencia.id,
                     codigo_competencia=competencia.codigo_competencia,
                     nombre_competencia=competencia.nombre_competencia,
-                    tipo_resultado=tipos.get(resultado.id, ""),
+                    tipo_resultado=TipoResultadoProyecto(
+                        tipos.get(resultado.id, TipoResultadoProyecto.ESPECIFICO.value)
+                    ),
                 ),
             )
             resumen.resultados.append(
@@ -1475,7 +1481,9 @@ class PlaneacionPedagogicaService:
                     id=resultado.id,
                     codigo_resultado=resultado.codigo_resultado,
                     descripcion=resultado.descripcion,
-                    tipo_resultado=tipos.get(resultado.id, ""),
+                    tipo_resultado=TipoResultadoProyecto(
+                        tipos.get(resultado.id, TipoResultadoProyecto.ESPECIFICO.value)
+                    ),
                 )
             )
         return PlaneacionResponseDTO(

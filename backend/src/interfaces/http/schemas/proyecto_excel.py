@@ -7,6 +7,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.domain.shared.enums import TipoResultadoProyecto
 
 
 class ExcelValidationIssueResponse(BaseModel):
@@ -49,7 +50,7 @@ class ExcelResultPreviewResponse(BaseModel):
     rap_id: str
     rap_numero: str
     resultado_aprendizaje: str
-    tipo_resultado: str
+    tipo_resultado: TipoResultadoProyecto
     orden_resultado: int | None
     pagina_origen: str | None
     observaciones: str | None

@@ -25,7 +25,7 @@ class ExcelResultPreviewDTO:
     rap_id: str
     rap_numero: str
     resultado_aprendizaje: str
-    tipo_resultado: TipoResultadoProyecto | str
+    tipo_resultado: TipoResultadoProyecto
     orden_resultado: int | None
     pagina_origen: str | None
     observaciones: str | None
