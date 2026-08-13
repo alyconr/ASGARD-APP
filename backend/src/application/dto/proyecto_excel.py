@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
+from src.domain.shared.enums import TipoResultadoProyecto
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class ExcelResultPreviewDTO:
     rap_id: str
     rap_numero: str
     resultado_aprendizaje: str
-    tipo_resultado: str
+    tipo_resultado: TipoResultadoProyecto | str
     orden_resultado: int | None
     pagina_origen: str | None
     observaciones: str | None

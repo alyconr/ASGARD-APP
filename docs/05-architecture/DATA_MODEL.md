@@ -768,3 +768,11 @@ Configuración 1:1 asociada a `ProyectoFormativo`:
 - timestamps.
 
 `ProgramaFormacion.modalidad_formacion` conserva la modalidad como atributo intrínseco del programa. El Excel individual usa la ruta `planeaciones-pedagogicas/{programa}/{proyecto}/resultados/{codigo_resultado}/GPFI-F-134V05-planeacion.xlsx`; el consolidado usa `formato-oficial/GPFI-F-134V05-planeacion-pedagogica.xlsx`.
+
+## TipoResultadoProyecto
+
+Dominio cerrado de clasificación para asignaciones curriculares del proyecto formativo:
+
+- `ESPECIFICO`: Resultado de aprendizaje técnico/específico.
+- `TRANSVERSAL`: Resultado de aprendizaje transversal.
+- El valor es validado y normalizado en mayúsculas y sin espacios al procesar el Excel canónico. Cualquier otro valor genera rechazo inmediato y no se materializa en la base de datos.

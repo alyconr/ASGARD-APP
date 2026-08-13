@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.domain.shared.enums import TipoResultadoProyecto
+
 
 # Context retrieval DTOs (project curricular structure tree)
 class ContextoConocimientoDTO(BaseModel):
@@ -34,7 +36,7 @@ class ContextoResultadoDTO(BaseModel):
     id: uuid.UUID
     codigo_resultado: str | None = None
     descripcion: str
-    tipo_resultado: str
+    tipo_resultado: TipoResultadoProyecto | str
     orden_resultado: int | None = None
 
     model_config = {"from_attributes": True}
@@ -113,7 +115,7 @@ class PlaneacionResultadoResumenDTO(BaseModel):
     id: uuid.UUID
     codigo_resultado: str | None = None
     descripcion: str
-    tipo_resultado: str
+    tipo_resultado: TipoResultadoProyecto | str
 
     model_config = {"from_attributes": True}
 
@@ -124,7 +126,7 @@ class PlaneacionCompetenciaResumenDTO(BaseModel):
     competencia_id: uuid.UUID
     codigo_competencia: str
     nombre_competencia: str
-    tipo_resultado: str
+    tipo_resultado: TipoResultadoProyecto | str
     resultados: list[PlaneacionResultadoResumenDTO] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

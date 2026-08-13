@@ -7,16 +7,20 @@ import uuid
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
+import openpyxl
 import pytest
 from openpyxl import Workbook
 
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.services.proyecto_excel import (
     InvalidProjectExcelUploadError,
+    PlaneacionRow,
     ProjectExcelDraftMissingError,
     ProjectExcelMissingPreviewError,
     ProjectExcelValidationError,
     ProyectoExcelImportService,
+    count_resultados_especificos,
+    parse_canonical_workbook,
 )
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.curriculum import (
@@ -1184,3 +1188,115 @@ class TestMaterializacionCurricular:
         assert result.pendientes_resumen.asignaciones_materializadas == 3
         assert result.pendientes_resumen.total == 0
         assert len(repo.created_asignaciones) == 3
+
+
+class TestTipoResultadoValidation:
+    def _create_workbook_with_tipo_resultado(self, tipo_value: str) -> bytes:
+        wb = openpyxl.Workbook()
+        ws_proj = wb.active
+        ws_proj.title = "Proyecto"
+        ws_proj.append(
+            [
+                "proyecto_id",
+                "nombre_proyecto",
+                "codigo_proyecto_sofia",
+                "codigo_programa",
+                "nombre_programa",
+                "fuente_archivo",
+                "observaciones",
+            ]
+        )
+        ws_proj.append(["PROJ-01", "Proyecto Test", "SOFIA-01", "228118", "Programa", "MATRIZ", ""])
+
+        ws_plan = wb.create_sheet("Planeacion_Proyecto")
+        ws_plan.append(_PLANEACION_HEADERS)
+        _append_planeacion_row(
+            ws_plan,
+            actividad_id="A1",
+            actividad="Actividad 1",
+            tipo=tipo_value,
+            codigo_comp="220501094",
+            comp_id="C1",
+            rap_id="R10",
+            rap_num="1",
+            rap_desc="Desc R10",
+            orden_resultado=1,
+        )
+
+        ws_val = wb.create_sheet("Validacion_Proyecto")
+        ws_val.append(["tipo_validacion", "descripcion", "estado", "observaciones"])
+        ws_val.append(["CURRICULAR", "Validacion", "OK", ""])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    async def test_tipo_resultado_especifico_normalized(self):
+        content = self._create_workbook_with_tipo_resultado("  especifico  ")
+        parsed = parse_canonical_workbook(content)
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].tipo_resultado == "ESPECIFICO"
+
+    async def test_tipo_resultado_transversal_normalized(self):
+        content = self._create_workbook_with_tipo_resultado("transversal")
+        parsed = parse_canonical_workbook(content)
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].tipo_resultado == "TRANSVERSAL"
+
+    async def test_tipo_resultado_invalid_value_rejected(self):
+        for invalid_val in ["TECNICO", "OTRO", "TRANSVERS", "INVALIDO"]:
+            content = self._create_workbook_with_tipo_resultado(invalid_val)
+            parsed = parse_canonical_workbook(content)
+            assert len(parsed.planeacion) == 0
+            assert len(parsed.errores) == 1
+            issue = parsed.errores[0]
+            assert issue.hoja == "Planeacion_Proyecto"
+            assert issue.campo == "tipo_resultado"
+            assert issue.fila == 2
+            assert "Valor invalido para 'tipo_resultado'" in issue.mensaje
+
+    async def test_tipo_resultado_metrics_counting(self):
+        p1 = PlaneacionRow(
+            proyecto_id="P1",
+            fase_id="F1",
+            fase_proyecto="Analisis",
+            actividad_id="A1",
+            actividad_proyecto="Act 1",
+            tipo_resultado="ESPECIFICO",
+            competencia_id="C1",
+            codigo_competencia="220501094",
+            nombre_competencia="Comp 1",
+            rap_id="RAP-1",
+            rap_numero="1",
+            resultado_aprendizaje="Resultado 1",
+            orden_fase=1,
+            orden_actividad=1,
+            orden_resultado=1,
+            pagina_origen=None,
+            observaciones=None,
+            raw={},
+        )
+        p2 = PlaneacionRow(
+            proyecto_id="P1",
+            fase_id="F1",
+            fase_proyecto="Analisis",
+            actividad_id="A1",
+            actividad_proyecto="Act 1",
+            tipo_resultado="TRANSVERSAL",
+            competencia_id="C2",
+            codigo_competencia="240201524",
+            nombre_competencia="Comp 2",
+            rap_id="RAP-2",
+            rap_numero="2",
+            resultado_aprendizaje="Resultado 2",
+            orden_fase=1,
+            orden_actividad=1,
+            orden_resultado=2,
+            pagina_origen=None,
+            observaciones=None,
+            raw={},
+        )
+        count = count_resultados_especificos([p1, p2])
+        assert count == 1

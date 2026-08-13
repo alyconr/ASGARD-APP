@@ -674,3 +674,9 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 - Una `ActividadProyecto` puede asociarse a 1..N `PlaneacionPedagogica` (1:N), permitiendo crear y gestionar múltiples actividades de aprendizaje dentro de la misma actividad de proyecto formativo.
 - Cada `PlaneacionPedagogica` integra 1..N Competencias y 1..N Resultados de Aprendizaje (RAP).
 - Las horas didácticas se asignan por `PlaneacionPedagogica` y se escriben en la primera fila del bloque correspondientes a cada planeación en la exportación oficial.
+
+## Tipado estricto de tipo_resultado
+
+- El dominio de `tipo_resultado` en el proyecto formativo queda restringido exclusivamente al enum `TipoResultadoProyecto` con valores `ESPECIFICO` y `TRANSVERSAL`.
+- Se normalizan espacios y mayúsculas durante la carga del Excel canónico. Cualquier valor no equivalente (ej. `TECNICO`, `OTRO`, `TRANSVERS`) es rechazado con error claro indicando hoja, fila y campo, impidiendo la materialización.
+- No se aplica ninguna regla de inferencia basada en códigos o nombres de competencia; la matriz Excel es la única fuente autoritativa.

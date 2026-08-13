@@ -22,7 +22,11 @@ from src.application.dto.dashboard import (
     ProyectoDashboardMetricsDTO,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque, TipoConocimiento
+from src.domain.shared.enums import (
+    EstadoBloque,
+    TipoConocimiento,
+    TipoResultadoProyecto,
+)
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     ProgramaFormacion,
@@ -360,13 +364,13 @@ def _build_metrics(
         item.resultado_id
         for item in planeaciones
         if item.resultado_id is not None
-        and (item.tipo_resultado or "").strip().upper() == "ESPECIFICO"
+        and item.tipo_resultado == TipoResultadoProyecto.ESPECIFICO.value
     }
     resultados_transversales = {
         item.resultado_id
         for item in planeaciones
         if item.resultado_id is not None
-        and (item.tipo_resultado or "").strip().upper() == "TRANSVERSAL"
+        and item.tipo_resultado == TipoResultadoProyecto.TRANSVERSAL.value
     }
     fases = proyecto.fases if proyecto is not None else []
     actividades = [actividad for fase in fases for actividad in fase.actividades]

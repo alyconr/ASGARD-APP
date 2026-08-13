@@ -27,7 +27,7 @@ from src.application.dto.proyecto_excel import (
     ProyectoExcelPreviewDTO,
 )
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import EstadoBloque
+from src.domain.shared.enums import EstadoBloque, TipoResultadoProyecto
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     ProgramaFormacion,
@@ -876,9 +876,29 @@ def _parse_planeacion(
             row, "Planeacion_Proyecto", "actividad_proyecto", errores
         )
 
-        tipo_res = _required_string(
+        tipo_res_raw = _required_string(
             row, "Planeacion_Proyecto", "tipo_resultado", errores
         )
+        tipo_res: str | None = None
+        if tipo_res_raw is not None:
+            normalized_tipo = tipo_res_raw.strip().upper()
+            if normalized_tipo in (
+                TipoResultadoProyecto.ESPECIFICO.value,
+                TipoResultadoProyecto.TRANSVERSAL.value,
+            ):
+                tipo_res = normalized_tipo
+            else:
+                errores.append(
+                    ExcelValidationIssueDTO(
+                        hoja="Planeacion_Proyecto",
+                        fila=_row_index(row),
+                        campo="tipo_resultado",
+                        mensaje=(
+                            f"Valor invalido para 'tipo_resultado': '{tipo_res_raw}'. "
+                            "Valores permitidos: 'ESPECIFICO', 'TRANSVERSAL'"
+                        ),
+                    )
+                )
         comp_id = _required_string(
             row, "Planeacion_Proyecto", "competencia_id", errores
         )
@@ -1026,7 +1046,7 @@ def count_resultados_especificos(planeacion: list[PlaneacionRow]) -> int:
     unique_raps = set()
     for r in planeacion:
         if r.rap_id and r.tipo_resultado:
-            if r.tipo_resultado.strip().upper() == "ESPECIFICO":
+            if r.tipo_resultado == TipoResultadoProyecto.ESPECIFICO.value:
                 unique_raps.add(r.rap_id)
     return len(unique_raps)
 
