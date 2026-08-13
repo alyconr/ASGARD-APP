@@ -78,6 +78,7 @@ interface PlaneacionGuideInput {
   confirmed: boolean;
   officialMissing?: string[];
   hoursMatch?: boolean;
+  existingPlanningsCount?: number;
 }
 
 function item(
@@ -320,6 +321,7 @@ export function buildPlaneacionWizardGuide({
   confirmed,
   officialMissing = [],
   hoursMatch = true,
+  existingPlanningsCount = 0,
 }: PlaneacionGuideInput): WizardGuideState {
   if (confirmed || activeStep === "confirmacion") {
     return {
@@ -342,6 +344,11 @@ export function buildPlaneacionWizardGuide({
   }
 
   if (activeStep === "dashboard") {
+    const planningsText =
+      existingPlanningsCount && existingPlanningsCount > 0
+        ? `Esta actividad de proyecto ya tiene ${existingPlanningsCount} actividad(es) de aprendizaje. Puedes continuar una existente o crear una nueva.`
+        : "Selecciona la fase y la actividad del proyecto para integrar sus competencias y RAP en una nueva actividad de aprendizaje.";
+
     return {
       wizard: "planeacion",
       severity:
@@ -355,9 +362,7 @@ export function buildPlaneacionWizardGuide({
         officialMissing.length > 0
           ? "Prepara el formato oficial"
           : "Selecciona fase y actividad",
-      message:
-        officialMissing[0] ??
-        "Selecciona la fase y la actividad del proyecto para integrar sus competencias y RAP.",
+      message: officialMissing[0] ?? planningsText,
       checklist: [
         item("fases", "Fases del proyecto disponibles", fasesCount > 0, true),
         item("fase", "Fase seleccionada", faseSelected),

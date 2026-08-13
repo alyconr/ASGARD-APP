@@ -112,13 +112,6 @@ class PlaneacionPedagogica(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "planeaciones_pedagogicas"
     __table_args__ = (
-        Index(
-            "uq_planeacion_proyecto_actividad",
-            "proyecto_id",
-            "actividad_id",
-            unique=True,
-            postgresql_where=text("actividad_id IS NOT NULL"),
-        ),
         Index("ix_planeaciones_pedagogicas_proyecto_id", "proyecto_id"),
         Index("ix_planeaciones_pedagogicas_actividad_id", "actividad_id"),
     )

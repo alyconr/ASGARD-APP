@@ -11,7 +11,6 @@ import pytest
 
 from src.application.dto.planeacion import PlaneacionSaveDTO
 from src.application.services.planeacion_formato_excel import (
-    EXCEL_CONTENT_TYPE,
     FormatoExcelResultado,
     PlaneacionFormatoExcelService,
 )
@@ -458,23 +457,9 @@ class TestGuardarBorrador:
         fx = _build_base_context()
         session = _build_context_session(fx)
         repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
-        repository.get_by_proyecto_and_actividad.return_value = None
-
-        created = PlaneacionPedagogica(
-            proyecto_id=fx["proyecto"].id,
-            fase_id=fx["fase"].id,
-            actividad_id=fx["actividad"].id,
-        )
-        created.id = uuid.uuid4()
-        created.estado = EstadoBloque.BORRADOR
-        created.datos_complementarios = {
-            "actividades_aprendizaje": "Analizar y estructurar"
-        }
-        created.resultados = [fx["rap_t1"], fx["rap_t2"], fx["rap_x1"]]
-        created.conocimientos = [fx["saber_t"], fx["saber_x"]]
-        created.criterios = [fx["criterio_t"], fx["criterio_x"]]
-        created.version = 1
-        repository.get_by_id.return_value = created
+        repository.list_by_proyecto_and_actividad.return_value = []
+        repository.save.side_effect = lambda entity: entity
+        repository.get_by_id.side_effect = lambda pid: repository.save.call_args[0][0]
 
         service = _build_service(session, repository)
         response = await service.guardar_borrador(self._dto(fx))
@@ -688,3 +673,158 @@ class TestLegacyCompatibility:
         assert len(detail.competencias) == 1
         assert detail.competencias[0].competencia_id == fx["comp_tecnica"].id
         assert len(detail.competencias[0].resultados) == 1
+
+
+class TestMultiplesPlaneacionesPorActividad:
+    async def test_crear_multiples_planeaciones_misma_actividad(self):
+        """Creating 3 learning activities yields 3 distinct IDs."""
+        fx = _build_base_context()
+        session = _build_context_session(fx)
+        repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+
+        saved_map: dict[uuid.UUID, PlaneacionPedagogica] = {}
+
+        def _mock_save(entity: PlaneacionPedagogica):
+            saved_map[entity.id] = entity
+            return entity
+
+        repository.save.side_effect = _mock_save
+        repository.get_by_id.side_effect = lambda pid: saved_map.get(pid)
+
+        service = _build_service(session, repository)
+
+        dto1 = PlaneacionSaveDTO(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            resultados_ids=[fx["rap_t1"].id],
+            conocimientos_ids=[fx["saber_t"].id],
+            criterios_ids=[fx["criterio_t"].id],
+            datos_complementarios={"actividades_aprendizaje": "Actividad 1"},
+        )
+        res1 = await service.guardar_borrador(dto1)
+
+        dto2 = PlaneacionSaveDTO(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            resultados_ids=[fx["rap_t2"].id],
+            conocimientos_ids=[fx["saber_t"].id],
+            criterios_ids=[fx["criterio_t"].id],
+            datos_complementarios={"actividades_aprendizaje": "Actividad 2"},
+        )
+        res2 = await service.guardar_borrador(dto2)
+
+        dto3 = PlaneacionSaveDTO(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            resultados_ids=[fx["rap_x1"].id],
+            conocimientos_ids=[fx["saber_x"].id],
+            criterios_ids=[fx["criterio_x"].id],
+            datos_complementarios={"actividades_aprendizaje": "Actividad 3"},
+        )
+        res3 = await service.guardar_borrador(dto3)
+
+        assert res1.id != res2.id
+        assert res2.id != res3.id
+        assert res1.id != res3.id
+        assert len({res1.id, res2.id, res3.id}) == 3
+
+    async def test_editar_solo_una_planeacion(self):
+        """Passing planeacion_id updates strictly that planning."""
+        fx = _build_base_context()
+        session = _build_context_session(fx)
+        repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+
+        target = PlaneacionPedagogica(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+        )
+        target.id = uuid.uuid4()
+        target.estado = EstadoBloque.BORRADOR
+        target.datos_complementarios = {"actividades_aprendizaje": "Original"}
+        target.resultados = [fx["rap_t1"]]
+        target.conocimientos = [fx["saber_t"]]
+        target.criterios = [fx["criterio_t"]]
+        target.version = 1
+
+        repository.get_by_id.return_value = target
+
+        service = _build_service(session, repository)
+        dto = PlaneacionSaveDTO(
+            planeacion_id=target.id,
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            resultados_ids=[fx["rap_t1"].id, fx["rap_t2"].id],
+            conocimientos_ids=[fx["saber_t"].id],
+            criterios_ids=[fx["criterio_t"].id],
+            datos_complementarios={"actividades_aprendizaje": "Editado"},
+        )
+        res = await service.guardar_borrador(dto)
+        assert res.id == target.id
+        assert target.datos_complementarios["actividades_aprendizaje"] == "Editado"
+        assert len(target.resultados) == 2
+
+    async def test_exportar_varias_planeaciones_misma_actividad_escribe_horas_por_bloque(
+        self,
+    ):
+        """Consolidated Excel output writes hours once per block."""
+        fx = _build_base_context()
+        session = _build_context_session(fx)
+
+        p1 = PlaneacionPedagogica(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            datos_complementarios={
+                "actividades_aprendizaje": "Actividad 1",
+                "duracion_actividad_horas": 20,
+                "horas_trabajo_directo": 12,
+                "horas_trabajo_independiente": 8,
+            },
+        )
+        p1.id = uuid.uuid4()
+        p1.estado = EstadoBloque.COMPLETO
+        p1.proyecto = fx["proyecto"]
+        p1.fase = fx["fase"]
+        p1.actividad = fx["actividad"]
+        p1.resultados = [fx["rap_t1"], fx["rap_t2"]]
+        p1.conocimientos = [fx["saber_t"]]
+        p1.criterios = [fx["criterio_t"]]
+
+        p2 = PlaneacionPedagogica(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            datos_complementarios={
+                "actividades_aprendizaje": "Actividad 2",
+                "duracion_actividad_horas": 10,
+                "horas_trabajo_directo": 6,
+                "horas_trabajo_independiente": 4,
+            },
+        )
+        p2.id = uuid.uuid4()
+        p2.estado = EstadoBloque.COMPLETO
+        p2.proyecto = fx["proyecto"]
+        p2.fase = fx["fase"]
+        p2.actividad = fx["actividad"]
+        p2.resultados = [fx["rap_x1"]]
+        p2.conocimientos = [fx["saber_x"]]
+        p2.criterios = [fx["criterio_x"]]
+
+        repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+        service = _build_service(session, repository)
+
+        rows = await service._build_rows([p1, p2])
+        assert len(rows) == 3
+        p1_rows = [r for r in rows if r.actividades_aprendizaje == "Actividad 1"]
+        p2_rows = [r for r in rows if r.actividades_aprendizaje == "Actividad 2"]
+        assert len(p1_rows) == 2
+        assert len(p2_rows) == 1
+        assert p1_rows[0].horas_trabajo_directo == 12.0
+        assert p1_rows[1].horas_trabajo_directo is None
+        assert p2_rows[0].horas_trabajo_directo == 6.0
+

@@ -51,20 +51,21 @@ class PlaneacionPedagogicaRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_by_proyecto_and_actividad(
+    async def list_by_proyecto_and_actividad(
         self,
         proyecto_id: uuid.UUID,
         actividad_id: uuid.UUID,
-    ) -> PlaneacionPedagogica | None:
-        """Retrieve the integrated planning of one project activity."""
+    ) -> list[PlaneacionPedagogica]:
+        """List all integrated plannings for a single project activity."""
         statement = (
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
             .where(PlaneacionPedagogica.actividad_id == actividad_id)
             .options(*_LIST_OPTIONS)
+            .order_by(PlaneacionPedagogica.fecha_actualizacion.desc())
         )
         result = await self._session.execute(statement)
-        return result.scalar_one_or_none()
+        return list(result.scalars().unique().all())
 
     async def list_by_proyecto(
         self,

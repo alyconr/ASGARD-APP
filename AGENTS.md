@@ -126,7 +126,18 @@ A partir del refactor del módulo de planeación pedagógica:
 - una misma actividad de aprendizaje puede integrar 1..N competencias y 1..N RAPs pertenecientes a dichas competencias, incluyendo combinaciones de resultados técnicos/específicos y transversales;
 - la información estructurada del proyecto materializada relacionalmente en `AsignacionCurricularProyecto` desde la matriz Excel `Planeacion_Proyecto` es la fuente de verdad autoritativa para responder qué competencias y RAPs pertenecen a cada actividad;
 - en el exportador del workbook oficial `GPFI-F-134 V05`, el bloque de la planeación integrada se expande a N filas (una fila por cada RAP seleccionado), agrupando por competencia; las horas didácticas (directas e independientes) pertenecen a la actividad de aprendizaje y se escriben exclusivamente en la primera fila de cada bloque para evitar duplicidad o suma errónea de horas;
-- la identidad de la planeación en PostgreSQL es `(proyecto_id, actividad_id)`; `resultado_id` no constituye la fuente de verdad ni la identidad del agregado.
+- la identidad de la planeación en PostgreSQL es su propia clave primaria `id` (UUID); la relación entre `ActividadProyecto` y `PlaneacionPedagogica` es estrictamente 1:N (`ActividadProyecto 1:N PlaneacionPedagogica`).
+
+## Decision funcional PLANEACION-ACTIVIDAD-PROYECTO-UNO-A-MUCHOS
+A partir del refactor de cardinalidad de la Planeación Pedagógica:
+
+- una **Actividad de Proyecto** puede contener **1..N Actividades de Aprendizaje / Planeaciones Pedagógicas** independientes (`ActividadProyecto 1:N PlaneacionPedagogica`);
+- se remueve la restricción de unicidad de base de datos `uq_planeacion_proyecto_actividad` mediante migración Alembic `e8f901a2b3c4`;
+- cada planeación pedagógica conserva la capacidad de integrar **1..N Competencias → 1..N RAPs**;
+- el backend opera bajo `planeacion_id == null` para CREAR una nueva planeación pedagógica dentro de la actividad de proyecto, y `planeacion_id != null` para ACTUALIZAR una planeación existente;
+- la lista de competencias filtradas en el frontend (`filteredCompetencias`) responde estrictamente a la actividad de proyecto seleccionada (sin fallback global a todas las competencias del proyecto);
+- las carpetas y llaves físicas en MinIO para los formatos `.xlsx` individuales incorporan un sufijo determinístico derivado del UUID (`id`) de la entidad para evitar colisiones entre planeaciones de la misma actividad;
+- en la exportación consolidada del workbook `GPFI-F-134 V05`, todas las planeaciones en estado `COMPLETO` pertenecientes a la misma actividad de proyecto se generan como bloques secuenciales continuos sin duplicar horas entre RAPs ni entre actividades de aprendizaje.
 
 ## Decision funcional FORMATO-OFICIAL-PLANEACION-GPFI-F-134-V05
 

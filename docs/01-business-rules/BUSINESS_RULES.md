@@ -668,3 +668,9 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 - La duración total debe coincidir con horas de trabajo directo más independiente; cualquier diferencia bloquea la generación.
 - Modalidad, fecha, clasificación, equipo curricular, regional y centro son obligatorios.
 - Saberes SABER y PROCESO se separan, incorporan temáticas adicionales y eliminan duplicados exactos conservando orden estable.
+
+## Múltiples actividades de aprendizaje por actividad de proyecto
+
+- Una `ActividadProyecto` puede asociarse a 1..N `PlaneacionPedagogica` (1:N), permitiendo crear y gestionar múltiples actividades de aprendizaje dentro de la misma actividad de proyecto formativo.
+- Cada `PlaneacionPedagogica` integra 1..N Competencias y 1..N Resultados de Aprendizaje (RAP).
+- Las horas didácticas se asignan por `PlaneacionPedagogica` y se escriben en la primera fila del bloque correspondientes a cada planeación en la exportación oficial.

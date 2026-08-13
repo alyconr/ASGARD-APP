@@ -408,14 +408,11 @@ export function PlaneacionWizardShell({
 
   // Filter competencies based on search query
   const filteredCompetencias = useMemo(() => {
+    if (!selectedFase || !selectedActividad) return [];
+    const list = actividadCompetencias;
     const query = searchQuery.trim().toLowerCase();
-    const list = actividadCompetencias.length > 0
-      ? actividadCompetencias
-      : contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias));
-    const uniqueList = Array.from(new Map(list.map((c) => [c.id, c])).values());
-
-    if (!query) return uniqueList;
-    return uniqueList.filter((comp) => {
+    if (!query) return list;
+    return list.filter((comp) => {
       const matchCodigo = comp.codigo_competencia.toLowerCase().includes(query);
       const matchNombre = comp.nombre_competencia.toLowerCase().includes(query);
       const matchResultado = comp.resultados.some((res) =>
@@ -423,7 +420,7 @@ export function PlaneacionWizardShell({
       );
       return matchCodigo || matchNombre || matchResultado;
     });
-  }, [actividadCompetencias, contexto.fases, searchQuery]);
+  }, [selectedFase, selectedActividad, actividadCompetencias, searchQuery]);
 
   // Selected competencies & results
   const selectedCompetencias = useMemo(() => {
@@ -445,18 +442,18 @@ export function PlaneacionWizardShell({
   const planningsByCompetencia = useMemo(() => {
     const map = new Map<string, PlaneacionListResponse[]>();
     planningsList.forEach((planning) => {
-      contexto.fases.flatMap((f) => f.actividades).forEach((act) => {
-        if (act.id === planning.actividad_id) {
-          act.competencias.forEach((comp) => {
-            const current = map.get(comp.id) ?? [];
+      if (planning.competencias && planning.competencias.length > 0) {
+        planning.competencias.forEach((comp) => {
+          const current = map.get(comp.competencia_id) ?? [];
+          if (!current.some((p) => p.id === planning.id)) {
             current.push(planning);
-            map.set(comp.id, current);
-          });
-        }
-      });
+            map.set(comp.competencia_id, current);
+          }
+        });
+      }
     });
     return map;
-  }, [planningsList, contexto.fases]);
+  }, [planningsList]);
 
   // Single object references for guides and previews
   const selectedCompetencia = selectedCompetencias[0] ?? null;
@@ -545,7 +542,7 @@ export function PlaneacionWizardShell({
     }
   };
 
-  // Clean form state
+  // Clean form state completely
   const resetForm = () => {
     setFaseId("");
     setActividadId("");
@@ -573,6 +570,35 @@ export function PlaneacionWizardShell({
     setActivePlanningId(null);
     setConfirmedPlanning(null);
     setOfficialStatus(null);
+  };
+
+  // Start creating a new learning activity under the currently selected activity
+  const handleCreateNewLearningActivity = () => {
+    setActivePlanningId(null);
+    setSelectedCompetenciaIds([]);
+    setSelectedResultadoIds([]);
+    setProyectoAsignaciones([]);
+    setSelectedConocimientos([]);
+    setSelectedCriterios([]);
+    setActividadesAprendizaje("");
+    setEstrategias("");
+    setAmbientesTipificados("");
+    setAmbiente("");
+    setMaterialesFormacion("");
+    setDescripcionEvidencia("");
+    setObservaciones("");
+    setDuracionHoras(0);
+    setHorasTrabajoDirecto(0);
+    setHorasTrabajoIndependiente(0);
+    setInstructores("");
+    setTematicasSaber([]);
+    setTematicasProceso([]);
+    setNuevaTematicaSaber("");
+    setNuevaTematicaProceso("");
+    setReadComplementaryFields(new Set());
+    setConfirmedPlanning(null);
+    setOfficialStatus(null);
+    setActiveStep("curricular");
   };
 
   const loadPlanningDetails = async (
@@ -627,7 +653,7 @@ export function PlaneacionWizardShell({
   };
 
   const handleOpenResultadoModal = (competenciaId: string) => {
-    resetForm();
+    handleCreateNewLearningActivity();
     setSelectedCompetenciaIds([competenciaId]);
     setResultModalCompetenciaId(competenciaId);
   };
@@ -648,12 +674,6 @@ export function PlaneacionWizardShell({
     setSelectedResultadoIds([resultadoId]);
     setResultModalCompetenciaId(null);
 
-    const existing = planningsList.find((p) => p.actividad_id === parentActividad?.id);
-    if (existing) {
-      await loadPlanningDetails(existing);
-      return;
-    }
-
     setActiveStep("curricular");
   };
 
@@ -666,6 +686,7 @@ export function PlaneacionWizardShell({
     
     setIsSaving(true);
     const payload: PlaneacionSaveRequest = {
+      planeacion_id: activePlanningId ?? undefined,
       proyecto_id: contexto.proyecto_id,
       fase_id: faseId,
       actividad_id: actividadId,
@@ -1007,6 +1028,7 @@ export function PlaneacionWizardShell({
         : (officialStatus?.faltantes.map((gap) => gap.mensaje) ?? []),
     hoursMatch:
       duracionHoras === horasTrabajoDirecto + horasTrabajoIndependiente,
+    existingPlanningsCount: planningsList.length,
   });
   const activeFieldInstruction =
     instructionTarget?.kind === "field"
@@ -1051,14 +1073,11 @@ export function PlaneacionWizardShell({
             </div>
             <button
               type="button"
-              onClick={() => {
-                resetForm();
-                setActiveStep("curricular");
-              }}
+              onClick={handleCreateNewLearningActivity}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition shadow-sm"
             >
               <Plus className="h-4 w-4" />
-              Crear nueva planeación
+              + Nueva actividad de aprendizaje
             </button>
           </div>
 

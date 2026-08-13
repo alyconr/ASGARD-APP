@@ -55,6 +55,7 @@ export interface PlaneacionContextoResponse {
 }
 
 export interface PlaneacionSaveRequest {
+  planeacion_id?: string | null;
   proyecto_id: string;
   fase_id: string;
   actividad_id: string;
@@ -77,6 +78,12 @@ export interface PlaneacionCompetenciaResumen {
   nombre_competencia: string;
   tipo_resultado: string;
   resultados: PlaneacionResultadoResumen[];
+}
+
+export interface PlaneacionListCompetencia {
+  competencia_id: string;
+  codigo_competencia: string;
+  resultados_count: number;
 }
 
 export interface PlaneacionResponse {
@@ -107,6 +114,7 @@ export interface PlaneacionListResponse {
   descripcion_actividad?: string | null;
   actividades_aprendizaje?: string | null;
   estado: string;
+  competencias?: PlaneacionListCompetencia[];
   competencias_count: number;
   resultados_count: number;
   resultados_especificos: number;

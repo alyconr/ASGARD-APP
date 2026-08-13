@@ -560,31 +560,6 @@ Representa la planeación pedagógica de una competencia para un proyecto format
 - 1:N con Competencia
 - 1:N con ProyectoFormativo
 
-## Competencia
-- 1:N con ResultadoAprendizaje
-- 1:N con Conocimiento
-- 1:N con CriterioEvaluacion
-
-## ResultadoAprendizaje
-- 1:N opcional con Conocimiento
-- 1:N opcional con CriterioEvaluacion
-
-## ProyectoFormativo
-- 1:N con FaseProyecto
-
-## FaseProyecto
-- 1:N con ActividadProyecto
-
----
-
-# 7. Reglas de integridad
-
-## RI-01
-No puede existir una competencia sin programa.
-
-## RI-02
-No puede existir un resultado sin competencia.
-
 ## RI-03
 No puede existir un conocimiento sin competencia.
 

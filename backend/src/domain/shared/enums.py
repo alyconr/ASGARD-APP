@@ -73,3 +73,11 @@ class MotivoFalloExtraccion(str, Enum):
     CAMPO_NO_ENCONTRADO = "CAMPO_NO_ENCONTRADO"
     CONTENIDO_AMBIGUO = "CONTENIDO_AMBIGUO"
     ARCHIVO_PROTEGIDO = "ARCHIVO_PROTEGIDO"
+
+
+class TipoResultadoProyecto(str, Enum):
+    """Authoritative Learning Result classification for project activities."""
+
+    ESPECIFICO = "ESPECIFICO"
+    TRANSVERSAL = "TRANSVERSAL"
+

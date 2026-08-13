@@ -243,7 +243,7 @@ describe("PlaneacionWizardShell", () => {
   it("navigates to curricular wizard step when starting a new planning", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Nueva actividad de aprendizaje/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
@@ -303,7 +303,7 @@ describe("PlaneacionWizardShell", () => {
 
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Nueva actividad de aprendizaje/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
@@ -356,7 +356,7 @@ describe("PlaneacionWizardShell", () => {
   it("toggles all checkboxes when using the Select All button", async () => {
     render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Crear nueva planeación/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Nueva actividad de aprendizaje/i }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();

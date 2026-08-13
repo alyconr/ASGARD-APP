@@ -96,6 +96,7 @@ class PlaneacionContextoDTO(BaseModel):
 class PlaneacionSaveDTO(BaseModel):
     """Save payload for an integrated pedagogical planning draft."""
 
+    planeacion_id: uuid.UUID | None = None
     proyecto_id: uuid.UUID
     fase_id: uuid.UUID
     actividad_id: uuid.UUID
@@ -125,6 +126,16 @@ class PlaneacionCompetenciaResumenDTO(BaseModel):
     nombre_competencia: str
     tipo_resultado: str
     resultados: list[PlaneacionResultadoResumenDTO] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class PlaneacionListCompetenciaDTO(BaseModel):
+    """Competence item summary inside a planning list response."""
+
+    competencia_id: uuid.UUID
+    codigo_competencia: str
+    resultados_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -163,6 +174,7 @@ class PlaneacionListDTO(BaseModel):
     descripcion_actividad: str | None = None
     actividades_aprendizaje: str | None = None
     estado: str
+    competencias: list[PlaneacionListCompetenciaDTO] = Field(default_factory=list)
     competencias_count: int = 0
     resultados_count: int = 0
     resultados_especificos: int = 0

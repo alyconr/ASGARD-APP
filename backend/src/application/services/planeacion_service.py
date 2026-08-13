@@ -30,6 +30,7 @@ from src.application.dto.planeacion import (
     PlaneacionContextoDTO,
     PlaneacionDocumentoConfigDTO,
     PlaneacionDocumentoConfigUpdateDTO,
+    PlaneacionListCompetenciaDTO,
     PlaneacionListDTO,
     PlaneacionResponseDTO,
     PlaneacionResultadoResumenDTO,
@@ -281,14 +282,30 @@ class PlaneacionPedagogicaService:
         dtos: list[PlaneacionListDTO] = []
         for entity in entities:
             tipos: list[str] = []
-            competencias: set[uuid.UUID] = set()
+            comp_map: dict[uuid.UUID, tuple[str, int]] = {}
             for resultado in entity.resultados:
-                competencias.add(resultado.competencia_id)
+                c_id = resultado.competencia_id
+                c_code = (
+                    resultado.competencia.codigo_competencia
+                    if resultado.competencia
+                    else ""
+                )
+                existing_comp = comp_map.get(c_id, (c_code, 0))
+                comp_map[c_id] = (c_code, existing_comp[1] + 1)
+
                 tipo = tipo_by_pair.get((entity.actividad_id, resultado.id))
                 if tipo:
                     tipos.append(tipo.strip().upper())
             datos = entity.datos_complementarios
             actividades_aprendizaje = datos.get("actividades_aprendizaje")
+            competencias_list = [
+                PlaneacionListCompetenciaDTO(
+                    competencia_id=c_id,
+                    codigo_competencia=c_code,
+                    resultados_count=count,
+                )
+                for c_id, (c_code, count) in comp_map.items()
+            ]
             dtos.append(
                 PlaneacionListDTO(
                     id=entity.id,
@@ -305,7 +322,8 @@ class PlaneacionPedagogicaService:
                         else None
                     ),
                     estado=entity.estado.value,
-                    competencias_count=len(competencias),
+                    competencias=competencias_list,
+                    competencias_count=len(comp_map),
                     resultados_count=len(entity.resultados),
                     resultados_especificos=sum(
                         1 for tipo in tipos if tipo == "ESPECIFICO"
@@ -427,16 +445,24 @@ class PlaneacionPedagogicaService:
                     "competencias involucradas en la planeacion"
                 )
 
-        entity = await self._repository.get_by_proyecto_and_actividad(
-            dto.proyecto_id,
-            dto.actividad_id,
-        )
-        if entity is None:
+        if dto.planeacion_id is not None:
+            entity = await self._repository.get_by_id(dto.planeacion_id)
+            if entity is None:
+                raise ValueError(
+                    f"No existe la planeación pedagógica con id {dto.planeacion_id}"
+                )
+            if entity.proyecto_id != dto.proyecto_id:
+                raise ValueError(
+                    "La planeación no pertenece al proyecto formativo indicado"
+                )
+        else:
             entity = PlaneacionPedagogica(
+                id=uuid.uuid4(),
                 proyecto_id=dto.proyecto_id,
                 fase_id=dto.fase_id,
                 actividad_id=dto.actividad_id,
             )
+
         entity.fase_id = dto.fase_id
         entity.actividad_id = dto.actividad_id
         entity.estado = EstadoBloque.BORRADOR
@@ -1118,7 +1144,7 @@ class PlaneacionPedagogicaService:
         )
 
         sortable: list[
-            tuple[tuple[int, int, str, int], FormatoPlaneacionRow]
+            tuple[tuple[int, int, str, str, int], FormatoPlaneacionRow]
         ] = []
         for entity in entities:
             data = entity.datos_complementarios
@@ -1235,7 +1261,8 @@ class PlaneacionPedagogicaService:
                             (
                                 phase_orden,
                                 activity_orden,
-                                str(entity.actividad_id or entity.id),
+                                str(entity.actividad_id or ""),
+                                str(entity.id),
                                 local_index,
                             ),
                             row,
@@ -1467,7 +1494,7 @@ class PlaneacionPedagogicaService:
             content_type=entity.content_type,
             checksum_sha256=entity.checksum_sha256,
             fecha_generacion=entity.fecha_generacion,
-            version=entity.version,
+            version=entity.version or 1,
         )
 
     @staticmethod

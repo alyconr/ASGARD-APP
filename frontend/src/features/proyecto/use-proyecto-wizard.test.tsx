@@ -41,7 +41,7 @@ function buildDraftResponse(
   };
 }
 
-function buildProjectPayload(referenceId = projectReferenceId): ProyectoWizardPayload {
+function buildProjectPayload(referenceId = projectReferenceId): DraftPayloadProyecto {
   return {
     meta: {
       referenciaId: referenceId,
@@ -207,6 +207,7 @@ describe("useProyectoWizard", () => {
     mockGetDraft.mockImplementation(async () => {
       const payload = buildProjectPayload();
       payload.documental.fuente_estructurada = {
+        documento: null,
         preview: {
           valid: true,
           proyecto: {
@@ -218,9 +219,8 @@ describe("useProyectoWizard", () => {
         confirmacion: {
           estado: "IMPORTADO",
           confirmed_at: "2026-05-16T10:00:00.000Z",
-          proyecto_id: "some-id",
         },
-      } as unknown as DraftPayloadProyecto;
+      } as unknown as NonNullable<DraftPayloadProyecto["documental"]["fuente_estructurada"]>;
       payload.documental.proyecto_pdf = {
         documento: {
           original_filename: "proyecto.pdf",
