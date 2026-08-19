@@ -1245,6 +1245,13 @@ class TestTipoResultadoValidation:
         assert len(parsed.planeacion) == 1
         assert parsed.planeacion[0].tipo_resultado == "TRANSVERSAL"
 
+    async def test_tipo_resultado_basico_normalized(self):
+        content = self._create_workbook_with_tipo_resultado("  basico  ")
+        parsed = parse_canonical_workbook(content)
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].tipo_resultado == "BASICO"
+
     async def test_tipo_resultado_invalid_value_rejected(self):
         for invalid_val in ["TECNICO", "OTRO", "TRANSVERS", "INVALIDO"]:
             content = self._create_workbook_with_tipo_resultado(invalid_val)

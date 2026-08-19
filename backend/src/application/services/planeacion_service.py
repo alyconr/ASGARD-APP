@@ -289,9 +289,10 @@ class PlaneacionPedagogicaService:
             comp_map: dict[uuid.UUID, tuple[str, int]] = {}
             for resultado in entity.resultados:
                 c_id = resultado.competencia_id
+                competencia_obj = getattr(resultado, "competencia", None)
                 c_code = (
-                    resultado.competencia.codigo_competencia
-                    if resultado.competencia
+                    competencia_obj.codigo_competencia
+                    if competencia_obj is not None
                     else ""
                 )
                 existing_comp = comp_map.get(c_id, (c_code, 0))
@@ -590,15 +591,16 @@ class PlaneacionPedagogicaService:
             for entity in complete:
                 gaps.extend(await self._collect_gaps(entity, require_complete=True))
         gaps = self._unique_gaps(gaps)
+        has_valid_consolidated = bool(complete and config and config.storage_key)
         return FormatoOficialEstadoDTO(
             listo=not gaps,
             faltantes=gaps,
             planeaciones_completas=len(complete),
             borradores_excluidos=drafts,
-            storage_key=config.storage_key if config else None,
-            file_name=config.file_name if config else None,
-            checksum_sha256=config.checksum_sha256 if config else None,
-            fecha_generacion=config.fecha_generacion if config else None,
+            storage_key=config.storage_key if (config and has_valid_consolidated) else None,
+            file_name=config.file_name if (config and has_valid_consolidated) else None,
+            checksum_sha256=config.checksum_sha256 if (config and has_valid_consolidated) else None,
+            fecha_generacion=config.fecha_generacion if (config and has_valid_consolidated) else None,
         )
 
     async def generar_formato_individual(
@@ -698,14 +700,17 @@ class PlaneacionPedagogicaService:
         proyecto_id: uuid.UUID,
     ) -> tuple[bytes, str]:
         """Read the latest consolidated project workbook from MinIO."""
+        entities = await self._repository.list_full_by_proyecto(proyecto_id)
+        complete = [e for e in entities if e.estado == EstadoBloque.COMPLETO]
         config = await self._repository.get_document_config(proyecto_id)
         if (
-            config is None
+            not complete
+            or config is None
             or not config.storage_key
             or config.content_type != EXCEL_CONTENT_TYPE
         ):
             raise FileNotFoundError(
-                "El proyecto no tiene un Excel oficial consolidado generado"
+                "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes volver a generar el formato consolidado."
             )
         content = await self._storage_service.read_excel(key=config.storage_key)
         return content, config.file_name or OFFICIAL_FILE_NAME
@@ -715,8 +720,37 @@ class PlaneacionPedagogicaService:
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             return
+
+        # Invalidate existing consolidated project workbook in MinIO and DB
+        if entity.proyecto_id:
+            config = await self._repository.get_document_config(entity.proyecto_id)
+            if config and config.storage_key:
+                try:
+                    await self._storage_service.delete_by_prefix(prefix=config.storage_key)
+                except Exception:
+                    pass
+                config.storage_key = None
+                config.file_name = None
+                config.checksum_sha256 = None
+                config.fecha_generacion = None
+                await self._repository.save_document_config(config)
+
         if entity.storage_key:
             await self._storage_service.delete_by_prefix(prefix=entity.storage_key)
+            if "/" in entity.storage_key:
+                folder_prefix = entity.storage_key.rsplit("/", 1)[0] + "/"
+                await self._storage_service.delete_by_prefix(prefix=folder_prefix)
+
+        if entity.proyecto and entity.fase and entity.actividad:
+            try:
+                calc_key = self._build_individual_storage_key(entity)
+                await self._storage_service.delete_by_prefix(prefix=calc_key)
+                if "/" in calc_key:
+                    calc_folder = calc_key.rsplit("/", 1)[0] + "/"
+                    await self._storage_service.delete_by_prefix(prefix=calc_folder)
+            except Exception:
+                pass
+
         await self._repository.delete(entity)
 
     # ------------------------------------------------------------------
@@ -1209,6 +1243,9 @@ class PlaneacionPedagogicaService:
 
             first_row_of_block = True
             local_index = 0
+            raps_data_dict = data.get("raps") if isinstance(data.get("raps"), dict) else {}
+            has_per_rap_data = bool(raps_data_dict)
+
             for competencia, resultados in grupos:
                 saberes_competencia = self._competencia_knowledge(
                     entity, competencia.id, TipoConocimiento.SABER
@@ -1220,14 +1257,111 @@ class PlaneacionPedagogicaService:
                     entity, competencia.id
                 )
                 for resultado in resultados:
+                    r_id_str = str(resultado.id)
+                    rap_data = (
+                        raps_data_dict.get(r_id_str)
+                        if isinstance(raps_data_dict.get(r_id_str), dict)
+                        else data
+                    )
+
+                    ambientes = self._stable_unique(
+                        self._text_items(rap_data.get("ambientes_tipificados"))
+                        + self._text_items(
+                            rap_data.get("ambiente")
+                            or rap_data.get("ambientes_aprendizaje")
+                        )
+                        or (
+                            self._text_items(data.get("ambientes_tipificados"))
+                            + self._text_items(
+                                data.get("ambiente")
+                                or data.get("ambientes_aprendizaje")
+                            )
+                        )
+                    )
+                    direct_val = self._number(rap_data.get("horas_trabajo_directo"))
+                    independent_val = self._number(
+                        rap_data.get("horas_trabajo_independiente")
+                    )
+
+                    if has_per_rap_data and direct_val is not None:
+                        row_direct = direct_val
+                    elif first_row_of_block:
+                        row_direct = self._number(data.get("horas_trabajo_directo"))
+                    else:
+                        row_direct = None
+
+                    if has_per_rap_data and independent_val is not None:
+                        row_independent = independent_val
+                    elif first_row_of_block:
+                        row_independent = self._number(
+                            data.get("horas_trabajo_independiente")
+                        )
+                    else:
+                        row_independent = None
+
+                    actividad_aprendizaje = str(
+                        rap_data.get("actividades_aprendizaje")
+                        or data.get("actividades_aprendizaje")
+                        or ""
+                    ).strip()
+                    descripcion_evidencia = str(
+                        rap_data.get("descripcion_evidencia_aprendizaje")
+                        or data.get("descripcion_evidencia_aprendizaje")
+                        or ""
+                    ).strip()
+                    estrategias = str(
+                        rap_data.get("estrategias_didacticas")
+                        or data.get("estrategias_didacticas")
+                        or ""
+                    ).strip()
+                    materiales = str(
+                        rap_data.get("materiales_formacion")
+                        or rap_data.get("recursos_didacticos")
+                        or data.get("materiales_formacion")
+                        or data.get("recursos_didacticos")
+                        or ""
+                    ).strip()
+                    instructores_text = str(
+                        rap_data.get("instructores")
+                        or rap_data.get("instructor_responsable")
+                        or data.get("instructores")
+                        or data.get("instructor_responsable")
+                        or ""
+                    ).strip()
+                    observaciones = str(
+                        rap_data.get("observaciones")
+                        or data.get("observaciones")
+                        or ""
+                    ).strip()
+
+                    rap_t_saber = self._string_list(rap_data.get("tematicas_saber"))
+                    rap_t_proceso = self._string_list(rap_data.get("tematicas_proceso"))
+                    t_saber_use = (
+                        rap_t_saber
+                        if rap_t_saber
+                        else (
+                            self._string_list(data.get("tematicas_saber"))
+                            if first_row_of_block
+                            else []
+                        )
+                    )
+                    t_proceso_use = (
+                        rap_t_proceso
+                        if rap_t_proceso
+                        else (
+                            self._string_list(data.get("tematicas_proceso"))
+                            if first_row_of_block
+                            else []
+                        )
+                    )
+
                     saberes = self._stable_unique(
-                        saberes_competencia
-                        + (tematicas_saber if first_row_of_block else [])
+                        saberes_competencia + t_saber_use
                     )
                     procesos = self._stable_unique(
-                        procesos_competencia
-                        + (tematicas_proceso if first_row_of_block else [])
+                        procesos_competencia + t_proceso_use
                     )
+
                     row = FormatoPlaneacionRow(
                         fase=fase_nombre,
                         actividad_proyecto=actividad_nombre,
@@ -1247,12 +1381,8 @@ class PlaneacionPedagogicaService:
                         procesos=tuple(procesos),
                         criterios=tuple(criterios_competencia),
                         actividades_aprendizaje=actividad_aprendizaje,
-                        horas_trabajo_directo=(
-                            direct if first_row_of_block else None
-                        ),
-                        horas_trabajo_independiente=(
-                            independent if first_row_of_block else None
-                        ),
+                        horas_trabajo_directo=row_direct,
+                        horas_trabajo_independiente=row_independent,
                         descripcion_evidencia=descripcion_evidencia,
                         estrategias_didacticas=estrategias,
                         ambiente=tuple(ambientes),

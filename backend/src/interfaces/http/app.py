@@ -1,12 +1,18 @@
 """FastAPI application factory."""
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.runtime import configure_asyncio_event_loop_policy
 
 configure_asyncio_event_loop_policy()
+
 
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
@@ -53,6 +59,12 @@ from src.interfaces.http.controllers.proyecto_excel import (
 from src.interfaces.http.controllers.proyecto_gate import (
     router as proyecto_gate_router,
 )
+from src.interfaces.http.controllers.proyecto_excel import (
+    router as proyecto_excel_router,
+)
+from src.interfaces.http.controllers.proyecto_gate import (
+    router as proyecto_gate_router,
+)
 from src.interfaces.http.controllers.resultados_aprendizaje import (
     router as resultados_aprendizaje_router,
 )
@@ -75,6 +87,28 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @application.exception_handler(Exception)
+    async def unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        logger.error(
+            "Unhandled exception on %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=True,
+        )
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": str(exc) or "Internal server error"},
+        )
+        origin = request.headers.get("origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
+
     application.include_router(health_router)
     application.include_router(dashboard_router)
     application.include_router(drafts_router)

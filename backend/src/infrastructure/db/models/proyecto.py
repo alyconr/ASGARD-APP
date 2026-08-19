@@ -178,7 +178,7 @@ class AsignacionCurricularProyecto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asignaciones_curriculares_proyecto"
     __table_args__ = (
         CheckConstraint(
-            "tipo_resultado IN ('ESPECIFICO', 'TRANSVERSAL')",
+            "tipo_resultado IN ('ESPECIFICO', 'TRANSVERSAL', 'BASICO')",
             name="asignacion_curricular_tipo_resultado_enum",
         ),
         Index(

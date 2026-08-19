@@ -80,4 +80,5 @@ class TipoResultadoProyecto(str, Enum):
 
     ESPECIFICO = "ESPECIFICO"
     TRANSVERSAL = "TRANSVERSAL"
+    BASICO = "BASICO"
 

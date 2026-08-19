@@ -418,10 +418,20 @@ async function downloadWorkbook(
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as {
-      detail?: string | string[];
+      detail?:
+        | string
+        | Array<string | { msg?: string; loc?: Array<string | number> }>;
     };
     if (Array.isArray(payload.detail)) {
-      return payload.detail.join(" ");
+      const messages = payload.detail.map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && item.msg) {
+          const field = item.loc ? item.loc[item.loc.length - 1] : "";
+          return field ? `${field}: ${item.msg}` : item.msg;
+        }
+        return String(item);
+      });
+      return messages.join("; ");
     }
     return payload.detail ?? "No fue posible completar la operación.";
   } catch {

@@ -23,15 +23,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema: enforce strict enum values for tipo_resultado."""
-    op.drop_constraint(
-        "asignacion_curricular_tipo_resultado_not_blank",
-        "asignaciones_curriculares_proyecto",
-        type_="check",
+    op.execute(
+        "ALTER TABLE asignaciones_curriculares_proyecto "
+        "DROP CONSTRAINT IF EXISTS ck_asignaciones_curriculares_proyecto_asignacion_curric_20e9;"
+    )
+    op.execute(
+        "ALTER TABLE asignaciones_curriculares_proyecto "
+        "DROP CONSTRAINT IF EXISTS asignacion_curricular_tipo_resultado_not_blank;"
+    )
+    op.execute(
+        "ALTER TABLE asignaciones_curriculares_proyecto "
+        "DROP CONSTRAINT IF EXISTS asignacion_curricular_tipo_resultado_enum;"
     )
     op.create_check_constraint(
         "asignacion_curricular_tipo_resultado_enum",
         "asignaciones_curriculares_proyecto",
-        "tipo_resultado IN ('ESPECIFICO', 'TRANSVERSAL')",
+        "tipo_resultado IN ('ESPECIFICO', 'TRANSVERSAL', 'BASICO')",
     )
 
 

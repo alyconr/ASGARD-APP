@@ -259,11 +259,7 @@ describe("PlaneacionWizardShell", () => {
       target: { value: "act-1" },
     });
 
-    // Step 3: check competency
-    const compCheckbox = await screen.findByRole("checkbox", { name: /220501001/i });
-    fireEvent.click(compCheckbox);
-
-    // Step 4: check RAP
+    // Step 3: check RAP
     const rapCheckbox = await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i });
     fireEvent.click(rapCheckbox);
 
@@ -316,7 +312,10 @@ describe("PlaneacionWizardShell", () => {
     fireEvent.change(await screen.findByLabelText("2. Selecciona la Actividad del Proyecto"), {
       target: { value: "act-1" },
     });
-    fireEvent.click(await screen.findByRole("checkbox", { name: /220501001/i }));
+    const compCheckboxes1 = await screen.findAllByRole("checkbox", { name: /220501001/i });
+    if (!(compCheckboxes1[0] as HTMLInputElement).checked) {
+      fireEvent.click(compCheckboxes1[0]);
+    }
     fireEvent.click(await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i }));
 
     fireEvent.change(screen.getByLabelText("Temáticas adicionales de conceptos y principios"), {
@@ -368,7 +367,10 @@ describe("PlaneacionWizardShell", () => {
     fireEvent.change(await screen.findByLabelText("2. Selecciona la Actividad del Proyecto"), {
       target: { value: "act-1" },
     });
-    fireEvent.click(await screen.findByRole("checkbox", { name: /220501001/i }));
+    const compCheckboxes2 = await screen.findAllByRole("checkbox", { name: /220501001/i });
+    if (!(compCheckboxes2[0] as HTMLInputElement).checked) {
+      fireEvent.click(compCheckboxes2[0]);
+    }
     fireEvent.click(await screen.findByRole("checkbox", { name: /Resultado 1: Identificar requisitos técnicos/i }));
 
     const selectAllBtn = await screen.findByRole("button", { name: "Seleccionar Todo" });
@@ -409,12 +411,37 @@ describe("PlaneacionWizardShell", () => {
       expect(screen.getByText("BORRADOR")).toBeInTheDocument();
     });
 
-    const deleteBtn = await screen.findByTitle("Eliminar borrador");
+    const deleteBtn = await screen.findByTitle(/Eliminar planeación/i);
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
       expect(api.deletePlaneacion).toHaveBeenCalledWith("plan-1");
     });
+  });
+
+  it("automatically infers the fase and pre-selects competencies when an activity is selected directly", async () => {
+    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Nueva actividad de aprendizaje/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("1. Estructura Curricular y de Proyecto")).toBeInTheDocument();
+    });
+
+    // Select activity directly without selecting fase first
+    fireEvent.change(screen.getByLabelText("2. Selecciona la Actividad del Proyecto"), {
+      target: { value: "act-1" },
+    });
+
+    // Verify Fase is automatically populated and displayed
+    await waitFor(() => {
+      expect(screen.getByText(/Fase activa: Fase 1: Análisis/i)).toBeInTheDocument();
+    });
+
+    // Verify competencies are automatically pre-selected and RAPs are displayed
+    const compCheckboxes = await screen.findAllByRole("checkbox", { name: /220501001/i });
+    expect(compCheckboxes[0]).toBeChecked();
+    expect(screen.getByText("Resultado 1: Identificar requisitos técnicos")).toBeInTheDocument();
   });
 });
 

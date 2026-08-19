@@ -18,6 +18,8 @@ import {
   FileSpreadsheet,
   Settings2,
   AlertTriangle,
+  Layers,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -258,6 +260,22 @@ const COMPLEMENTARY_FIELD_MAP = new Map(
   COMPLEMENTARY_FIELDS.map((field) => [field.id, field]),
 );
 
+export interface ComplementaryDataPerRap {
+  actividades_aprendizaje?: string;
+  estrategias_didacticas?: string;
+  ambientes_tipificados?: string;
+  ambiente?: string;
+  materiales_formacion?: string;
+  descripcion_evidencia_aprendizaje?: string;
+  observaciones?: string;
+  duracion_actividad_horas?: number;
+  horas_trabajo_directo?: number;
+  horas_trabajo_independiente?: number;
+  instructores?: string;
+  tematicas_saber?: string[];
+  tematicas_proceso?: string[];
+}
+
 function normalizeTematicas(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
@@ -373,6 +391,12 @@ export function PlaneacionWizardShell({
   const [tematicasProceso, setTematicasProceso] = useState<string[]>([]);
   const [nuevaTematicaSaber, setNuevaTematicaSaber] = useState("");
   const [nuevaTematicaProceso, setNuevaTematicaProceso] = useState("");
+  const [rapComplementaryMap, setRapComplementaryMap] = useState<
+    Record<string, ComplementaryDataPerRap>
+  >({});
+  const [activeRapIdForComplementary, setActiveRapIdForComplementary] =
+    useState<string | null>(null);
+
   const [instructionTarget, setInstructionTarget] = useState<InstructionTarget | null>(null);
   const [readComplementaryFields, setReadComplementaryFields] = useState<Set<ComplementaryFieldId>>(
     () => new Set(),
@@ -391,15 +415,36 @@ export function PlaneacionWizardShell({
     return map;
   }, [contexto.fases]);
 
-  const selectedFase = faseId ? faseMap.get(faseId) ?? null : null;
-
-  const availableActividades = useMemo(() => {
-    return selectedFase?.actividades ?? [];
-  }, [selectedFase]);
+  // All activities with parent fase information
+  const allActividadesWithFase = useMemo(() => {
+    return contexto.fases.flatMap((fase) =>
+      fase.actividades.map((act) => ({
+        ...act,
+        fase_id: fase.id,
+        nombre_fase: fase.nombre_fase,
+      }))
+    );
+  }, [contexto.fases]);
 
   const selectedActividad = useMemo(() => {
-    return availableActividades.find((a) => a.id === actividadId) ?? null;
-  }, [availableActividades, actividadId]);
+    if (!actividadId) return null;
+    return allActividadesWithFase.find((a) => a.id === actividadId) ?? null;
+  }, [allActividadesWithFase, actividadId]);
+
+  const selectedFase = useMemo(() => {
+    if (selectedActividad) {
+      return faseMap.get(selectedActividad.fase_id) ?? null;
+    }
+    return faseId ? faseMap.get(faseId) ?? null : null;
+  }, [selectedActividad, faseId, faseMap]);
+
+  const availableActividades = useMemo(() => {
+    if (faseId) {
+      const f = faseMap.get(faseId);
+      return f?.actividades ?? [];
+    }
+    return allActividadesWithFase;
+  }, [faseId, faseMap, allActividadesWithFase]);
 
   // Competencies associated with the selected activity
   const actividadCompetencias = useMemo(() => {
@@ -408,7 +453,7 @@ export function PlaneacionWizardShell({
 
   // Filter competencies based on search query
   const filteredCompetencias = useMemo(() => {
-    if (!selectedFase || !selectedActividad) return [];
+    if (!selectedActividad) return [];
     const list = actividadCompetencias;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return list;
@@ -420,16 +465,53 @@ export function PlaneacionWizardShell({
       );
       return matchCodigo || matchNombre || matchResultado;
     });
-  }, [selectedFase, selectedActividad, actividadCompetencias, searchQuery]);
+  }, [selectedActividad, actividadCompetencias, searchQuery]);
 
-  // Selected competencies & results
+  const handleSelectFase = (newFaseId: string) => {
+    setFaseId(newFaseId);
+    if (actividadId) {
+      const act = allActividadesWithFase.find((a) => a.id === actividadId);
+      if (act && act.fase_id !== newFaseId) {
+        setActividadId("");
+        setSelectedCompetenciaIds([]);
+        setSelectedResultadoIds([]);
+        setSelectedConocimientos([]);
+        setSelectedCriterios([]);
+      }
+    }
+  };
+
+  const handleSelectActividad = (newActId: string) => {
+    setActividadId(newActId);
+    if (!newActId) {
+      setSelectedCompetenciaIds([]);
+      setSelectedResultadoIds([]);
+      setSelectedConocimientos([]);
+      setSelectedCriterios([]);
+      return;
+    }
+    const actFound = allActividadesWithFase.find((a) => a.id === newActId);
+    if (actFound) {
+      // Automatically set the corresponding Fase
+      setFaseId(actFound.fase_id);
+      // Automatically pre-select competencies linked to this activity in project matrix
+      const compIds = actFound.competencias.map((c) => c.id);
+      setSelectedCompetenciaIds(compIds);
+      setSelectedResultadoIds([]);
+      setSelectedConocimientos([]);
+      setSelectedCriterios([]);
+    }
+  };
+
+  // Selected competencies & results for the currently selected activity
   const selectedCompetencias = useMemo(() => {
-    const allCompList = contexto.fases.flatMap((f) => f.actividades.flatMap((a) => a.competencias));
-    const compMap = new Map(allCompList.map((c) => [c.id, c]));
+    if (!selectedActividad) return [];
+    const compList = selectedActividad.competencias;
+    const compMap = new Map(compList.map((c) => [c.id, c]));
     return selectedCompetenciaIds
       .map((id) => compMap.get(id))
       .filter((c): c is ContextoCompetencia => Boolean(c));
-  }, [contexto.fases, selectedCompetenciaIds]);
+  }, [selectedActividad, selectedCompetenciaIds]);
 
   const availableResultados = useMemo(() => {
     return selectedCompetencias.flatMap((c) => c.resultados);
@@ -438,6 +520,82 @@ export function PlaneacionWizardShell({
   const selectedResultados = useMemo(() => {
     return availableResultados.filter((r) => selectedResultadoIds.includes(r.id));
   }, [availableResultados, selectedResultadoIds]);
+
+  const currentRapId = useMemo(() => {
+    if (
+      activeRapIdForComplementary &&
+      selectedResultadoIds.includes(activeRapIdForComplementary)
+    ) {
+      return activeRapIdForComplementary;
+    }
+    return selectedResultadoIds[0] ?? null;
+  }, [activeRapIdForComplementary, selectedResultadoIds]);
+
+  const handleSelectRapForComplementary = (targetRapId: string) => {
+    if (targetRapId === currentRapId) return;
+
+    if (currentRapId) {
+      setRapComplementaryMap((prev) => ({
+        ...prev,
+        [currentRapId]: {
+          actividades_aprendizaje: actividadesAprendizaje,
+          estrategias_didacticas: estrategias,
+          ambientes_tipificados: ambientesTipificados,
+          ambiente,
+          materiales_formacion: materialesFormacion,
+          descripcion_evidencia_aprendizaje: descripcionEvidencia,
+          observaciones,
+          duracion_actividad_horas: duracionHoras,
+          horas_trabajo_directo: horasTrabajoDirecto,
+          horas_trabajo_independiente: horasTrabajoIndependiente,
+          instructores,
+          tematicas_saber: tematicasSaber,
+          tematicas_proceso: tematicasProceso,
+        },
+      }));
+    }
+
+    setActiveRapIdForComplementary(targetRapId);
+
+    const targetData = rapComplementaryMap[targetRapId] || {};
+    setActividadesAprendizaje(targetData.actividades_aprendizaje ?? "");
+    setEstrategias(targetData.estrategias_didacticas ?? "");
+    setAmbientesTipificados(targetData.ambientes_tipificados ?? "");
+    setAmbiente(targetData.ambiente ?? "");
+    setMaterialesFormacion(targetData.materiales_formacion ?? "");
+    setDescripcionEvidencia(targetData.descripcion_evidencia_aprendizaje ?? "");
+    setObservaciones(targetData.observaciones ?? "");
+    setDuracionHoras(targetData.duracion_actividad_horas ?? 0);
+    setHorasTrabajoDirecto(targetData.horas_trabajo_directo ?? 0);
+    setHorasTrabajoIndependiente(targetData.horas_trabajo_independiente ?? 0);
+    setInstructores(targetData.instructores ?? "");
+    setTematicasSaber(targetData.tematicas_saber ?? []);
+    setTematicasProceso(targetData.tematicas_proceso ?? []);
+  };
+
+  const handleCopyCurrentRapDataToAll = () => {
+    const currentData: ComplementaryDataPerRap = {
+      actividades_aprendizaje: actividadesAprendizaje,
+      estrategias_didacticas: estrategias,
+      ambientes_tipificados: ambientesTipificados,
+      ambiente,
+      materiales_formacion: materialesFormacion,
+      descripcion_evidencia_aprendizaje: descripcionEvidencia,
+      observaciones,
+      duracion_actividad_horas: duracionHoras,
+      horas_trabajo_directo: horasTrabajoDirecto,
+      horas_trabajo_independiente: horasTrabajoIndependiente,
+      instructores,
+      tematicas_saber: tematicasSaber,
+      tematicas_proceso: tematicasProceso,
+    };
+    const nextMap: Record<string, ComplementaryDataPerRap> = {};
+    selectedResultadoIds.forEach((id) => {
+      nextMap[id] = { ...currentData };
+    });
+    setRapComplementaryMap(nextMap);
+    toast.success("Información didáctica copiada a todos los RAPs seleccionados");
+  };
 
   const planningsByCompetencia = useMemo(() => {
     const map = new Map<string, PlaneacionListResponse[]>();
@@ -566,6 +724,8 @@ export function PlaneacionWizardShell({
     setTematicasProceso([]);
     setNuevaTematicaSaber("");
     setNuevaTematicaProceso("");
+    setRapComplementaryMap({});
+    setActiveRapIdForComplementary(null);
     setReadComplementaryFields(new Set());
     setActivePlanningId(null);
     setConfirmedPlanning(null);
@@ -595,6 +755,8 @@ export function PlaneacionWizardShell({
     setTematicasProceso([]);
     setNuevaTematicaSaber("");
     setNuevaTematicaProceso("");
+    setRapComplementaryMap({});
+    setActiveRapIdForComplementary(null);
     setReadComplementaryFields(new Set());
     setConfirmedPlanning(null);
     setOfficialStatus(null);
@@ -617,19 +779,44 @@ export function PlaneacionWizardShell({
       setSelectedCriterios(details.criterios_ids);
 
       const c = details.datos_complementarios;
-      setActividadesAprendizaje(getStringValue(c, "actividades_aprendizaje"));
-      setEstrategias(getStringValue(c, "estrategias_didacticas"));
-      setAmbientesTipificados(getStringValue(c, "ambientes_tipificados"));
-      setAmbiente(getStringValue(c, "ambiente", "ambientes_aprendizaje"));
-      setMaterialesFormacion(getStringValue(c, "materiales_formacion", "recursos_didacticos"));
-      setDescripcionEvidencia(getStringValue(c, "descripcion_evidencia_aprendizaje"));
-      setObservaciones(getStringValue(c, "observaciones"));
-      setDuracionHoras(getNumberValue(c, "duracion_actividad_horas", "duracion_horas"));
-      setHorasTrabajoDirecto(getNumberValue(c, "horas_trabajo_directo"));
-      setHorasTrabajoIndependiente(getNumberValue(c, "horas_trabajo_independiente"));
-      setInstructores(getStringValue(c, "instructores", "instructor_responsable"));
-      setTematicasSaber(normalizeTematicas(c.tematicas_saber));
-      setTematicasProceso(normalizeTematicas(c.tematicas_proceso));
+      const rapsFromDb = (c && typeof c.raps === "object" && c.raps !== null)
+        ? (c.raps as Record<string, ComplementaryDataPerRap>)
+        : {};
+      setRapComplementaryMap(rapsFromDb);
+
+      const firstRapId = details.resultados_ids[0] ?? null;
+      setActiveRapIdForComplementary(firstRapId);
+      const firstRapData = firstRapId ? rapsFromDb[firstRapId] : null;
+
+      if (firstRapData) {
+        setActividadesAprendizaje(firstRapData.actividades_aprendizaje ?? getStringValue(c, "actividades_aprendizaje"));
+        setEstrategias(firstRapData.estrategias_didacticas ?? getStringValue(c, "estrategias_didacticas"));
+        setAmbientesTipificados(firstRapData.ambientes_tipificados ?? getStringValue(c, "ambientes_tipificados"));
+        setAmbiente(firstRapData.ambiente ?? getStringValue(c, "ambiente", "ambientes_aprendizaje"));
+        setMaterialesFormacion(firstRapData.materiales_formacion ?? getStringValue(c, "materiales_formacion", "recursos_didacticos"));
+        setDescripcionEvidencia(firstRapData.descripcion_evidencia_aprendizaje ?? getStringValue(c, "descripcion_evidencia_aprendizaje"));
+        setObservaciones(firstRapData.observaciones ?? getStringValue(c, "observaciones"));
+        setDuracionHoras(firstRapData.duracion_actividad_horas ?? getNumberValue(c, "duracion_actividad_horas", "duracion_horas"));
+        setHorasTrabajoDirecto(firstRapData.horas_trabajo_directo ?? getNumberValue(c, "horas_trabajo_directo"));
+        setHorasTrabajoIndependiente(firstRapData.horas_trabajo_independiente ?? getNumberValue(c, "horas_trabajo_independiente"));
+        setInstructores(firstRapData.instructores ?? getStringValue(c, "instructores", "instructor_responsable"));
+        setTematicasSaber(firstRapData.tematicas_saber ?? normalizeTematicas(c.tematicas_saber));
+        setTematicasProceso(firstRapData.tematicas_proceso ?? normalizeTematicas(c.tematicas_proceso));
+      } else {
+        setActividadesAprendizaje(getStringValue(c, "actividades_aprendizaje"));
+        setEstrategias(getStringValue(c, "estrategias_didacticas"));
+        setAmbientesTipificados(getStringValue(c, "ambientes_tipificados"));
+        setAmbiente(getStringValue(c, "ambiente", "ambientes_aprendizaje"));
+        setMaterialesFormacion(getStringValue(c, "materiales_formacion", "recursos_didacticos"));
+        setDescripcionEvidencia(getStringValue(c, "descripcion_evidencia_aprendizaje"));
+        setObservaciones(getStringValue(c, "observaciones"));
+        setDuracionHoras(getNumberValue(c, "duracion_actividad_horas", "duracion_horas"));
+        setHorasTrabajoDirecto(getNumberValue(c, "horas_trabajo_directo"));
+        setHorasTrabajoIndependiente(getNumberValue(c, "horas_trabajo_independiente"));
+        setInstructores(getStringValue(c, "instructores", "instructor_responsable"));
+        setTematicasSaber(normalizeTematicas(c.tematicas_saber));
+        setTematicasProceso(normalizeTematicas(c.tematicas_proceso));
+      }
       setReadComplementaryFields(new Set(COMPLEMENTARY_FIELDS.map((field) => field.id)));
       try {
         setOfficialStatus(
@@ -685,6 +872,28 @@ export function PlaneacionWizardShell({
     }
     
     setIsSaving(true);
+    const currentRapData: ComplementaryDataPerRap = {
+      actividades_aprendizaje: actividadesAprendizaje,
+      estrategias_didacticas: estrategias,
+      ambientes_tipificados: ambientesTipificados,
+      ambiente,
+      materiales_formacion: materialesFormacion,
+      descripcion_evidencia_aprendizaje: descripcionEvidencia,
+      observaciones,
+      duracion_actividad_horas: duracionHoras,
+      horas_trabajo_directo: horasTrabajoDirecto,
+      horas_trabajo_independiente: horasTrabajoIndependiente,
+      instructores,
+      tematicas_saber: tematicasSaber,
+      tematicas_proceso: tematicasProceso,
+    };
+    const finalRapMap: Record<string, ComplementaryDataPerRap> = { ...rapComplementaryMap };
+    if (currentRapId) {
+      finalRapMap[currentRapId] = currentRapData;
+    }
+    const firstRapId = selectedResultadoIds[0];
+    const topLevelData = (firstRapId ? finalRapMap[firstRapId] : null) || currentRapData;
+
     const payload: PlaneacionSaveRequest = {
       planeacion_id: activePlanningId ?? undefined,
       proyecto_id: contexto.proyecto_id,
@@ -694,24 +903,25 @@ export function PlaneacionWizardShell({
       conocimientos_ids: selectedConocimientos,
       criterios_ids: selectedCriterios,
       datos_complementarios: {
-        actividades_aprendizaje: actividadesAprendizaje,
-        duracion_actividad_horas: duracionHoras,
-        horas_trabajo_directo: horasTrabajoDirecto,
-        horas_trabajo_independiente: horasTrabajoIndependiente,
-        descripcion_evidencia_aprendizaje: descripcionEvidencia,
-        estrategias_didacticas: estrategias,
-        ambientes_tipificados: ambientesTipificados,
-        ambiente,
-        materiales_formacion: materialesFormacion,
-        instructores,
-        observaciones,
-        ambientes_aprendizaje: ambiente,
-        recursos_didacticos: materialesFormacion,
-        duracion_horas: duracionHoras,
-        instructor_responsable: instructores,
+        raps: finalRapMap,
+        actividades_aprendizaje: topLevelData.actividades_aprendizaje ?? actividadesAprendizaje,
+        duracion_actividad_horas: topLevelData.duracion_actividad_horas ?? duracionHoras,
+        horas_trabajo_directo: topLevelData.horas_trabajo_directo ?? horasTrabajoDirecto,
+        horas_trabajo_independiente: topLevelData.horas_trabajo_independiente ?? horasTrabajoIndependiente,
+        descripcion_evidencia_aprendizaje: topLevelData.descripcion_evidencia_aprendizaje ?? descripcionEvidencia,
+        estrategias_didacticas: topLevelData.estrategias_didacticas ?? estrategias,
+        ambientes_tipificados: topLevelData.ambientes_tipificados ?? ambientesTipificados,
+        ambiente: topLevelData.ambiente ?? ambiente,
+        materiales_formacion: topLevelData.materiales_formacion ?? materialesFormacion,
+        instructores: topLevelData.instructores ?? instructores,
+        observaciones: topLevelData.observaciones ?? observaciones,
+        ambientes_aprendizaje: topLevelData.ambiente ?? ambiente,
+        recursos_didacticos: topLevelData.materiales_formacion ?? materialesFormacion,
+        duracion_horas: topLevelData.duracion_actividad_horas ?? duracionHoras,
+        instructor_responsable: topLevelData.instructores ?? instructores,
         asignaciones_proyecto: proyectoAsignaciones,
-        tematicas_saber: tematicasSaber,
-        tematicas_proceso: tematicasProceso,
+        tematicas_saber: topLevelData.tematicas_saber ?? tematicasSaber,
+        tematicas_proceso: topLevelData.tematicas_proceso ?? tematicasProceso,
       },
     };
 
@@ -774,6 +984,7 @@ export function PlaneacionWizardShell({
       await deletePlaneacion(planningId);
       toast.success("Planeación eliminada");
       await loadPlannings();
+      await loadOfficialFormat();
       resetForm();
       setActiveStep("dashboard");
     } catch {
@@ -782,19 +993,42 @@ export function PlaneacionWizardShell({
   };
 
   const handleSaveOfficialConfig = async () => {
+    if (!fechaElaboracion) {
+      toast.error("La fecha de elaboración es obligatoria");
+      return;
+    }
+    if (!modalidadFormacion.trim()) {
+      toast.error("La modalidad de formación es obligatoria");
+      return;
+    }
+    if (!regional.trim()) {
+      toast.error("La regional es obligatoria");
+      return;
+    }
+    if (!centroFormacion.trim()) {
+      toast.error("El centro de formación es obligatorio");
+      return;
+    }
     const team = equipoGestionCurricular
       .split(/[\n,;]+/)
       .map((member) => member.trim())
       .filter(Boolean);
+    if (team.length === 0) {
+      toast.error(
+        "Debe ingresar al menos un integrante en el equipo de gestión curricular",
+      );
+      return;
+    }
+
     setIsOfficialBusy(true);
     try {
       await savePlaneacionDocumentoConfig(contexto.proyecto_id, {
         fecha_elaboracion: fechaElaboracion,
-        modalidad_formacion: modalidadFormacion,
+        modalidad_formacion: modalidadFormacion.trim(),
         clasificacion_informacion: clasificacionInformacion,
         equipo_gestion_curricular: team,
-        regional,
-        centro_formacion: centroFormacion,
+        regional: regional.trim(),
+        centro_formacion: centroFormacion.trim(),
       });
       await loadOfficialFormat();
       toast.success("Configuración del formato oficial guardada");
@@ -831,14 +1065,21 @@ export function PlaneacionWizardShell({
   };
 
   const handleDownloadConsolidated = async () => {
+    if (!consolidatedStatus?.storage_key) {
+      toast.error(
+        "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes volver a generar el formato consolidado.",
+      );
+      return;
+    }
     try {
       await downloadFormatoOficialConsolidado(contexto.proyecto_id);
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "No fue posible descargar el consolidado",
+          : "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada. Debes volver a generar el formato consolidado.",
       );
+      await loadOfficialFormat();
     }
   };
 
@@ -936,36 +1177,108 @@ export function PlaneacionWizardShell({
     switch (field) {
       case "actividades_aprendizaje":
         setActividadesAprendizaje(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], actividades_aprendizaje: value },
+          }));
+        }
         break;
-      case "duracion_actividad_horas":
-        setDuracionHoras(Number(value) || 0);
+      case "duracion_actividad_horas": {
+        const num = Number(value) || 0;
+        setDuracionHoras(num);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], duracion_actividad_horas: num },
+          }));
+        }
         break;
-      case "horas_trabajo_directo":
-        setHorasTrabajoDirecto(Number(value) || 0);
+      }
+      case "horas_trabajo_directo": {
+        const num = Number(value) || 0;
+        setHorasTrabajoDirecto(num);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], horas_trabajo_directo: num },
+          }));
+        }
         break;
-      case "horas_trabajo_independiente":
-        setHorasTrabajoIndependiente(Number(value) || 0);
+      }
+      case "horas_trabajo_independiente": {
+        const num = Number(value) || 0;
+        setHorasTrabajoIndependiente(num);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], horas_trabajo_independiente: num },
+          }));
+        }
         break;
+      }
       case "descripcion_evidencia_aprendizaje":
         setDescripcionEvidencia(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], descripcion_evidencia_aprendizaje: value },
+          }));
+        }
         break;
       case "estrategias_didacticas":
         setEstrategias(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], estrategias_didacticas: value },
+          }));
+        }
         break;
       case "ambientes_tipificados":
         setAmbientesTipificados(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], ambientes_tipificados: value },
+          }));
+        }
         break;
       case "ambiente":
         setAmbiente(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], ambiente: value },
+          }));
+        }
         break;
       case "materiales_formacion":
         setMaterialesFormacion(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], materiales_formacion: value },
+          }));
+        }
         break;
       case "instructores":
         setInstructores(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], instructores: value },
+          }));
+        }
         break;
       case "observaciones":
         setObservaciones(value);
+        if (currentRapId) {
+          setRapComplementaryMap((prev) => ({
+            ...prev,
+            [currentRapId]: { ...prev[currentRapId], observaciones: value },
+          }));
+        }
         break;
     }
   };
@@ -1126,16 +1439,14 @@ export function PlaneacionWizardShell({
                       >
                         Editar planeación
                       </button>
-                      {planning.estado !== "COMPLETO" && (
-                        <button
-                          type="button"
-                          onClick={(e) => void handleDeletePlanning(planning.id, e)}
-                          title="Eliminar borrador"
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700 transition"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => void handleDeletePlanning(planning.id, e)}
+                        title="Eliminar planeación"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-700 transition"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -1512,12 +1823,12 @@ export function PlaneacionWizardShell({
                           {isComplete && <Lock className="h-3 w-3" />}
                           {isComplete ? "COMPLETO" : isDraft ? "BORRADOR" : "DISPONIBLE"}
                         </span>
-                        {planning && !isComplete && (
+                        {planning && (
                           <button
                             type="button"
                             onClick={(event) => void handleDeletePlanning(planning.id, event)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-700"
-                            title="Eliminar borrador"
+                            title="Eliminar planeación"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -1652,60 +1963,79 @@ export function PlaneacionWizardShell({
                 </div>
                 
                 <div className="grid gap-6">
-                  {/* Step 1.1: Fase Selection */}
-                  <div>
-                    <label htmlFor="fase-selector" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      1. Selecciona la Fase del Proyecto Formativo
-                    </label>
-                    <select
-                      id="fase-selector"
-                      value={faseId}
-                      onChange={(e) => {
-                        const newFaseId = e.target.value;
-                        setFaseId(newFaseId);
-                        setActividadId("");
-                        setSelectedCompetenciaIds([]);
-                        setSelectedResultadoIds([]);
-                        setSelectedConocimientos([]);
-                        setSelectedCriterios([]);
-                      }}
-                      className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-                    >
-                      <option value="">-- Seleccionar Fase --</option>
-                      {contexto.fases.map((fase) => (
-                        <option key={fase.id} value={fase.id}>
-                          {fase.nombre_fase}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Step 1.2: Actividad de Proyecto Selection */}
-                  {faseId && (
+                  {/* Primary Selection: Actividad del Proyecto */}
+                  <div className="rounded-lg border border-[color:var(--card-border)] bg-slate-50/50 p-4 grid gap-4">
                     <div>
-                      <label htmlFor="actividad-selector" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      <label htmlFor="actividad-selector" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-800">
                         2. Selecciona la Actividad del Proyecto
                       </label>
+                      <p className="text-xs text-[var(--muted)] mb-2.5">
+                        Al seleccionar la actividad de proyecto, la fase y las competencias asociadas se cargarán automáticamente.
+                      </p>
                       <select
                         id="actividad-selector"
                         value={actividadId}
-                        onChange={(e) => {
-                          const newActId = e.target.value;
-                          setActividadId(newActId);
-                          setSelectedCompetenciaIds([]);
-                          setSelectedResultadoIds([]);
-                          setSelectedConocimientos([]);
-                          setSelectedCriterios([]);
-                        }}
-                        className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
+                        onChange={(e) => handleSelectActividad(e.target.value)}
+                        className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] font-medium shadow-xs"
                       >
                         <option value="">-- Seleccionar Actividad de Proyecto --</option>
-                        {availableActividades.map((act) => (
-                          <option key={act.id} value={act.id}>
-                            {act.descripcion}
-                          </option>
-                        ))}
+                        {availableActividades.map((act) => {
+                          const nombreFase = (act as { nombre_fase?: string }).nombre_fase;
+                          return (
+                            <option key={act.id} value={act.id}>
+                              {faseId || !nombreFase ? act.descripcion : `[${nombreFase}] — ${act.descripcion}`}
+                            </option>
+                          );
+                        })}
                       </select>
+                    </div>
+
+                    {/* Secondary Filter: Fase (Optional / Auto-filled) */}
+                    <div className="border-t border-slate-200/80 pt-3 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex-1 min-w-[200px]">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5">
+                            <label htmlFor="fase-selector" className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                              1. Selecciona la Fase del Proyecto Formativo
+                            </label>
+                            <span className="text-[10px] font-normal text-slate-500">(Filtro Opcional)</span>
+                          </div>
+                          {faseId && selectedFase && (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                              Fase activa: {selectedFase.nombre_fase}
+                            </span>
+                          )}
+                        </div>
+                        <select
+                          id="fase-selector"
+                          value={faseId}
+                          onChange={(e) => handleSelectFase(e.target.value)}
+                          className="min-h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-[var(--accent)]"
+                        >
+                          <option value="">-- Todas las Fases del Proyecto --</option>
+                          {contexto.fases.map((fase) => (
+                            <option key={fase.id} value={fase.id}>
+                              {fase.nombre_fase}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Activity and Phase Link Banner */}
+                  {selectedActividad && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-950 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-emerald-900">Actividad seleccionada:</span>
+                        <span className="font-medium text-emerald-800">{selectedActividad.descripcion}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase text-emerald-700">Fase asignada:</span>
+                        <span className="rounded bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                          {selectedFase?.nombre_fase ?? "Fase del proyecto"}
+                        </span>
+                      </div>
                     </div>
                   )}
 
@@ -1730,10 +2060,13 @@ export function PlaneacionWizardShell({
                           {actividadCompetencias.map((comp) => {
                             const isSelected = selectedCompetenciaIds.includes(comp.id);
                             const hasEspecifico = comp.resultados.some(
-                              (r) => r.tipo_resultado.toUpperCase() === "ESPECIFICO"
+                              (r) => r.tipo_resultado?.toUpperCase() === "ESPECIFICO"
                             );
                             const hasTransversal = comp.resultados.some(
-                              (r) => r.tipo_resultado.toUpperCase() === "TRANSVERSAL"
+                              (r) => r.tipo_resultado?.toUpperCase() === "TRANSVERSAL"
+                            );
+                            const hasBasico = comp.resultados.some(
+                              (r) => r.tipo_resultado?.toUpperCase() === "BASICO"
                             );
 
                             return (
@@ -1789,6 +2122,11 @@ export function PlaneacionWizardShell({
                                     {hasTransversal && (
                                       <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-semibold text-purple-800">
                                         Transversal
+                                      </span>
+                                    )}
+                                    {hasBasico && (
+                                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                        Básica / Clave
                                       </span>
                                     )}
                                   </div>
@@ -1856,9 +2194,11 @@ export function PlaneacionWizardShell({
                                         )}
                                         <span className={cn(
                                           "rounded px-2 py-0.25 text-[10px] font-semibold uppercase",
-                                          resultado.tipo_resultado.toUpperCase() === "ESPECIFICO"
+                                          resultado.tipo_resultado?.toUpperCase() === "ESPECIFICO"
                                             ? "bg-blue-100 text-blue-800"
-                                            : "bg-purple-100 text-purple-800"
+                                            : resultado.tipo_resultado?.toUpperCase() === "TRANSVERSAL"
+                                            ? "bg-purple-100 text-purple-800"
+                                            : "bg-amber-100 text-amber-800"
                                         )}>
                                           {resultado.tipo_resultado}
                                         </span>
@@ -2123,29 +2463,43 @@ export function PlaneacionWizardShell({
                   )}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3 border-t border-[var(--line)] pt-4">
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => void handleSaveDraft()}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-slate-50 transition"
-                  >
-                    <Save className="h-4 w-4" />
-                    Guardar Borrador
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const savedId = await handleSaveDraft(true);
-                      if (savedId) {
-                        setActiveStep("complementario");
-                      }
-                    }}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition"
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                <div className="mt-6 flex justify-between gap-3 border-t border-[var(--line)] pt-4">
+                  {activePlanningId ? (
+                    <button
+                      type="button"
+                      onClick={(e) => void handleDeletePlanning(activePlanningId, e)}
+                      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar Planeación
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => void handleSaveDraft()}
+                      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-slate-50 transition"
+                    >
+                      <Save className="h-4 w-4" />
+                      Guardar Borrador
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const savedId = await handleSaveDraft(true);
+                        if (savedId) {
+                          setActiveStep("complementario");
+                        }
+                      }}
+                      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition"
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </section>
             )}
@@ -2169,9 +2523,99 @@ export function PlaneacionWizardShell({
                     Instrucciones
                   </button>
                 </div>
-                <p className="text-xs text-amber-700 mb-4 bg-amber-50 border border-amber-100 p-2.5 rounded-lg">
-                  💡 <strong>Nota sobre Brecha Documental:</strong> No existe un formato de planeación institucional estricto configurado en este repositorio. Se expone un bloque extensible de campos didácticos recomendados.
+                <p className="text-xs text-emerald-800 mb-4 bg-emerald-50/80 border border-emerald-200 p-3 rounded-lg flex items-center gap-2 font-medium">
+                  <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>
+                    <strong>Formato Oficial SENA (GPFI-F-134 V05):</strong> Toda la información didáctica registrada se integrará directamente en la matriz de planeación pedagógica y se exportará en el libro de trabajo oficial institucional Excel.
+                  </span>
                 </p>
+
+                {/* Selector de RAP para Diligenciamiento Individual */}
+                {selectedResultados.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-2">
+                          <Layers className="h-4 w-4 text-indigo-600" />
+                          Resultados de Aprendizaje Seleccionados ({selectedResultados.length} RAPs)
+                        </h3>
+                        <p className="mt-0.5 text-xs text-indigo-700">
+                          Selecciona un RAP para diligenciar de manera individual su orientación didáctica e intensidad horaria:
+                        </p>
+                      </div>
+                      {selectedResultados.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleCopyCurrentRapDataToAll}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 shadow-sm transition"
+                          title="Copiar la información didáctica actual a todos los demás RAPs seleccionados"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copiar datos a todos los RAPs
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {selectedResultados.map((res) => {
+                        const isSelected = res.id === currentRapId;
+                        const rapData = isSelected
+                          ? {
+                              actividades_aprendizaje: actividadesAprendizaje,
+                              estrategias_didacticas: estrategias,
+                              descripcion_evidencia_aprendizaje: descripcionEvidencia,
+                            }
+                          : rapComplementaryMap[res.id];
+                        const isFilled = Boolean(
+                          rapData?.actividades_aprendizaje?.trim() ||
+                            rapData?.estrategias_didacticas?.trim() ||
+                            rapData?.descripcion_evidencia_aprendizaje?.trim(),
+                        );
+
+                        return (
+                          <button
+                            key={res.id}
+                            type="button"
+                            onClick={() => handleSelectRapForComplementary(res.id)}
+                            className={cn(
+                              "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition border text-left",
+                              isSelected
+                                ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-sm"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/50",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "inline-flex h-2 w-2 rounded-full",
+                                isFilled
+                                  ? isSelected
+                                    ? "bg-emerald-300"
+                                    : "bg-emerald-500"
+                                  : isSelected
+                                  ? "bg-amber-300"
+                                  : "bg-amber-400",
+                              )}
+                            />
+                            <span className="font-mono">{res.codigo_resultado || "RAP"}</span>
+                            <span className="max-w-[200px] truncate opacity-90">{res.descripcion}</span>
+                            <span
+                              className={cn(
+                                "rounded px-1.5 py-0.5 text-[10px] uppercase font-bold",
+                                isSelected
+                                  ? "bg-white/20 text-white"
+                                  : isFilled
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-amber-50 text-amber-700",
+                              )}
+                            >
+                              {isFilled ? "Diligenciado" : "Pendiente"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-4">
                   {COMPLEMENTARY_FIELDS.map((field) => {
@@ -2250,14 +2694,26 @@ export function PlaneacionWizardShell({
                   })}
                 </div>
 
-                <div className="mt-6 flex justify-between gap-3 border-t border-[var(--line)] pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setActiveStep("curricular")}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-slate-50 transition"
-                  >
-                    Anterior
-                  </button>
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-4">
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep("curricular")}
+                      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[color:var(--card-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-slate-50 transition"
+                    >
+                      Anterior
+                    </button>
+                    {activePlanningId && (
+                      <button
+                        type="button"
+                        onClick={(e) => void handleDeletePlanning(activePlanningId, e)}
+                        className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar Planeación
+                      </button>
+                    )}
+                  </div>
                   <div className="flex gap-3">
                     <button
                       type="button"
@@ -2701,6 +3157,16 @@ export function PlaneacionWizardShell({
                       <Download className="h-4 w-4" />
                       Descargar Excel oficial
                     </button>
+                    {activePlanningId && (
+                      <button
+                        type="button"
+                        onClick={(e) => void handleDeletePlanning(activePlanningId, e)}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar planeación
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {

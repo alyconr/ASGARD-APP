@@ -828,3 +828,41 @@ class TestMultiplesPlaneacionesPorActividad:
         assert p1_rows[1].horas_trabajo_directo is None
         assert p2_rows[0].horas_trabajo_directo == 6.0
 
+
+async def test_eliminar_planeacion_removes_db_record_and_minio_files() -> None:
+    fx = _build_base_context()
+    session = FakePlaneacionSession()
+    planning_id = uuid.uuid4()
+    p = PlaneacionPedagogica(
+        id=planning_id,
+        proyecto_id=fx["proyecto"].id,
+        fase_id=fx["fase"].id,
+        actividad_id=fx["actividad"].id,
+        storage_key="planeaciones-pedagogicas/prog/proj/fase/act-1234/GPFI-F-134V05-planeacion.xlsx",
+        file_name="GPFI-F-134V05-planeacion.xlsx",
+    )
+    p.proyecto = fx["proyecto"]
+    p.fase = fx["fase"]
+    p.actividad = fx["actividad"]
+
+    repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+    repository.get_by_id.return_value = p
+    repository.delete = AsyncMock()
+
+    storage_service = AsyncMock()
+    service = PlaneacionPedagogicaService(
+        session=session,
+        repository=repository,
+        storage_service=storage_service,
+        formato_excel_service=MagicMock(),
+    )
+
+    await service.eliminar_planeacion(planning_id)
+
+    repository.get_by_id.assert_awaited_once_with(planning_id)
+    repository.delete.assert_awaited_once_with(p)
+    assert storage_service.delete_by_prefix.await_count >= 1
+    deleted_prefixes = [call.kwargs.get("prefix") for call in storage_service.delete_by_prefix.await_args_list]
+    assert "planeaciones-pedagogicas/prog/proj/fase/act-1234/GPFI-F-134V05-planeacion.xlsx" in deleted_prefixes
+
+

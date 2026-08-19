@@ -640,9 +640,17 @@ class ProyectoExcelImportService:
             if actividad_db_id is None:
                 continue
 
-            competencia = competencias_by_codigo.get(
-                row.codigo_competencia.strip().lower()
-            )
+            codigo_raw = row.codigo_competencia.strip().lower()
+            competencia = competencias_by_codigo.get(codigo_raw)
+            if competencia is None:
+                competencia = next(
+                    (
+                        c
+                        for key, c in competencias_by_codigo.items()
+                        if key and (key in codigo_raw or codigo_raw in key)
+                    ),
+                    None,
+                )
             if competencia is None:
                 sin_competencia += 1
                 continue
@@ -654,8 +662,9 @@ class ProyectoExcelImportService:
                     (
                         item
                         for item in competencia.resultados
-                        if (item.codigo_resultado or "").strip().lower()
-                        == rap_id.lower()
+                        if (item.codigo_resultado or "").strip().lower() == rap_id.lower()
+                        or rap_id.lower() in (item.codigo_resultado or "").strip().lower()
+                        or (item.descripcion or "").strip().lower() == row.resultado_aprendizaje.strip().lower()
                     ),
                     None,
                 )
@@ -885,6 +894,7 @@ def _parse_planeacion(
             if normalized_tipo in (
                 TipoResultadoProyecto.ESPECIFICO.value,
                 TipoResultadoProyecto.TRANSVERSAL.value,
+                TipoResultadoProyecto.BASICO.value,
             ):
                 tipo_res = normalized_tipo
             else:
@@ -895,7 +905,7 @@ def _parse_planeacion(
                         campo="tipo_resultado",
                         mensaje=(
                             f"Valor invalido para 'tipo_resultado': '{tipo_res_raw}'. "
-                            "Valores permitidos: 'ESPECIFICO', 'TRANSVERSAL'"
+                            "Valores permitidos: 'ESPECIFICO', 'TRANSVERSAL', 'BASICO'"
                         ),
                     )
                 )

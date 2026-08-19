@@ -76,7 +76,9 @@ class PlaneacionPedagogicaRepository:
             select(PlaneacionPedagogica)
             .where(PlaneacionPedagogica.proyecto_id == proyecto_id)
             .options(
-                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.resultados).selectinload(
+                    ResultadoAprendizaje.competencia
+                ),
                 selectinload(PlaneacionPedagogica.fase),
                 selectinload(PlaneacionPedagogica.actividad),
             )
