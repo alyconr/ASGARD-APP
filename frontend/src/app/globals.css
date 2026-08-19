@@ -2,13 +2,19 @@
 
 :root {
   color-scheme: light;
-  --background: #f6f4ee;
-  --foreground: #11213a;
-  --card: rgba(255, 255, 255, 0.78);
-  --card-border: rgba(17, 33, 58, 0.12);
-  --accent: #0f766e;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --muted: #5f6b7a;
+  --background: #f6f7f2;
+  --foreground: #17352f;
+  --paper: #ffffff;
+  --paper-strong: #fbfbf7;
+  --card: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(23, 53, 47, 0.14);
+  --accent: #00843d;
+  --accent-strong: #005e34;
+  --accent-soft: rgba(0, 132, 61, 0.1);
+  --ink-blue: #204b78;
+  --gold: #b98524;
+  --muted: #5e6b66;
+  --line: rgba(23, 53, 47, 0.12);
 }
 
 * {
@@ -17,20 +23,127 @@
 
 html {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 32%),
-    linear-gradient(180deg, #fbfaf6 0%, var(--background) 100%);
+  background: var(--background);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   color: var(--foreground);
-  font-family:
-    "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+  font-family: var(--font-sans), "Segoe UI", sans-serif;
+  background-image:
+    linear-gradient(rgba(23, 53, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 53, 47, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: top left;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(13, 95, 82, 0.18);
+}
+
+.sena-toast {
+  border-radius: 8px !important;
+  border-color: var(--card-border) !important;
+  font-family: var(--font-sans), "Segoe UI", sans-serif !important;
+}
+
+.sena-toast-title {
+  color: var(--foreground) !important;
+  font-weight: 700 !important;
+}
+
+.sena-toast-description {
+  color: var(--muted) !important;
+}
+
+.asgard-guide-avatar {
+  isolation: isolate;
+  animation: asgard-teacher-float 3.8s ease-in-out infinite;
+}
+
+.asgard-teacher-cap {
+  transform-origin: bottom center;
+  animation: asgard-teacher-cap 4.2s ease-in-out infinite;
+}
+
+.asgard-teacher-glasses-glare {
+  animation: asgard-teacher-glare 5s linear infinite;
+}
+
+.asgard-teacher-sparkle {
+  transform-origin: center;
+  animation: asgard-teacher-sparkle 3s ease-in-out infinite;
+}
+
+.asgard-teacher-sparkle--one {
+  animation-delay: 0s;
+}
+
+.asgard-teacher-sparkle--two {
+  animation-delay: 1.5s;
+}
+
+@keyframes asgard-teacher-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(1deg);
+  }
+}
+
+@keyframes asgard-teacher-cap {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-1.5deg) translateY(-0.75px);
+  }
+}
+
+@keyframes asgard-teacher-glare {
+  0% {
+    transform: translateX(-20px);
+  }
+  20% {
+    transform: translateX(20px);
+  }
+  100% {
+    transform: translateX(20px);
+  }
+}
+
+@keyframes asgard-teacher-sparkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.7) rotate(0deg);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.15) rotate(180deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asgard-guide-avatar,
+  .asgard-teacher-cap,
+  .asgard-teacher-glasses-glare,
+  .asgard-teacher-sparkle {
+    animation: none;
+  }
 }

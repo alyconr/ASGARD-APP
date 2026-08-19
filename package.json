@@ -10,7 +10,7 @@
     "build:frontend": "npm --workspace frontend run build",
     "lint:frontend": "npm --workspace frontend run lint",
     "typecheck:frontend": "npm --workspace frontend run typecheck",
-    "dev:backend": "cd backend && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:backend": "cd backend && uv run python -m src.dev_server",
     "lint:backend": "cd backend && uv run ruff check . && uv run mypy src",
     "test:backend": "cd backend && uv run pytest",
     "format": "npm --workspace frontend run format && cd backend && uv run ruff format .",

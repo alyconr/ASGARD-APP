@@ -6,22 +6,77 @@
 
 ---
 
+## Decision funcional TASK-UNICO-CARRIL
+
+Desde esta refactorizacion integral, el sistema opera con un unico carril:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO;
+- no se permite el carril manual como modo operativo;
+- las tareas TASK-18, TASK-19 y siguientes quedan reinterpretadas.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+- El paso `datos-programa` queda eliminado del wizard, navegacion, tipos, tests y documentacion.
+- El wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y cierra en `revision-programa`.
+- El origen documental conserva PDF evidencia y Excel canonico; tras importacion confirmada muestra un resumen compacto y abre competencias en una modal paginada.
+- La estructura curricular usa selector/filtro de competencia y evita render masivo; conocimientos y criterios se seleccionan progresivamente antes de mostrarse.
+- El wizard del proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como paso manual.
+- Los documentos del proyecto se guardan en `proyectos-formativos/{referencia_id}/documentos/...` y los Excel en `proyectos-formativos/{referencia_id}/excel/...`.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+- La home `/` es el dashboard maestro ASGARD.
+- El wizard del programa se abre desde `/programa`.
+- El dashboard consume `GET /api/v1/dashboard/{referencia_id}` para estado agregado, reglas de habilitacion, metricas y mapa navegable.
+- El proyecto solo queda disponible si el programa esta `COMPLETO`.
+- La planeacion pedagogica solo queda disponible si programa y proyecto estan `COMPLETO`.
+- El dashboard muestra metricas de programa, proyecto y planeacion derivadas de persistencia, no de estado local.
+- El mapa navegable expone nodos de programa, estructura curricular, proyecto y planeacion con enlaces activos solo cuando el modulo esta habilitado.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+- Los wizards de programa, proyecto y planeacion pedagogica muestran un asistente flotante, colapsable y reutilizable.
+- El asistente presenta titulo, mensaje, severidad, checklist y CTA sugerido.
+- El motor de guia calcula mensajes desde estado real: paso actual, importaciones, cierres, disponibilidad de proyecto y acceso de planeacion.
+- Las advertencias entre wizards deben reflejar las reglas reales: proyecto requiere programa `COMPLETO`; planeacion requiere programa y proyecto `COMPLETO`.
+- El asistente persiste de forma ligera preferencias de UX, como estado colapsado.
+- El asistente no sustituye endpoints, validadores ni confirmaciones de cierre.
+
+---
+
 # 1. Resumen
 
 Este documento define la especificación funcional y técnica de la Fase 1 del sistema para construcción de guías de aprendizaje SENA.
 
 La Fase 1 debe permitir:
 
-- cargar información del programa de formación,
-- cargar información del proyecto formativo,
-- extraer datos desde PDF cuando sea posible,
-- permitir diligenciamiento manual cuando no sea posible,
+- cargar información del programa de formación desde Excel canónico,
+- cargar información del proyecto formativo desde fuente estructurada,
+- conservar PDF como evidencia documental cuando exista,
+- importar datos desde Excel canonico cuando se use fuente estructurada,
+- permitir correccion post-importacion SOLO para completar lo estrictamente faltante sin reactivar un carril manual,
 - guardar automáticamente el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta completar el programa,
+- centralizar el acceso desde un dashboard maestro con metricas y mapa navegable,
 - y persistir toda la información de forma estructurada y trazable.
 
 La Fase 1 no genera aún la guía final; deja preparada la base funcional y de datos para fases posteriores.
+
+## Decision funcional TASK-08.5
+
+Desde TASK-08.5, el flujo del programa separa dos insumos:
+
+- PDF: documento soporte, validado de forma basica y almacenado en MinIO; no se usa para extraccion curricular.
+- Excel canonico `.xlsx`: fuente estructurada para validar hojas, encabezados, claves cruzadas, preview e importacion relacional.
+
+El contrato canonico del workbook contiene las hojas `Programa`, `Competencias`, `Resultados`, `Conocimientos` y `Criterios`.
+
+La organizacion funcional del workbook es por competencia. Cada competencia es
+el nodo principal y contiene sus resultados, conocimientos y criterios. Los
+conocimientos y criterios se importan asociados inicialmente a la competencia;
+su asignacion a un resultado de aprendizaje es opcional y secundaria.
 
 ---
 
@@ -33,14 +88,15 @@ Implementar un módulo web que permita registrar, extraer, revisar, editar y val
 
 # 3. Objetivos específicos
 
-- Permitir el cargue manual o asistido del programa de formación.
-- Permitir la extracción automática desde PDF del programa cuando el documento sea legible.
-- Permitir el diligenciamiento manual de los campos faltantes o no extraídos.
+- Permitir el cargue asistido desde Excel canonico del programa.
+- Permitir el cargue asistido desde fuente estructurada del proyecto.
+- Permitir el cargue asistido desde fuente estructurada del proyecto.
 - Permitir la gestión completa de competencias y su estructura curricular.
 - Validar la completitud del programa antes de habilitar el proyecto.
-- Permitir el cargue manual o asistido del proyecto formativo.
+- Permitir la carga del proyecto formativo desde fuente estructurada.
 - Permitir la gestión de fases y actividades del proyecto.
 - Validar la completitud del proyecto antes de cerrar la Fase 1.
+- Centralizar acceso, progreso y bloqueos en el dashboard maestro.
 - Mantener guardado automático del avance en todo momento.
 - Mantener trazabilidad básica de los cambios relevantes.
 
@@ -56,7 +112,8 @@ La Fase 1 incluye:
 - wizard del proyecto formativo,
 - servicio de borradores,
 - diagnóstico de legibilidad de PDF,
-- extracción híbrida PDF/manual,
+- carga documental PDF como evidencia,
+- importacion estructurada desde Excel canonico,
 - CRUD de competencias,
 - CRUD de resultados de aprendizaje,
 - CRUD de conocimientos de saber,
@@ -95,31 +152,28 @@ Responsable de:
 
 - iniciar el proceso,
 - cargar documentos,
-- completar datos manualmente,
-- revisar la información,
+- revisar la informacion,
 - cerrar el programa,
 - habilitar el proyecto,
 - revisar y cerrar el proyecto.
 
 ## 5.2 Actor secundario
-**Sistema de extracción documental**
+**Sistema de almacenamiento documental**
 
 Responsable de:
 
 - recibir archivos PDF,
 - validar que sean procesables,
-- diagnosticar legibilidad,
-- intentar extraer información,
-- clasificar fallos,
-- y dejar campos listos para revisión humana.
+- almacenar como evidencia documental en MinIO,
+- y dejar metadata de validacion en el borrador.
 
 ---
 
 # 6. Supuestos del sistema
 
-- El usuario cuenta con documentos fuente o con información suficiente para diligenciar manualmente el sistema.
-- Los PDFs pueden tener texto extraíble o ser escaneados; el sistema debe soportar ambas situaciones mediante fallback manual.
-- La revisión humana es obligatoria antes de cerrar cualquier bloque.
+- El usuario cuenta con documentos fuente o con la matriz Excel canonica diligenciada.
+- Los PDFs se almacenan como evidencia documental; no se asume extraccion curricular desde ellos.
+- La revision humana es obligatoria antes de cerrar cualquier bloque.
 - El programa de formación es el bloque padre de la estructura de Fase 1.
 - El proyecto formativo solo se habilita cuando el programa ya está completo.
 
@@ -131,32 +185,25 @@ Responsable de:
 El usuario puede:
 
 - iniciar un nuevo proceso,
-- cargar PDF del programa,
-- diligenciar manualmente,
 - continuar un borrador existente.
 
-## Paso 2. Diagnóstico del programa
-Si se carga PDF, el sistema debe determinar si el archivo es:
+## Paso 2. Origen documental del programa
+El usuario sube el PDF del programa como evidencia documental y carga el Excel canonico del programa como fuente estructurada.
 
-- legible,
-- parcialmente legible,
-- o no legible.
+## Paso 3. Importacion estructurada del programa
+El sistema importa desde Excel canónico:
 
-## Paso 3. Captura inicial del programa
-El sistema debe mostrar:
-
-- campos extraídos automáticamente,
-- campos vacíos para diligenciar manualmente,
-- campos pendientes por revisión.
-
-## Paso 4. Gestión curricular del programa
-El usuario debe poder crear, editar o eliminar:
-
+- datos del programa,
 - competencias,
 - resultados,
 - conocimientos de saber,
 - conocimientos de proceso,
 - criterios.
+
+Tras confirmar la importacion, el usuario ve un resumen compacto del workbook y puede abrir una modal paginada para revisar competencias importadas.
+
+## Paso 4. Estructura curricular del programa
+El usuario selecciona una competencia para trabajar en contexto. Resultados se muestran con la competencia seleccionada; conocimientos y criterios se eligen progresivamente desde selectores antes de renderizarse.
 
 ## Paso 5. Revisión del programa
 El sistema debe mostrar el consolidado del programa antes del cierre.
@@ -167,11 +214,15 @@ El sistema debe validar completitud y, si procede, marcar el programa como COMPL
 ## Paso 7. Habilitación del proyecto
 Solo cuando el programa esté completo, el sistema debe habilitar el proyecto formativo.
 
-## Paso 8. Diagnóstico del proyecto
-Si se carga PDF del proyecto, el sistema debe analizar su legibilidad.
+## Paso 8. Fuente del proyecto
+El usuario sube el PDF del proyecto como evidencia documental y carga la matriz Excel del proyecto como fuente estructurada.
 
-## Paso 9. Captura inicial del proyecto
-El sistema debe mostrar campos extraídos y permitir completar manualmente los faltantes.
+## Paso 9. Importacion estructurada del proyecto
+El sistema importa desde fuente estructurada (Excel/matriz):
+
+- datos del proyecto,
+- fases,
+- actividades.
 
 ## Paso 10. Gestión estructural del proyecto
 El usuario debe poder crear, editar o eliminar:
@@ -204,19 +255,15 @@ Los campos mínimos del programa son:
 El sistema debe guardar el programa aunque esté incompleto.
 
 ### RF-04. Cargar PDF del programa
-El sistema debe permitir subir un archivo PDF del programa.
+El sistema debe permitir subir un archivo PDF del programa como evidencia documental.
 
-### RF-05. Diagnosticar legibilidad del programa
-El sistema debe clasificar el PDF del programa como:
+### RF-05. Validar formato del PDF del programa
+El sistema debe verificar que el archivo subido sea un PDF valido.
 
-- legible,
-- parcialmente legible,
-- no legible.
+### RF-06. Importar datos del programa desde Excel canonico
+El sistema debe importar desde Excel canonico:
 
-### RF-06. Extraer datos del programa
-Cuando el documento sea legible, el sistema debe intentar extraer:
-
-- código del programa,
+- codigo del programa,
 - nombre del programa,
 - competencias,
 - resultados,
@@ -224,8 +271,8 @@ Cuando el documento sea legible, el sistema debe intentar extraer:
 - conocimientos de proceso,
 - criterios.
 
-### RF-07. Permitir fallback manual del programa
-Si la extracción es parcial o falla, el sistema debe permitir completar manualmente la información faltante.
+### RF-07. Correccion post-importacion de lo faltante
+Si la importacion Excel no resuelve ciertos campos de forma confiable, el sistema debe permitir correccion puntual SOLO de lo faltante, sin convertirlo en carril manual de entrada.
 
 ### RF-08. Gestionar competencias
 El sistema debe permitir crear, editar y eliminar competencias.
@@ -275,17 +322,13 @@ Los campos mínimos del proyecto son:
 El sistema debe guardar el proyecto aunque esté incompleto.
 
 ### RF-21. Cargar PDF del proyecto
-El sistema debe permitir subir un archivo PDF del proyecto.
+El sistema debe permitir subir un archivo PDF del proyecto como evidencia documental.
 
-### RF-22. Diagnosticar legibilidad del proyecto
-El sistema debe clasificar el PDF del proyecto como:
+### RF-22. Validar formato del PDF del proyecto
+El sistema debe verificar que el archivo subido sea un PDF valido.
 
-- legible,
-- parcialmente legible,
-- no legible.
-
-### RF-23. Extraer datos del proyecto
-Cuando el documento sea legible, el sistema debe intentar extraer:
+### RF-23. Importar datos del proyecto desde fuente estructurada
+El sistema debe importar desde Excel/matriz:
 
 - código del proyecto,
 - nombre del proyecto,
@@ -293,8 +336,8 @@ Cuando el documento sea legible, el sistema debe intentar extraer:
 - fases,
 - actividades.
 
-### RF-24. Permitir fallback manual del proyecto
-Si la extracción es parcial o falla, el sistema debe permitir completar manualmente la información faltante.
+### RF-24. Correccion post-importacion del proyecto
+Si la importacion no resuelve ciertos campos de forma confiable, el sistema debe permitir correccion puntual SOLO de lo faltante, sin convertirlo en carril manual de entrada.
 
 ### RF-25. Gestionar fases
 El sistema debe permitir crear, editar y eliminar fases del proyecto.
@@ -441,6 +484,11 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 - no duplicar conocimientos exactos dentro de la misma categoría y competencia,
 - no duplicar criterios exactos dentro de la misma competencia.
 
+Durante preview/importacion Excel, los conocimientos y criterios sin
+competencia confiable no se consideran error fatal: se conservan como pendientes
+de asignacion y la duplicidad se evalua cuando el usuario seleccione el destino
+final. La ausencia de `rap_id` no genera pendiente si la competencia esta clara.
+
 ## 12.3 Validaciones del proyecto
 - no duplicar actividad exacta dentro de la misma fase,
 - no permitir actividades sin fase,
@@ -449,43 +497,42 @@ Si el programa vuelve a EN_REVISION, el sistema debe advertir que el proyecto as
 
 ---
 
-# 13. Reglas de extracción documental
+# 13. Reglas de fuente documental e importacion Excel
 
-## 13.1 Objetivo de extracción del programa
-El sistema debe intentar extraer del PDF del programa:
+> TASK-08.5 deja el PDF como evidencia documental. TASK-UNICO-CARRIL elimina
+> el carril manual: Excel canonico es la unica fuente estructurada para programa
+> y proyecto.
 
-- código,
-- nombre,
-- competencias,
-- resultados,
-- saber,
-- proceso,
-- criterios.
+## 13.1 Objetivo de carga del programa
+El sistema debe permitir cargar el PDF del programa como evidencia documental
+en MinIO. No se realiza extraccion curricular desde el PDF.
 
-## 13.2 Objetivo de extracción del proyecto
-El sistema debe intentar extraer del PDF del proyecto:
+El sistema debe permitir importar datos del programa desde Excel canonico `.xlsx`
+mediante preview y confirmacion explícita.
 
-- código,
-- nombre,
-- versión,
-- fases,
-- actividades.
+## 13.2 Objetivo de carga del proyecto
+El sistema debe permitir cargar el PDF del proyecto como evidencia documental
+en MinIO. No se realiza extraccion curricular desde el PDF.
+
+El sistema debe permitir importar datos del proyecto desde fuente estructurada
+tipo Excel/matriz. Los documentos del proyecto usan el prefijo MinIO
+`proyectos-formativos/{referencia_id}/documentos/...` y los Excel usan
+`proyectos-formativos/{referencia_id}/excel/...`.
 
 ## 13.3 Manejo de fallos
-Cuando un campo no pueda ser extraído, el sistema debe:
+Cuando la importacion Excel no pueda resolver un campo de forma confiable, el sistema debe:
 
 1. informar el motivo,
 2. marcar el campo como pendiente,
-3. habilitar edición manual.
+3. habilitar correccion post-importacion SOLO para completar lo faltante sin reactivar captura manual como fuente.
 
 ## 13.4 Motivos mínimos de fallo
-- PDF escaneado
-- documento ilegible
-- baja resolución
-- estructura no reconocida
-- campo no encontrado
+- archivo Excel no canonico
+- hojas faltantes
+- encabezados invalidos
+- claves cruzadas rotas
+- duplicados
 - contenido ambiguo
-- archivo protegido
 
 ---
 
@@ -540,7 +587,7 @@ La vista consolidada debe permitir volver a editar antes del cierre.
 ## ResultadoAprendizaje
 - id
 - competencia_id
-- codigo_resultado
+- codigo_resultado (`rap_id` estable cuando proviene del Excel canonico)
 - descripcion
 - estado
 - orden
@@ -566,6 +613,21 @@ La vista consolidada debe permitir volver a editar antes del cierre.
 - codigo_proyecto
 - nombre_proyecto
 - version_proyecto
+
+## ElementoCurricularPendiente
+- id
+- referencia_id
+- programa_id
+- tipo_elemento
+- tipo_conocimiento
+- descripcion
+- competencia_id_origen_excel
+- rap_id_origen_excel
+- motivo
+- estado
+- competencia_destino_id
+- resultado_destino_id
+- elemento_creado_id
 - estado
 - fuente_cargue
 - fecha_creacion
@@ -642,11 +704,8 @@ No deben implementarse funcionalidades de fases futuras dentro de este alcance.
 
 # 18. Criterios de aceptación globales
 
-## CA-01
-El programa puede iniciarse manualmente o desde PDF.
-
 ## CA-02
-Si el PDF del programa no es legible, el sistema permite completar manualmente.
+El programa puede iniciarse desde Excel canonico; el PDF queda como soporte documental.
 
 ## CA-03
 El sistema guarda automáticamente el avance en borrador.
@@ -661,7 +720,7 @@ El proyecto permanece bloqueado mientras el programa no esté completo.
 El proyecto puede iniciarse cuando el programa esté completo.
 
 ## CA-07
-Si el PDF del proyecto no es legible, el sistema permite completar manualmente.
+El proyecto puede iniciarse cuando el programa esté completo.
 
 ## CA-08
 El proyecto no puede cerrarse si faltan fases o actividades válidas.
@@ -691,13 +750,21 @@ La Fase 1 se considera terminada cuando el sistema permite:
 
 - crear y revisar el programa,
 - guardar borradores del programa,
-- extraer y completar manualmente información del programa,
 - gestionar la estructura curricular,
 - validar y cerrar el programa,
 - bloquear y habilitar el proyecto correctamente,
 - crear y revisar el proyecto,
 - guardar borradores del proyecto,
-- extraer y completar manualmente información del proyecto,
 - gestionar fases y actividades,
 - validar y cerrar el proyecto,
 - y mantener trazabilidad básica del proceso.
+
+## Exportacion GPFI-F-134 V05
+
+- Plantilla: `backend/src/infrastructure/templates/planeacion/GPFI-F-134V05.xlsx`.
+- Hojas: `Instrucciones` intacta y `FASE` diligenciada.
+- Encabezado: fecha, programa, modalidad, código/versión, proyecto, equipo curricular, regional y centro.
+- Tabla `FASE`: columnas A:P según fase, actividad, competencia, RAP, saberes, criterios y campos complementarios.
+- Endpoints individuales: `POST/GET /api/v1/planeaciones/{planeacion_id}/generar-formato-oficial` y `descargar-formato-oficial`.
+- Endpoints consolidados: `POST/GET /api/v1/planeaciones/proyecto/{proyecto_id}/generar-formato-oficial` y `descargar-formato-oficial`.
+- La descarga usa `StreamingResponse`, content type OOXML y `Content-Disposition` UTF-8.

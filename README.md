@@ -85,6 +85,23 @@ docker compose up -d postgres
 
 El servicio crea la base `sena_guias_db` en `localhost:5432`.
 
+### pgAdmin
+
+```bash
+docker compose up -d postgres pgadmin
+```
+
+pgAdmin queda disponible en `http://localhost:5050`.
+
+Credenciales por defecto:
+
+- Email: `admin@example.com`
+- Password: `admin123`
+
+Si necesitas cambiarlas sin modificar el compose, define
+`PGADMIN_DEFAULT_EMAIL` y `PGADMIN_DEFAULT_PASSWORD` antes de levantar el
+servicio.
+
 ### Frontend
 
 ```bash
@@ -98,10 +115,14 @@ Aplicacion disponible en `http://localhost:3000`.
 
 ```bash
 cd backend
-uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+uv run python -m src.dev_server
 ```
 
 API disponible en `http://localhost:8000` y healthcheck en `http://localhost:8000/api/v1/health`.
+
+En Windows no arranques el backend con `uvicorn src.main:app` directo: el
+launcher `src.dev_server` configura primero la politica de event loop compatible
+con el driver async de PostgreSQL.
 
 ## Calidad base
 

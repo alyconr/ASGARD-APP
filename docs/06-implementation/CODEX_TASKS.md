@@ -13,6 +13,48 @@ Este documento divide la implementación de la Fase 1 en tareas pequeñas, orden
 Cada tarea debe resolverse de forma incremental y verificable.  
 Codex no debe saltarse tareas ni mezclar varias iteraciones grandes en una sola entrega.
 
+## Decision funcional TASK-UNICO-CARRIL
+
+TASK-08.5 se ejecutó y alineó el programa a Excel canonico.
+Esta refactorizacion completa TASK-UNICO-CARRIL:
+
+- elimina el carril manual como modo operativo para programa y proyecto;
+- reinterpreta TASK-18, TASK-19 y siguientes en coherencia con el unico carril;
+- el PDF queda como evidencia documental para programa y proyecto;
+- el Excel/matriz es la unica fuente estructurada activa.
+- `datos-programa` y `datos-proyecto` quedan eliminados como pasos funcionales;
+- el programa inicia en `origen-documental`, muestra resumen compacto tras importacion y revisa competencias en modal paginada;
+- `estructura-curricular` trabaja por competencia seleccionada y usa selectores progresivos para conocimientos/criterios;
+- el proyecto inicia en `fuente-proyecto`;
+- MinIO usa `proyectos-formativos/{referencia_id}/documentos/...` para PDF de proyecto y `proyectos-formativos/{referencia_id}/excel/...` para matriz Excel.
+
+La importacion curricular se organiza principalmente por competencia. Los
+resultados, conocimientos y criterios quedan bajo la competencia; `resultado_id`
+en conocimientos y criterios es opcional y secundario. Solo los elementos sin
+competencia confiable quedan pendientes de conciliacion.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+Se incorpora un dashboard maestro ASGARD como entrada principal:
+
+- `/` muestra estado agregado, metricas, bloqueos y mapa navegable;
+- `/programa` contiene el wizard de programa;
+- proyecto requiere programa `COMPLETO`;
+- planeacion requiere programa y proyecto `COMPLETO`;
+- el backend expone el agregado por `GET /api/v1/dashboard/{referencia_id}`;
+- las pruebas deben cubrir servicio backend, gates y UI.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Se incorpora un asistente guiado transversal para los wizards:
+
+- visible en programa, proyecto y planeacion;
+- flotante, colapsable y no invasivo;
+- con severidad, mensaje, checklist y CTA;
+- basado en estado real de wizard, gates backend y contexto de planeacion;
+- con persistencia local ligera de experiencia;
+- sin reemplazar validadores ni reglas de habilitacion.
+
 ---
 
 # 2. Instrucción general para todas las tareas
@@ -39,6 +81,54 @@ Reglas generales:
 ---
 
 # 3. Tareas
+
+## TASK-DASHBOARD-MAESTRO-ASGARD. Centralizar acceso y progreso de Fase 1
+
+### Objetivo
+Convertir la home en un panel maestro que agregue programa, proyecto y planeacion sin saltar reglas de negocio.
+
+### Debe hacer
+- mover el wizard de programa a `/programa`,
+- crear endpoint agregado `GET /api/v1/dashboard/{referencia_id}`,
+- mostrar estados, acciones requeridas, metricas y mapa navegable,
+- bloquear proyecto hasta programa `COMPLETO`,
+- bloquear planeacion hasta programa y proyecto `COMPLETO`.
+
+### Debe entregar
+- servicio backend de dashboard,
+- contratos HTTP,
+- UI del dashboard maestro,
+- pruebas backend y frontend del flujo habilitado/bloqueado.
+
+### Aceptacion
+- `/` no abre directamente un wizard;
+- el proyecto no se habilita por PDF evidencia ni por programa incompleto;
+- la planeacion no permite guardar ni confirmar si el proyecto no esta `COMPLETO`;
+- el mapa navegable solo activa enlaces disponibles.
+
+---
+
+## TASK-ASISTENTE-GUIADO-ASGARD. Guia transversal de usuario
+
+### Objetivo
+Agregar un asistente visual reutilizable que oriente al usuario durante los wizards de programa, proyecto y planeacion.
+
+### Debe hacer
+- crear motor de reglas de guia;
+- crear componente flotante colapsable;
+- integrar programa, proyecto y planeacion;
+- mostrar advertencias entre wizards;
+- persistir preferencias ligeras de UX;
+- agregar pruebas de motor y componente.
+
+### Aceptacion
+- el asistente aparece en los tres wizards;
+- muestra mensajes por paso y severidad;
+- advierte cuando proyecto o planeacion estan bloqueados;
+- no reemplaza validaciones reales ni modifica gates;
+- conserva UX ligera y no invasiva.
+
+---
 
 ## TASK-01. Crear la base del proyecto
 
@@ -164,7 +254,9 @@ Crear la navegación inicial del programa de formación.
 
 ---
 
-## TASK-05. Implementar formulario base del programa
+## TASK-05. Implementar formulario base del programa [DEPRECATED - eliminado por REFACTOR-FLUJO-PROGRAMA-PROYECTO]
+
+Nota vigente: esta tarea queda reemplazada por importacion Excel canonica. El paso `datos-programa` no existe y no debe reactivarse como captura manual.
 
 ### Objetivo
 Capturar los datos mínimos del programa.
@@ -192,65 +284,48 @@ Capturar los datos mínimos del programa.
 
 ---
 
-## TASK-06. Implementar carga y diagnóstico de PDF del programa
+## TASK-06. Implementar carga y diagnóstico de PDF del programa como evidencia
 
 ### Objetivo
-Permitir subir un PDF del programa y evaluar si es legible.
+Permitir subir un PDF del programa como evidencia documental en MinIO.
 
 ### Debe hacer
 - implementar carga de archivo PDF,
 - validar formato,
-- analizar si el PDF tiene texto extraíble,
-- clasificar como:
-  - legible,
-  - parcialmente legible,
-  - no legible.
+- almacenar en MinIO como evidencia,
+- registrar metadata en el borrador.
 
 ### Debe entregar
 - endpoint/controlador de carga,
-- servicio de diagnóstico,
-- respuesta estructurada con estado de legibilidad.
+- almacenamiento en MinIO,
+- metadata de validación en borrador.
 
 ### No debe hacer
-- extracción avanzada completa en esta tarea.
+- realizar extracción curricular desde el PDF,
+- intentar leer contenido del PDF para poblar campos,
+- clasificar legibilidad como fuente de datos.
 
 ### Aceptación
 - el sistema acepta PDF válido,
 - el sistema rechaza formatos no válidos,
-- el sistema devuelve diagnóstico legible/parcial/no legible.
+- el PDF se almacena como evidencia en MinIO.
 
 ---
 
-## TASK-07. Implementar extracción híbrida del programa
+## TASK-07. Carga PDF del programa como evidencia [DEPRECATED - reemplazado por TASK-06]
 
 ### Objetivo
-Extraer automáticamente los campos del programa cuando sea posible.
+Esta tarea queda reemplazada por TASK-06. El PDF ya no es fuente de extracción curricular.
 
 ### Debe hacer
-- extraer:
-  - código del programa,
-  - nombre del programa,
-  - competencias,
-  - resultados,
-  - conocimientos de saber,
-  - conocimientos de proceso,
-  - criterios,
-- marcar estado de cada campo,
-- registrar motivo de fallo cuando no se pueda extraer,
-- dejar listos los campos para revisión manual.
-
-### Debe entregar
-- servicio de extracción,
-- estructura de respuesta por campo,
-- integración con el wizard.
+- marcar esta tarea como DEPRECATED,
+- actualizar referencias cruzadas.
 
 ### No debe hacer
-- asumir que lo extraído ya quedó validado.
+- implementar ningun flujo de extracción desde PDF.
 
 ### Aceptación
-- los campos extraídos se prellenan,
-- los campos faltantes quedan marcados,
-- el usuario puede continuar con ingreso manual.
+- la tarea queda marcada como obsoleta.
 
 ---
 
@@ -277,6 +352,56 @@ Permitir registrar, editar y eliminar competencias del programa.
 - se pueden crear varias competencias,
 - no se aceptan competencias vacías,
 - no se aceptan duplicados.
+
+---
+
+## TASK-08.5. Refactorizar fuente de extraccion a Excel canonico
+
+### Objetivo
+Desactivar la extraccion curricular desde PDF y habilitar un carril de Excel canonico antes de TASK-09.
+
+### Debe hacer
+- conservar la carga del PDF como evidencia documental en MinIO,
+- eliminar el endpoint y la UI activa de extraccion desde PDF,
+- validar workbook `.xlsx` con hojas `Programa`, `Competencias`, `Resultados`, `Conocimientos` y `Criterios`,
+- validar encabezados exactos, claves cruzadas, tipos minimos y duplicados,
+- generar preview sin persistir tablas relacionales,
+- confirmar importacion para materializar ProgramaFormacion, Competencia, ResultadoAprendizaje, Conocimiento y CriterioEvaluacion,
+- asociar conocimientos y criterios a la competencia aunque no tengan `rap_id`,
+- crear pendientes solo para conocimientos o criterios sin competencia confiable,
+- mantener el mismo `referencia_id` del wizard y sincronizar metadata en `payload_json`.
+
+### No debe hacer
+- no implementar el CRUD manual de resultados de TASK-09,
+- no reactivar extraccion PDF,
+- no guardar binarios Excel en PostgreSQL.
+
+### Aceptacion
+- PDF sigue en MinIO como soporte documental,
+- Excel canonico valida y muestra preview,
+- confirmacion importa la estructura curricular completa,
+- conocimientos y criterios quedan organizados por competencia y no dependen de RAP,
+- el borrador conserva el mismo `referencia_id`,
+- TASK-09 puede continuar sobre la base importada.
+
+---
+
+## TASK-08.6. Refactor visual y funcional del flujo programa [COMPLETA]
+
+### Objetivo
+Eliminar `datos-programa`, compactar el origen documental y focalizar la gestion curricular.
+
+### Debe hacer
+- iniciar el wizard en `origen-documental`,
+- mostrar resumen compacto tras importacion confirmada,
+- abrir competencias importadas en modal paginada,
+- usar selector/filtro de competencia en `estructura-curricular`,
+- seleccionar conocimientos y criterios progresivamente antes de renderizarlos.
+
+### Aceptacion
+- no existe `datos-programa`,
+- no hay render masivo de competencias en origen documental,
+- el paso curricular trabaja por competencia seleccionada.
 
 ---
 
@@ -462,7 +587,9 @@ Crear el flujo principal del proyecto formativo.
 
 ---
 
-## TASK-17. Implementar formulario base del proyecto
+## TASK-17. Implementar formulario base del proyecto [DEPRECATED - eliminado por REFACTOR-FLUJO-PROGRAMA-PROYECTO]
+
+Nota vigente: esta tarea queda reemplazada por `fuente-proyecto`, con PDF evidencia y Excel/matriz estructurada. El paso `datos-proyecto` no existe y no debe reactivarse como captura manual.
 
 ### Objetivo
 Capturar los datos mínimos del proyecto.
@@ -485,51 +612,71 @@ Capturar los datos mínimos del proyecto.
 
 ---
 
-## TASK-18. Implementar carga y diagnóstico de PDF del proyecto
+## TASK-18. Implementar carga y diagnóstico de PDF del proyecto como evidencia ✅ COMPLETA
 
 ### Objetivo
-Permitir subir el PDF del proyecto y evaluar legibilidad.
+Permitir subir el PDF del proyecto como evidencia documental en MinIO.
 
 ### Debe hacer
 - carga de PDF,
 - validación de archivo,
-- diagnóstico de legibilidad,
-- respuesta estructurada.
+- almacenamiento en MinIO como evidencia bajo `proyectos-formativos/{referencia_id}/documentos/...`,
+- registro de metadata en borrador.
 
 ### Debe entregar
 - endpoint de carga,
-- servicio de diagnóstico.
+- almacenamiento en MinIO,
+- metadata de validación en borrador.
+
+### No debe hacer
+- realizar extracción curricular desde el PDF del proyecto,
+- intentar leer contenido del PDF para poblar campos,
+- clasificar legibilidad como fuente de datos.
 
 ### Aceptación
-- el sistema clasifica correctamente el archivo,
-- el usuario ve si podrá extraer o completar manualmente.
+- el sistema clasifica correctamente el archivo como evidencia,
+- el usuario ve el PDF almacenado como soporte documental.
+
+### Implementado
+- backend: `proyecto_documentos.py` (servicio, DTOs, controller, endpoint `POST /proyectos/{ref}/documentos/proyecto-pdf`)
+- frontend: `proyecto-document-upload.tsx` (uploader), `document-upload-api.ts` (client), integración en `proyecto-wizard-shell.tsx`
+- tipos: `ProyectoPdfUploadResult`, `ProyectoStoredDocument`, `normalizeProyectoDocumental`
+- pruebas: `test_proyecto_documentos_service.py`, `proyecto-document-upload.test.tsx`
 
 ---
 
-## TASK-19. Implementar extracción híbrida del proyecto
+## TASK-19. Definir e implementar fuente estructurada del proyecto [reinterpretada] ✅ COMPLETA
 
 ### Objetivo
-Extraer automáticamente los datos del proyecto cuando sea posible.
+Implementar la importación estructurada del proyecto desde una matriz/Excel, alineada con el unico carril funcional.
 
 ### Debe hacer
-- extraer:
-  - nombre del proyecto,
-  - código del proyecto,
-  - versión,
-  - fases,
-  - actividades,
-- marcar estado por campo,
-- indicar motivo de fallo cuando aplique,
-- habilitar edición manual de faltantes.
+- definir el contrato canonico del workbook del proyecto (hojas: Proyecto, Fases, Actividades),
+- validar workbook `.xlsx`,
+- almacenar Excel bajo `proyectos-formativos/{referencia_id}/excel/...`,
+- generar preview sin persistencia relacional,
+- confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto,
+- permitir correccion post-importacion SOLO para lo estrictamente faltante.
 
 ### Debe entregar
-- servicio de extracción del proyecto,
-- integración con wizard del proyecto.
+- servicio de importacion del proyecto,
+- preview funcional,
+- confirmacion de importacion,
+- integracion con wizard del proyecto.
 
-### Aceptación
-- el sistema prellena lo que identifica,
-- deja pendiente lo que no puede extraer,
-- no asume validación automática.
+### Aceptacion
+- el sistema importa desde Excel/matriz cuando se disponga,
+- deja pendiente lo que no puede importar,
+- no asume validacion automatica,
+- no intenta extraccion desde PDF.
+
+### Implementado
+- backend: `proyecto_excel.py` (servicio, DTOs, controller, endpoints preview/confirm, repository adapter)
+- frontend: `proyecto-excel-import.tsx` (uploader + preview + confirmacion), `excel-import-api.ts` (client)
+- integracion: wizard-shell renderiza ambos uploaders en paso `fuente-proyecto`
+- normalizacion: `normalizeProyectoDocumental` restaura preview y confirmacion desde borrador
+- tipos: `ProyectoExcelPreviewState`, `ExcelPreviewSummary`, `ExcelFasePreview`, `ExcelValidationIssue`
+- pruebas: `test_proyecto_excel_service.py` (13 tests), `proyecto-excel-import.test.tsx` (10 tests)
 
 ---
 
@@ -708,12 +855,12 @@ Validar el comportamiento de los módulos conectados.
 Validar el flujo completo del usuario.
 
 ### Debe hacer
-- escenario programa manual,
-- escenario programa con extracción parcial,
+- escenario programa importado desde Excel,
+- escenario programa con correccion post-importacion,
 - escenario proyecto bloqueado,
 - escenario proyecto habilitado,
 - escenario proyecto completo,
-- escenario impacto por edición posterior.
+- escenario impacto por edicion posterior.
 
 ### Debe entregar
 - suite mínima end-to-end.
@@ -757,27 +904,28 @@ Ejecutar en este orden:
 6. TASK-06
 7. TASK-07
 8. TASK-08
-9. TASK-09
-10. TASK-10
-11. TASK-11
-12. TASK-12
-13. TASK-13
-14. TASK-14
-15. TASK-15
-16. TASK-16
-17. TASK-17
-18. TASK-18
-19. TASK-19
-20. TASK-20
-21. TASK-21
-22. TASK-22
-23. TASK-23
-24. TASK-24
-25. TASK-25
-26. TASK-26
-27. TASK-27
-28. TASK-28
-29. TASK-29
+9. TASK-08.5
+10. TASK-09
+11. TASK-10
+12. TASK-11
+13. TASK-12
+14. TASK-13
+15. TASK-14
+16. TASK-15
+17. TASK-16
+18. TASK-17
+19. TASK-18
+20. TASK-19
+21. TASK-20
+22. TASK-21
+23. TASK-22
+24. TASK-23
+25. TASK-24
+26. TASK-25
+27. TASK-26
+28. TASK-27
+29. TASK-28
+30. TASK-29
 
 ---
 
@@ -816,3 +964,14 @@ Una tarea se considera terminada cuando:
 - no rompe tareas anteriores,
 - mantiene persistencia y trazabilidad,
 - y puede verificarse funcionalmente.
+
+## TASK-FORMATO-OFICIAL-GPFI-F-134-V05
+
+- [x] Empaquetar la plantilla oficial inmutable.
+- [x] Persistir modalidad y metadata documental compartida.
+- [x] Reemplazar el JSON descargable por Excel oficial.
+- [x] Implementar exportación individual y consolidada.
+- [x] Validar metadata, relaciones curriculares, asignaciones y horas.
+- [x] Guardar con `save_excel` y descargar con `read_excel`.
+- [x] Integrar vista previa, dashboard y asistente guiado.
+- [x] Cubrir generador, HTTP, API Blob y UI con pruebas focalizadas.

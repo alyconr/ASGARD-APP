@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-
+mcp_config.json
 # Environment and secrets
 .env
 .env.*
@@ -57,3 +57,7 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+opencode.json
+.codex/config.toml
+

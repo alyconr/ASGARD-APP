@@ -1,227 +1,389 @@
-# RAPID OS - CODEX PROJECT INSTRUCTIONS
-# SOURCE OF TRUTH FOR CODEX.
+# AGENTS.md
+# SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
 
+# Importante
+Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
 
-### 🛑 TECH STACK
-# ⚡ TECH STACK: MODERN WEB
-- **Framework:** Next.js 14+ (App Router).
-- **Language:** TypeScript 5+ (Strict Mode).
-- **Styling:** TailwindCSS v4.
-- **3D:** React Three Fiber (R3F) + Drei.
-- **Motion:** Framer Motion (UI), GSAP (Sequences).
-- **Components:** Shadcn UI + Radix UI + Lucide React.
-- **Performance:** Use `Suspense` for all models. 
-- **State:** Zustand (Client), TanStack Query (Server).
-- **Icons:** Lucide React.
-- **Version Control:** Git.
+NO vuelvas a leer archivos para los cuales codegraph_explore ya devolvió código fuente. Los fragmentos fuente son completos y autoritativos.
 
-### 🛑 TOPOLOGY
-# 🏗️ TOPOLOGY: SEPARATED FRONTEND & BACKEND
+Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes adicionales' si necesitas más detalle, o si codegraph no arrojó resultados.
 
-## ARCHITECTURE
-- **Type:** Decoupled.
-- **Frontend:** Consumer (Next.js/React).
-- **Backend:** Provider (Python FastAPI / Go / Node).
-- **Database:** Separate (PostgreSQL / MongoDB).
-- **Communication:** REST API or GraphQL.
+## Proyecto
+Aplicación web para construcción de guías de aprendizaje SENA
 
-## DATA STRATEGY
-- **Frontend:** NEVER access the DB directly. ALWAYS fetch from the Backend API.
-- **Contracts:** Use TypeScript interfaces mirroring the API DTOs.
+## Fase activa
+Fase 1
 
-### 🛑 SECURITY
-# 🛡️ SECURITY PROTOCOLS (NON-NEGOTIABLE)
-1. **Secrets:** NEVER commit .env files. Use Secret Managers.
-2. **Injection:** Use ORM parameterization. NEVER concatenate SQL.
-3. **Auth:** Validate JWT on every private endpoint.
-4. **PII:** Do not log emails or phones in plain text.
+## Propósito operativo
+Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
 
-### 🛑 BUSINESS
-# Business Constitution
-## Proyecto: Aplicación web para construcción de guías de aprendizaje SENA
-## Fase activa: Fase 1
-## Estado: Reglas obligatorias para implementación
+## Fuente estructurada unica
+A partir de TASK-08.5, la matriz Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto.
+El PDF queda exclusivamente como evidencia documental en MinIO.
+El carril manual ya no existe como fuente funcional de captura.
+
+## Decision funcional TASK-08.5
+A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF queda reemplazada para el programa de formacion por esta estrategia:
+
+- el PDF se carga, valida de forma basica, diagnostica y conserva solo como evidencia documental en MinIO;
+- el PDF no se usa como fuente activa para extraer ni prellenar informacion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para analizar, validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la organizacion curricular base de la importacion Excel es por competencia: Competencia -> Resultados, Competencia -> Conocimientos y Competencia -> Criterios;
+- conocimientos y criterios se asocian inicialmente a la competencia; `resultado_id` es opcional y secundario para uso posterior;
+- solo quedan pendientes de conciliacion los conocimientos o criterios que no puedan asociarse a una competencia de forma confiable;
+- la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
+
+## Decision funcional TASK-UNICO-CARRIL
+A partir de esta refactorizacion integral:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura para programa o proyecto;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base para TASK-19;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+A partir de este refactor integral:
+
+- el paso `datos-programa` desaparece por completo del wizard, tipos, navegacion, sidebar, tests y documentacion;
+- el wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y termina en `revision-programa`;
+- `origen-documental` conserva PDF como evidencia y Excel canonico como unica fuente estructurada;
+# AGENTS.md
+# SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
+
+# Importante
+Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
+
+NO vuelvas a leer archivos para los cuales codegraph_explore ya devolvió código fuente. Los fragmentos fuente son completos y autoritativos.
+
+Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes adicionales' si necesitas más detalle, o si codegraph no arrojó resultados.
+
+## Proyecto
+Aplicación web para construcción de guías de aprendizaje SENA
+
+## Fase activa
+Fase 1
+
+## Propósito operativo
+Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
+
+## Fuente estructurada unica
+A partir de TASK-08.5, la matriz Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto.
+El PDF queda exclusivamente como evidencia documental en MinIO.
+El carril manual ya no existe como fuente funcional de captura.
+
+## Decision funcional TASK-08.5
+A partir de TASK-08.5, toda mencion anterior a extraccion hibrida desde PDF queda reemplazada para el programa de formacion por esta estrategia:
+
+- el PDF se carga, valida de forma basica, diagnostica y conserva solo como evidencia documental en MinIO;
+- el PDF no se usa como fuente activa para extraer ni prellenar informacion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para analizar, validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la organizacion curricular base de la importacion Excel es por competencia: Competencia -> Resultados, Competencia -> Conocimientos y Competencia -> Criterios;
+- conocimientos y criterios se asocian inicialmente a la competencia; `resultado_id` es opcional y secundario para uso posterior;
+- solo quedan pendientes de conciliacion los conocimientos o criterios que no puedan asociarse a una competencia de forma confiable;
+- la importacion Excel debe usar el `referencia_id` estable del wizard y no debe crear un flujo nuevo.
+
+## Decision funcional TASK-UNICO-CARRIL
+A partir de esta refactorizacion integral:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura para programa o proyecto;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base para TASK-19;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+A partir de este refactor integral:
+
+- el paso `datos-programa` desaparece por completo del wizard, tipos, navegacion, sidebar, tests y documentacion;
+- el wizard del programa inicia en `origen-documental`, continua en `estructura-curricular` y termina en `revision-programa`;
+- `origen-documental` conserva PDF como evidencia y Excel canonico como unica fuente estructurada;
+- tras confirmar Excel, el origen documental muestra solo un resumen compacto y la revision de competencias importadas se hace en una modal paginada;
+- `estructura-curricular` se trabaja con selector/filtro de competencia antes de renderizar resultados, conocimientos o criterios;
+- conocimientos y criterios se seleccionan progresivamente desde listas eficientes antes de renderizar sus contenedores;
+- el proyecto se habilita solo con programa `COMPLETO` y opera con `fuente-proyecto`, PDF evidencia y Excel/matriz estructurada;
+- no existe paso `datos-proyecto` ni formulario base manual como carril de entrada;
+- el prefijo canonico de MinIO para documentos del proyecto es `proyectos-formativos/{referencia_id}/documentos/...`;
+- el prefijo canonico de MinIO para Excel del proyecto es `proyectos-formativos/{referencia_id}/excel/...`.
+
+## Decision funcional WIZARD-PLANEACION-PEDAGOGICA
+A partir de la implementación de la planeación pedagógica:
+
+- la planeación pedagógica representa una actividad de aprendizaje integrada construida dentro de una actividad de proyecto formativo;
+- se implementa el modelo relacional `PlaneacionPedagogica` y tablas M2M de asociación para resultados (`planeacion_resultados`), conocimientos (`planeacion_conocimientos`), y criterios (`planeacion_criterios`);
+- los campos complementarios didácticos (estrategias didácticas, ambientes de aprendizaje, recursos y medios, duración en horas, e instructor responsable) se consolidan de forma flexible y extensible dentro de una columna JSONB `datos_complementarios`;
+- al confirmar la planeación de una actividad de aprendizaje, se genera el workbook institucional `GPFI-F-134 V05` desde la plantilla canónica del backend y se almacena como `.xlsx` en MinIO bajo rutas legibles de programa, proyecto y planeación;
+- la eliminación de una planeación elimina tanto el registro de base de datos como el archivo físico de MinIO;
+- completar la planeación para una actividad de aprendizaje guarda de manera independiente el estado sin afectar o sobrescribir las demás actividades del proyecto.
+
+## Decision funcional PLANEACION-INTEGRADA-MULTICOMPETENCIA-MULTIRAP
+A partir del refactor del módulo de planeación pedagógica:
+
+- la unidad funcional de la planeación deja de ser el resultado de aprendizaje singular y pasa a ser la **Planeación Integrada de Actividad de Aprendizaje** dentro de una actividad de proyecto;
+- la jerarquía de selección en el wizard es estrictamente: **Fase → Actividad de Proyecto → Competencias (1..N) → Resultados de Aprendizaje (1..N RAP)**;
+- una misma actividad de aprendizaje puede integrar 1..N competencias y 1..N RAPs pertenecientes a dichas competencias, incluyendo combinaciones de resultados técnicos/específicos y transversales;
+- la información estructurada del proyecto materializada relacionalmente en `AsignacionCurricularProyecto` desde la matriz Excel `Planeacion_Proyecto` es la fuente de verdad autoritativa para responder qué competencias y RAPs pertenecen a cada actividad;
+- en el exportador del workbook oficial `GPFI-F-134 V05`, el bloque de la planeación integrada se expande a N filas (una fila por cada RAP seleccionado), agrupando por competencia; las horas didácticas (directas e independientes) pertenecen a la actividad de aprendizaje y se escriben exclusivamente en la primera fila de cada bloque para evitar duplicidad o suma errónea de horas;
+- la identidad de la planeación en PostgreSQL es su propia clave primaria `id` (UUID); la relación entre `ActividadProyecto` y `PlaneacionPedagogica` es estrictamente 1:N (`ActividadProyecto 1:N PlaneacionPedagogica`).
+
+## Decision funcional PLANEACION-ACTIVIDAD-PROYECTO-UNO-A-MUCHOS
+A partir del refactor de cardinalidad de la Planeación Pedagógica:
+
+- una **Actividad de Proyecto** puede contener **1..N Actividades de Aprendizaje / Planeaciones Pedagógicas** independientes (`ActividadProyecto 1:N PlaneacionPedagogica`);
+- se remueve la restricción de unicidad de base de datos `uq_planeacion_proyecto_actividad` mediante migración Alembic `e8f901a2b3c4`;
+- cada planeación pedagógica conserva la capacidad de integrar **1..N Competencias → 1..N RAPs**;
+- el backend opera bajo `planeacion_id == null` para CREAR una nueva planeación pedagógica dentro de la actividad de proyecto, y `planeacion_id != null` para ACTUALIZAR una planeación existente;
+- la lista de competencias filtradas en el frontend (`filteredCompetencias`) responde estrictamente a la actividad de proyecto seleccionada (sin fallback global a todas las competencias del proyecto);
+- las carpetas y llaves físicas en MinIO para los formatos `.xlsx` individuales incorporan un sufijo determinístico derivado del UUID (`id`) de la entidad para evitar colisiones entre planeaciones de la misma actividad;
+- en la exportación consolidada del workbook `GPFI-F-134 V05`, todas las planeaciones en estado `COMPLETO` pertenecientes a la misma actividad de proyecto se generan como bloques secuenciales continuos sin duplicar horas entre RAPs ni entre actividades de aprendizaje.
+
+## Decision funcional TIPO-RESULTADO-PROYECTO-ESTRICTO
+A partir del refactor de tipado de `tipo_resultado`:
+
+- el campo `tipo_resultado` en la materialización y vista previa de `Planeacion_Proyecto` se restringe estrictamente a los valores del enum de dominio `TipoResultadoProyecto`: `ESPECIFICO` y `TRANSVERSAL`;
+- durante la lectura y previsualización del Excel canónico, el valor se normaliza eliminando espacios de los extremos y convirtiéndolo a mayúsculas;
+- todo valor diferente a `ESPECIFICO` o `TRANSVERSAL` (ej. `TECNICO`, `OTRO`, `TRANSVERS`) es rechazado con un issue de validación explícito indicando la hoja `Planeacion_Proyecto`, fila, campo `tipo_resultado` y mensaje descriptivo, evitando que la fila sea materializada en la base de datos;
+- el tipo de resultado no se infiere jamás por nombre de competencia, código ni heurísticas; la fuente de verdad autoritativa es la columna `tipo_resultado` de la matriz Excel;
+- los DTOs, resúmenes y métricas de tablero utilizan la comparación directa contra los valores del enum `TipoResultadoProyecto`.
+
+## Decision funcional FORMATO-OFICIAL-PLANEACION-GPFI-F-134-V05
+
+- la salida oficial de la planeación es el workbook `GPFI-F-134 V05`; JSON deja de ser el artefacto descargable principal;
+- la plantilla binaria canónica vive en `backend/src/infrastructure/templates/planeacion/GPFI-F-134V05.xlsx` y nunca se sobrescribe;
+- `Instrucciones` permanece intacta y los datos se escriben exclusivamente en `FASE`;
+- `modalidad_formacion` pertenece al programa; fecha, clasificación, equipo de gestión curricular, regional y centro se persisten una sola vez por proyecto en `PlaneacionDocumentoConfig`;
+- la exportación individual genera un bloque de filas por cada RAP seleccionado en la planeación integrada;
+- la exportación consolidada incluye únicamente planeaciones `COMPLETO`, excluye borradores y ordena por fase, actividad, competencia y resultado;
+- antes de generar se validan pertenencias curriculares, coherencia fase/actividad, metadata institucional y la igualdad entre duración total y horas directas más independientes;
+- los Excel se guardan y leen desde MinIO con `save_excel` y `read_excel`; la descarga siempre transmite el archivo real desde backend.
+
+## Decision funcional REFACTOR-FLUJO-DOCUMENTAL-RESTRICCION-REHIDRATACION
+A partir del refactor del flujo documental de programa y proyecto:
+- el backend expone un endpoint de rehidratación `GET /api/v1/drafts/{referencia_id}/estado-documental` para consultar y reconstruir el estado completo y metadatos de los archivos del wizard;
+- al confirmarse ambas matrices Excel, se habilita una acción "Habilitar cargue de documentos PDF" que guarda el flag `cargue_pdf_habilitado` en la sección `documental` del borrador del proyecto formativo, lo que desbloquea visual y operativamente la carga de PDFs;
+- todos los archivos subidos a MinIO se guardan en rutas legibles y normalizadas bajo los prefijos de negocio `programas/{nombre_programa_sanitizado}-{codigo_programa}-{version_programa}/` y `proyectos-formativos/{nombre_proyecto_sanitizado}-{codigo_proyecto_sofia}/`, removiendo carpetas con UUIDs aleatorios de la estructura de MinIO.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+A partir del refactor del panel maestro:
+
+- la ruta `/` es el dashboard maestro ASGARD y no debe abrir directamente un wizard especifico;
+- el wizard de programa vive en `/programa` y conserva la secuencia `origen-documental`, `estructura-curricular`, `revision-programa`;
+- el proyecto solo se habilita cuando el programa esta `COMPLETO`;
+- la planeacion pedagogica solo se habilita cuando el programa y el proyecto estan `COMPLETO`;
+- el PDF como evidencia documental nunca habilita por si mismo el proyecto ni la planeacion;
+- el dashboard debe mostrar estados, bloqueos, acciones requeridas, metricas de avance y un mapa grafico navegable de programa, estructura curricular, proyecto y planeacion;
+- el backend debe exponer el estado agregado desde persistencia y no delegar las reglas de habilitacion exclusivamente al frontend.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+A partir de la implementacion del asistente guiado:
+
+- los wizards de programa, proyecto y planeacion pedagogica muestran un asistente visual flotante, colapsable y reutilizable;
+- el asistente deriva mensajes, checklist, severidad y CTA desde el estado real del wizard y desde reglas de backend ya expuestas;
+- el proyecto mantiene como fuente de bloqueo real la disponibilidad del backend y no una advertencia decorativa;
+- la planeacion pedagogica conserva el bloqueo backend que exige programa y proyecto en estado `COMPLETO`;
+- el asistente puede recordar de forma ligera si el usuario lo colapso para no invadir el flujo;
+- la guia nunca reemplaza las validaciones funcionales ni habilita modulos por si sola.
 
 ---
 
-# 1. Propósito del proyecto
+# 1. Prioridad de instrucciones
 
-Este proyecto construye la Fase 1 de una aplicación web para el equipo pedagógico del SENA.
+Si existe conflicto entre este archivo, una skill, MCP, o cualquier otro contexto, Codex debe obedecer en este orden:
 
-La Fase 1 tiene como objetivo capturar, revisar, editar y validar la información base del:
+1. `AGENTS.md`
+2. `/docs/01-business-rules/BUSINESS_RULES.md`
+3. `/docs/02-specs/SPECS.md`
+4. `/docs/05-architecture/DATA_MODEL.md`
+5. `/docs/03-user-stories/USER_STORIES.md`
+6. `/docs/04-traceability/TRACEABILITY_MATRIX.md`
+7. `/docs/06-implementation/IMPLEMENTATION_PLAN.md`
+8. `/docs/06-implementation/CODEX_TASKS.md`
+9. Skills invocadas en el hilo
+10. MCPs configurados en el entorno
 
-- programa de formación,
-- proyecto formativo,
-
-para dejar preparada la estructura necesaria para la futura construcción de guías de aprendizaje.
-
-La Fase 1 NO genera todavía la guía final.
-
----
-
-# 2. Resultado de negocio esperado
-
-El sistema debe permitir que un usuario gestor pedagógico:
-
-1. cargue o diligencie el programa de formación,
-2. capture competencias y su estructura curricular,
-3. revise y cierre el programa,
-4. cargue o diligencie el proyecto formativo,
-5. capture fases y actividades,
-6. revise y cierre el proyecto,
-7. deje toda la información validada y persistida para fases posteriores.
+Las skills y los MCP nunca pueden sobreescribir reglas del proyecto.
 
 ---
 
-# 3. Regla principal del dominio
+# 2. Orden de lectura obligatorio
 
-El proyecto formativo depende obligatoriamente del programa de formación.
+Antes de implementar cualquier tarea, leer en este orden:
 
-## Regla crítica
-NO se puede habilitar, crear ni cerrar el proyecto formativo mientras el programa de formación no esté completo y revisado.
+1. `/docs/01-business-rules/BUSINESS_RULES.md`
+2. `/docs/02-specs/SPECS.md`
+3. `/docs/03-user-stories/USER_STORIES.md`
+4. `/docs/04-traceability/TRACEABILITY_MATRIX.md`
+5. `/docs/05-architecture/DATA_MODEL.md`
+6. `/docs/06-implementation/IMPLEMENTATION_PLAN.md`
+7. `/docs/06-implementation/CODEX_TASKS.md`
+8.  `/docs/codegraph.md`
+
+No asumir requisitos fuera de esos documentos.
 
 ---
 
-# 4. Alcance obligatorio de Fase 1
+# 3. Stack permitido
+
+## Frontend
+- Next.js 14+ o superior
+- React
+- TypeScript en modo estricto
+- Tailwind CSS
+
+## Backend
+- FastAPI
+- Python tipado estrictamente
+
+## Base de datos
+- PostgreSQL
+
+## Persistencia y migraciones
+- SQLAlchemy
+- Alembic
+
+## Testing
+- Frontend: pruebas mínimas razonables cuando aplique
+- Backend: pytest
+- Validar lint, tipado y pruebas antes de cerrar tareas relevantes
+
+## Restricción
+No introducir sin autorización explícita:
+- React Three Fiber
+- Drei
+- GSAP
+- Framer Motion
+- Shadcn UI
+- Radix UI
+- Zustand
+- TanStack Query
+- Supabase
+- NestJS
+- Django
+- Express
+- MongoDB
+- GraphQL
+
+Solo se permite agregar una librería nueva si:
+1. resuelve una necesidad concreta de la tarea actual,
+2. no contradice `/docs`,
+3. y se reporta explícitamente en la entrega.
+
+---
+
+# 4. Topología obligatoria
+
+## Arquitectura
+- Frontend separado
+- Backend separado
+- Base de datos separada
+- Comunicación por API HTTP
+
+## Regla
+El frontend nunca debe acceder directamente a la base de datos.  
+Toda persistencia debe pasar por el backend.
+
+---
+
+# 5. Alcance estricto de Fase 1
 
 La Fase 1 SÍ incluye:
-
 - cargue del programa de formación,
 - cargue del proyecto formativo,
 - flujo tipo wizard,
-- extracción híbrida desde PDF,
-- fallback manual,
+- carga documental PDF como evidencia,
+- importación estructurada desde Excel canónico,
 - guardado automático en borrador,
 - revisión consolidada editable,
 - validación de completitud,
-- bloqueo y desbloqueo del proyecto,
+- bloqueo del proyecto hasta completar el programa,
 - auditoría básica,
 - pruebas mínimas.
 
 La Fase 1 NO incluye:
-
-- generación automática de la guía de aprendizaje,
+- generación automática de la guía final,
 - exportación a PDF,
 - exportación a DOCX,
 - versionamiento avanzado,
 - roles complejos,
+- autenticación avanzada no definida en `/docs`,
 - aprobaciones institucionales,
 - panel administrativo avanzado,
 - integraciones externas.
 
 ---
 
-# 5. Flujo obligatorio de UX
+# 6. Reglas críticas del dominio
 
-La experiencia principal debe implementarse como un wizard.
-
-El flujo obligatorio es:
-
-1. iniciar nuevo proceso o continuar borrador,
-2. cargar o diligenciar programa,
-3. extraer información si el PDF es legible,
-4. completar manualmente lo faltante,
-5. gestionar competencias y estructura curricular,
-6. revisar y cerrar programa,
-7. habilitar proyecto,
-8. cargar o diligenciar proyecto,
-9. extraer información si el PDF es legible,
-10. completar manualmente lo faltante,
-11. gestionar fases y actividades,
-12. revisar y cerrar proyecto.
-
-No se deben crear flujos alternos que rompan esta secuencia.
-
----
-
-# 6. Reglas obligatorias de persistencia
-
-## Guardado automático
-Todo avance del usuario debe guardarse automáticamente.
-
-## El borrador debe conservar
-- datos ingresados manualmente,
-- datos extraídos automáticamente,
-- campos pendientes,
-- paso actual del wizard,
-- estado del bloque.
-
-## Restricción
-Nunca se debe perder el trabajo del usuario al cambiar de paso, refrescar o retomar una sesión.
-
----
-
-# 7. Reglas obligatorias de extracción híbrida
-
-El sistema debe soportar dos modos:
-
-- extracción automática desde PDF,
-- diligenciamiento manual.
-
-## Regla de fallback
-Si el PDF no es legible, está escaneado o no permite extracción confiable, el sistema debe habilitar el ingreso manual inmediato.
-
-## Regla de extracción parcial
-Si solo se detectan algunos campos:
-- conservar los datos extraídos,
-- marcar los faltantes,
-- mostrar motivo del fallo,
-- permitir edición manual.
+## Dependencia principal
+El proyecto formativo depende obligatoriamente del programa de formación.
 
 ## Regla crítica
-La extracción automática NO equivale a validación humana.
+No crear, habilitar ni cerrar el proyecto formativo mientras el programa de formación no esté completo y revisado.
 
-Todo dato extraído debe ser revisado por el usuario antes del cierre.
+## Flujo obligatorio
+La UX principal debe implementarse como wizard y respetar esta secuencia:
 
----
+1. iniciar nuevo proceso o continuar borrador,
+2. abrir `origen-documental` del programa,
+3. cargar PDF solo como evidencia cuando exista,
+4. cargar, validar, previsualizar y confirmar Excel canónico como unica fuente estructurada,
+5. revisar competencias importadas mediante resumen compacto y modal paginada,
+6. gestionar estructura curricular por competencia seleccionada,
+7. revisar y cerrar programa,
+8. habilitar proyecto solo si el programa esta `COMPLETO`,
+9. abrir `fuente-proyecto`,
+10. cargar PDF del proyecto como evidencia documental,
+11. cargar, validar, previsualizar y confirmar Excel/matriz del proyecto,
+12. gestionar fases y actividades,
+13. revisar y cerrar proyecto.
 
-# 8. Reglas obligatorias del programa de formación
-
-## Datos mínimos del programa
-- código del programa,
-- nombre del programa.
-
-## Estructura mínima por competencia
-Cada competencia debe tener:
-- código,
-- nombre,
-- al menos un resultado de aprendizaje,
-- al menos un conocimiento de saber,
-- al menos un conocimiento de proceso,
-- al menos un criterio de evaluación.
-
-## Cierre del programa
-El programa solo puede pasar a estado COMPLETO cuando:
-- tiene datos mínimos,
-- tiene competencias,
-- cada competencia cumple estructura mínima,
-- el usuario revisa y confirma el consolidado.
+No crear flujos alternos que rompan esta secuencia.
 
 ---
 
-# 9. Reglas obligatorias del proyecto formativo
+# 7. Reglas obligatorias de persistencia
 
-## Datos mínimos del proyecto
-- código del proyecto,
-- nombre del proyecto,
-- versión del proyecto,
-- al menos una fase,
-- al menos una actividad por fase.
-
-## Regla estructural
-Toda actividad debe pertenecer a una fase.
-
-## Cierre del proyecto
-El proyecto solo puede pasar a estado COMPLETO cuando:
-- el programa ya está COMPLETO,
-- el proyecto tiene datos mínimos,
-- tiene fases válidas,
-- cada fase tiene actividades,
-- el usuario revisa y confirma el consolidado.
+- Todo avance del usuario debe guardarse automáticamente.
+- El borrador debe conservar:
+  - datos manuales,
+  - datos extraídos,
+  - campos pendientes,
+  - paso actual,
+  - estado del bloque.
+- Nunca se debe perder el avance al cambiar de paso, refrescar o retomar sesión.
 
 ---
 
-# 10. Estados obligatorios del sistema
+# 8. Reglas obligatorias de fuente documental e importacion
+
+El sistema debe soportar:
+- carga de PDF como evidencia documental en MinIO,
+- importacion estructurada desde Excel canonico `.xlsx`.
+
+## Regla crítica
+La carga documental o la importacion automatizada no equivalen a validacion humana sin revision del usuario.
+
+## Regla de organizacion curricular
+La importacion Excel debe organizar la estructura principalmente por competencia.
+Los resultados se relacionan con la competencia. Los conocimientos y criterios
+tambien se relacionan inicialmente con la competencia, aunque no tengan `rap_id`
+o no pueda resolverse un resultado especifico. La asignacion posterior a un
+resultado es opcional y secundaria.
+
+## Regla de fallback
+Si el Excel canonico falta, no cumple contrato o no permite importacion confiable:
+- conservar la metadata del intento y errores de validacion,
+- marcar faltantes,
+- informar motivo,
+- permitir conciliacion o correccion puntual de faltantes sin reactivar un carril manual de entrada.
+
+---
+
+# 9. Estados obligatorios
 
 ## Programa
 - BORRADOR
@@ -234,156 +396,158 @@ El proyecto solo puede pasar a estado COMPLETO cuando:
 - EN_REVISION
 - COMPLETO
 
-## Restricción
-La lógica de estados debe estar centralizada y no dispersa en múltiples lugares inconsistentes.
+La lógica de estados debe estar centralizada y no dispersa.
 
 ---
 
-# 11. Reglas de validación obligatorias
+# 10. Estrategia obligatoria de implementación
 
-No permitir:
-
-- programas duplicados según política definida,
-- competencias duplicadas dentro del mismo programa,
-- resultados duplicados dentro de la misma competencia,
-- conocimientos duplicados dentro de la misma categoría y competencia,
-- criterios duplicados dentro de la misma competencia,
-- actividades duplicadas dentro de la misma fase,
-- hijos sin padre relacional,
-- cierre de bloques incompletos.
-
----
-
-# 12. Reglas de revisión obligatoria
-
-Antes de marcar un bloque como completo, el sistema debe mostrar una vista consolidada editable.
-
-La vista consolidada debe permitir:
-- revisar,
-- corregir,
-- agregar,
-- borrar con confirmación,
-- identificar origen del dato:
-  - extraído,
-  - manual,
-  - corregido,
-  - pendiente.
-
----
-
-# 13. Impacto de cambios posteriores
-
-Si un programa ya completo es modificado y deja de cumplir la estructura mínima:
-
-- debe regresar a EN_REVISION,
-- el sistema debe advertir el impacto sobre el proyecto asociado,
-- el proyecto no debe considerarse confiable sin nueva revisión.
-
----
-
-# 14. Stack permitido
-
-El agente debe trabajar bajo estas restricciones técnicas:
-
-- Frontend: Next.js + React + TypeScript + Tailwind CSS
-- Backend: FastAPI
-- Base de datos: PostgreSQL
-- Arquitectura: modular por dominio
-- Validación: explícita y cercana al dominio
-- Testing: unitario, integración y end-to-end mínimo
-
-## Restricción
-No introducir stacks alternativos sin instrucción explícita.
-
-No migrar a Supabase, NestJS, Django, Express u otros frameworks sin autorización explícita.
-
----
-
-# 15. Estrategia obligatoria de implementación
-
-La aplicación NO debe construirse de una sola vez.
+La aplicación no debe construirse de una sola vez.
 
 Debe implementarse:
-
 - módulo por módulo,
 - tarea por tarea,
-- respetando orden de dependencias,
-- empezando por datos, borradores y programa,
-- y dejando el proyecto para después del cierre del programa.
+- respetando dependencias,
+- sin adelantarse a tareas futuras.
 
 ## Orden recomendado
-1. modelo de datos,
-2. borradores,
-3. wizard del programa,
-4. extracción del programa,
-5. CRUD curricular,
-6. cierre del programa,
-7. bloqueo/desbloqueo del proyecto,
-8. wizard del proyecto,
-9. extracción del proyecto,
-10. CRUD de fases y actividades,
-11. cierre del proyecto,
-12. auditoría y pruebas.
+1. modelo de datos
+2. borradores
+3. wizard del programa
+4. extracción del programa
+5. CRUD curricular
+6. cierre del programa
+7. bloqueo/desbloqueo del proyecto
+8. wizard del proyecto
+9. extracción del proyecto
+10. CRUD de fases y actividades
+11. cierre del proyecto
+12. auditoría y pruebas
 
 ---
 
-# 16. Restricciones de comportamiento del agente
+# 11. Restricciones de comportamiento de Codex
 
-El agente NO debe:
-
+Codex NO debe:
 - implementar fuera de Fase 1,
 - crear funcionalidades no definidas,
-- asumir que un campo extraído ya fue validado,
+- asumir que un dato extraído ya fue validado,
 - permitir proyecto sin programa completo,
 - mezclar conocimientos de saber y proceso,
 - saltarse el wizard,
 - ignorar borradores,
-- eliminar reglas del dominio por conveniencia técnica.
+- cambiar el stack sin permiso,
+- adelantar lógica de cierre o completitud antes de la tarea correspondiente.
 
-El agente SÍ debe:
-
-- respetar los documentos fuente del proyecto,
+Codex SÍ debe:
+- respetar el orden de lectura,
 - reportar ambigüedades,
 - mantener trazabilidad,
-- construir con incrementalidad,
-- priorizar consistencia de negocio sobre velocidad.
+- entregar soluciones incrementales,
+- priorizar consistencia del dominio sobre velocidad.
 
 ---
 
-# 17. Orden de lectura obligatorio para el agente
+# 12. Regla de skills en Codex
 
-Antes de implementar cualquier módulo, leer en este orden:
+Si en una tarea se invoca una skill usando `$skill-name`, Codex debe seguir estas reglas:
 
-1. /docs/01-business-rules/BUSINESS_RULES.md
-2. /docs/02-specs/SPECS.md
-3. /docs/03-user-stories/USER_STORIES.md
-4. /docs/04-traceability/TRACEABILITY_MATRIX.md
-5. /docs/05-architecture/DATA_MODEL.md
-6. /docs/06-implementation/IMPLEMENTATION_PLAN.md
-7. /docs/06-implementation/CODEX_TASKS.md
+1. La skill actúa como guía de proceso o playbook.
+2. La skill no puede contradecir `AGENTS.md` ni los archivos de `/docs`.
+3. Si la skill sugiere librerías, componentes o patrones no aprobados, Codex debe ignorarlos y reportarlo.
+4. Las skills de frontend solo deben ayudar en:
+   - estructura visual,
+   - composición de componentes,
+   - patrones de navegación,
+   - feedback visual,
+   - consistencia de UI.
+5. Las skills no deben introducir por sí solas:
+   - nuevas librerías,
+   - nuevos dominios,
+   - cambios de arquitectura,
+   - lógica fuera de la tarea actual.
 
-Si existe conflicto, manda primero:
-- BUSINESS_RULES.md
-- luego SPECS.md
-- luego DATA_MODEL.md
-- luego el resto.
+## Regla práctica
+Si una tarea menciona una skill de diseño frontend, Codex debe:
+- aplicar la skill solo al aspecto visual y estructural de la UI,
+- obedecer primero este archivo y `/docs`,
+- mantenerse dentro de la tarea actual.
 
 ---
 
-# 18. Definición operativa de éxito en esta fase
+# 13. Regla de MCPs
+
+Si existe un MCP configurado, Codex puede usarlo solo como herramienta auxiliar.
+
+## MCP de PostgreSQL
+- puede usarse para inspeccionar tablas,
+- validar estado del esquema,
+- revisar relaciones,
+- confirmar resultados de migraciones.
+
+## Restricción
+El MCP no reemplaza:
+- SQLAlchemy,
+- Alembic,
+- el modelo definido en `DATA_MODEL.md`,
+- ni las reglas del dominio.
+
+## Regla práctica
+Los MCPs sirven para inspección, validación y apoyo operativo.  
+No deben convertirse en la fuente de verdad del proyecto.
+
+---
+
+# 14. Regla específica para tareas con wizard y borradores
+
+Cuando una tarea implemente wizard y borradores:
+
+- debe usar un `referencia_id` UUID estable desde el inicio del flujo,
+- debe reutilizarlo en autosave y recuperación,
+- no debe generar un UUID nuevo por paso,
+- debe permitir continuar borrador con el mismo identificador lógico.
+
+---
+
+# 15. Seguridad mínima
+
+- Nunca commitear `.env`
+- Nunca concatenar SQL manual si existe capa ORM
+- No loggear PII sensible en texto plano
+- No introducir autenticación o JWT antes de que una tarea y `/docs` lo requieran explícitamente
+
+---
+
+# 16. Estándares de código
+
+- TypeScript estricto
+- Python tipado
+- No usar `any` sin justificación explícita
+- Mantener código modular y legible
+- Toda entrega debe explicar:
+  - qué cambió,
+  - qué archivos tocó,
+  - qué validaciones implementó,
+  - qué dejó listo para la siguiente tarea
+
+## Testing
+No cerrar tareas relevantes sin pruebas mínimas razonables.  
+La cobertura estricta se evalúa por hito o sprint, no como requisito rígido para bloquear cualquier tarea de infraestructura.
+
+## Documentación
+- Los métodos públicos importantes deben tener docstrings o documentación breve cuando aporte claridad.
+- No agregar documentación ceremonial innecesaria.
+
+---
+
+# 17. Definición operativa de éxito de Fase 1
 
 La Fase 1 se considera exitosa cuando:
-
-- el programa puede cargarse manualmente o desde PDF,
+- el programa puede cargarse desde Excel canonico,
+- el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o desde PDF,
+- el proyecto puede cargarse mediante fuente estructurada (Excel/matriz),
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida y trazable.
-
-### 🛑 CODING RULES
-# 👔 CORPORATE CODING STANDARDS
-1. **Testing:** 80% Coverage required. No merge without tests.
-2. **Typing:** Strict TypeScript/Python typing. No 'any'.
-3. **Docs:** All public methods require DocStrings/JSDoc.

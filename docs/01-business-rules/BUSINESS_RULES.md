@@ -21,6 +21,73 @@ Su objetivo es establecer:
 
 Este documento es la **fuente de verdad del negocio** para la Fase 1.
 
+## Decision funcional TASK-08.5
+
+Desde TASK-08.5, la estrategia documental del programa cambia:
+
+- el PDF del programa se carga y conserva solo como evidencia documental en MinIO;
+- el PDF ya no es fuente activa de extraccion curricular;
+- el Excel canonico `.xlsx` es la fuente estructurada para validar, previsualizar e importar programa, competencias, resultados, conocimientos y criterios;
+- la estructura importada se organiza por competencia: cada competencia contiene sus resultados, conocimientos y criterios;
+- los conocimientos y criterios se asocian inicialmente a la competencia, no al resultado de aprendizaje;
+- `resultado_id` en conocimientos y criterios es una relacion opcional y secundaria para asignaciones posteriores;
+- solo quedan en conciliacion manual los elementos sin competencia confiable;
+- cualquier regla anterior de extraccion hibrida desde PDF queda reemplazada por esta decision para el flujo del programa.
+
+---
+
+## Decision funcional TASK-UNICO-CARRIL
+
+Desde esta refactorizacion integral, el sistema opera con un unico carril funcional:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como fuente de captura;
+- no se debe iniciar ningun flujo "MANUAL" como modo operativo;
+- el proyecto tambien queda orientado a fuente estructurada (Excel/matriz) como base;
+- las tareas TASK-18, TASK-19 y siguientes deben reinterpretarse en coherencia con este unico carril.
+
+Esta decision reemplaza las reglas RN-13, RN-14, RN-15 y RN-35 anteriores que admitian captura manual o PDF como fuente activa.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+Desde este refactor, `datos-programa` no existe como paso funcional ni informativo. El programa inicia en `origen-documental`, conserva PDF como evidencia documental y usa Excel canonico como unica fuente estructurada activa. Despues de confirmar la importacion, el sistema muestra un resumen compacto del workbook y la revision de competencias importadas se abre en una modal paginada.
+
+La gestion de `estructura-curricular` debe iniciar con selector/filtro de competencia. Resultados se muestran al seleccionar la competencia; conocimientos y criterios se exponen primero mediante selectores progresivos y solo se renderizan cuando el usuario los elige.
+
+El proyecto formativo se habilita solo cuando el programa esta `COMPLETO`, usa PDF como evidencia y Excel/matriz como fuente estructurada. No existe paso `datos-proyecto` como carril manual de entrada. Los documentos del proyecto se almacenan bajo `proyectos-formativos/{referencia_id}/documentos/...` y los Excel bajo `proyectos-formativos/{referencia_id}/excel/...`.
+
+---
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El dashboard maestro ASGARD es la entrada principal del sistema. Debe centralizar acceso, estado, bloqueos, acciones requeridas, metricas y mapa navegable de la Fase 1 sin crear flujos alternos al wizard.
+
+Reglas vigentes:
+
+- `/` muestra el dashboard maestro y `/programa` abre el wizard del programa;
+- el proyecto se habilita unicamente cuando el programa esta `COMPLETO`;
+- la planeacion pedagogica se habilita unicamente cuando programa y proyecto estan `COMPLETO`;
+- PDF evidencia, carga documental o importacion pendiente no equivalen a cierre humano ni habilitan modulos siguientes;
+- las metricas deben derivarse de datos persistidos: competencias, resultados, conocimientos, criterios, fases, actividades y planeaciones;
+- el mapa grafico debe representar la dependencia programa -> estructura curricular -> proyecto -> planeacion y respetar los bloqueos reales.
+
+---
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Los wizards de programa, proyecto y planeacion pedagogica cuentan con un asistente visual transversal que explica el paso actual, muestra faltantes, advierte bloqueos y recomienda la siguiente accion.
+
+Reglas vigentes:
+
+- la guia deriva sus mensajes del estado real del wizard y de gates/backend disponibles;
+- las severidades minimas son `info`, `warning`, `blocked` y `success`;
+- el checklist distingue requisitos completos, pendientes y requisito actual;
+- el asistente no reemplaza validaciones funcionales ni habilita modulos por si solo;
+- el proyecto sigue dependiendo de programa `COMPLETO`;
+- la planeacion sigue dependiendo de programa y proyecto `COMPLETO`;
+- la experiencia puede recordar preferencias ligeras como panel colapsado o ayuda inicial vista.
+
 ---
 
 # 2. Contexto de negocio
@@ -30,10 +97,10 @@ El equipo pedagógico del SENA requiere una aplicación web que permita estructu
 En esta primera fase, la aplicación no generará aún la guía final.  
 La prioridad es construir una base confiable para capturar, revisar, editar y validar la información correspondiente a:
 
-- el **programa de formación**,
-- y el **proyecto formativo**.
+- el **programa de formación** (cargado desde Excel canónico con PDF como evidencia),
+- y el **proyecto formativo** (cargado desde Excel/matriz con PDF como evidencia).
 
-La solución debe permitir tanto el cargue asistido desde documentos PDF como el diligenciamiento manual, manteniendo trazabilidad, integridad de datos y control de estados.
+La solución debe permitir la carga asistida desde la matriz Excel con conservacion de PDF como evidencia, manteniendo trazabilidad, integridad de datos y control de estados.
 
 ---
 
@@ -43,11 +110,11 @@ La solución debe permitir tanto el cargue asistido desde documentos PDF como el
 
 La Fase 1 sí incluye:
 
-- cargue del programa de formación,
-- cargue del proyecto formativo,
+- cargue del programa de formación desde Excel canónico,
+- cargue del proyecto formativo desde fuente estructurada,
 - flujo de usuario tipo wizard,
-- extracción híbrida desde PDF,
-- cargue manual como mecanismo de respaldo,
+- carga documental PDF como evidencia,
+- importacion estructurada desde Excel canonico,
 - guardado automático en borrador,
 - edición y eliminación de registros,
 - revisión consolidada de la información,
@@ -81,23 +148,21 @@ La Fase 1 no incluye:
 Es la persona encargada de:
 
 - cargar documentos,
-- diligenciar información manualmente,
-- revisar datos extraídos,
+- revisar datos importados desde Excel,
 - corregir inconsistencias,
 - cerrar el programa,
 - habilitar el proyecto,
 - y cerrar la Fase 1 desde el punto de vista funcional.
 
 ## 4.2 Actor secundario
-**Sistema de extracción documental**
+**Sistema de almacenamiento documental**
 
 Es el componente que:
 
 - recibe archivos PDF,
-- diagnostica si son legibles,
-- intenta extraer campos,
-- clasifica errores de extracción,
-- y deja lista la información para revisión humana.
+- valida basicamente su formato,
+- los almacena en MinIO como evidencia documental,
+- y deja metadata de validacion en el borrador.
 
 ---
 
@@ -130,13 +195,20 @@ El sistema no debe permitir el cargue, revisión ni cierre del proyecto formativ
 ## RN-03. Orden de trabajo
 La secuencia funcional obligatoria de la Fase 1 es:
 
-1. cargar o diligenciar programa,
-2. revisar programa,
-3. cerrar programa,
-4. habilitar proyecto,
-5. cargar o diligenciar proyecto,
-6. revisar proyecto,
-7. cerrar proyecto.
+1. abrir el origen documental del programa,
+2. cargar PDF del programa como evidencia si existe,
+3. cargar, validar, previsualizar y confirmar Excel canonico del programa,
+4. revisar competencias importadas desde el resumen compacto y la modal paginada,
+5. gestionar estructura curricular por competencia seleccionada,
+6. revisar programa,
+7. cerrar programa,
+8. habilitar proyecto,
+9. abrir fuente del proyecto,
+10. cargar PDF del proyecto como evidencia,
+11. cargar, validar, previsualizar y confirmar Excel/matriz del proyecto,
+12. gestionar fases y actividades,
+13. revisar proyecto,
+14. cerrar proyecto.
 
 No se deben permitir flujos alternos que rompan esta secuencia.
 
@@ -194,38 +266,48 @@ El usuario debe poder retomar un borrador desde el mismo punto donde quedó.
 
 ---
 
-# 9. Reglas de extracción híbrida
+# 9. Reglas de fuente documental e importacion estructurada
 
-## RN-13. Modos de ingreso permitidos
-La información podrá ingresar al sistema por dos vías:
+> TASK-08.5 reemplaza la extraccion curricular desde PDF para el programa.
+> TASK-UNICO-CARRIL reemplaza el carril manual: Excel canonico es la unica
+> fuente estructurada para programa y proyecto.
 
-- extracción automática desde PDF,
-- diligenciamiento manual.
+## RN-13. Fuente estructurada unica
 
-## RN-14. Fallback manual obligatorio
-Si el PDF no es legible, está escaneado o no permite extracción confiable, el sistema debe habilitar el ingreso manual inmediato.
+La informacion estructurada del programa y del proyecto debe partir **unicamente** de la matriz Excel.
 
-## RN-15. Extracción parcial permitida
-Si solo algunos campos pueden extraerse, el sistema debe:
+- El Excel canonico `.xlsx` es la unica fuente estructurada activa.
+- El PDF se carga y almacena en MinIO como evidencia documental SOLO.
+- El PDF no se usa para extraccion ni prellenado de programa ni proyecto.
+- No existe carril manual como fuente de captura principal.
+- No se debe iniciar ningun flujo "MANUAL" como modo operativo.
 
-- conservar lo extraído,
-- marcar lo faltante,
-- informar el motivo del fallo,
-- permitir completar manualmente los pendientes.
+## RN-13A. Organizacion curricular por competencia
+La importacion estructurada desde Excel canonico debe tratar la competencia como
+contenedor principal. Los resultados de aprendizaje, conocimientos de saber,
+conocimientos de proceso y criterios de evaluacion deben quedar asociados a su
+competencia cuando `competencia_id` sea confiable.
 
-## RN-16. Confirmación humana obligatoria
-Ningún dato extraído automáticamente se considera definitivo sin revisión y confirmación explícita del usuario.
+Los conocimientos y criterios no deben quedar pendientes ni fallar solo por no
+tener `rap_id`. Si se puede resolver un resultado especifico, el sistema puede
+guardar `resultado_id`; si no, debe importar el elemento con `resultado_id = NULL`
+y conservarlo asociado a la competencia.
 
-## RN-17. Clasificación mínima de fallos de extracción
-El sistema debe informar como mínimo estas causas:
+## RN-14. Correccion editorial post-importacion
+Si la importacion Excel no permite resolver ciertos campos de forma confiable, el sistema debe habilitar la correccion editorial **solo para completar lo faltante**, nunca como fuente alternativa de construccion curricular.
 
-- PDF escaneado,
-- documento ilegible,
-- baja resolución,
-- estructura no reconocida,
-- campo no encontrado,
-- contenido ambiguo,
-- archivo protegido.
+## RN-15. Confirmacion humana obligatoria
+Ningun dato importado automaticamente se considera definitivo sin revision y confirmacion explícita del usuario.
+
+## RN-16. Clasificacion minima de fallos de importacion Excel
+El sistema debe informar como minimo estas causas:
+
+- archivo Excel no canonico,
+- hojas faltantes,
+- encabezados invalidos,
+- claves cruzadas rotas,
+- duplicados,
+- datos ambiguos.
 
 ---
 
@@ -259,6 +341,11 @@ Cada competencia debe tener obligatoriamente:
 - al menos un conocimiento de saber,
 - al menos un conocimiento de proceso,
 - al menos un criterio de evaluación.
+
+Esta estructura minima aplica al cierre del programa, no al preview ni a la
+importacion parcial del Excel canonico. La competencia de etapa practica puede
+existir sin resultados, conocimientos ni criterios, y no debe invalidar el
+workbook por esa ausencia.
 
 ## RN-24. Completitud del programa
 El programa solo puede pasar a estado **COMPLETO** cuando:
@@ -316,10 +403,21 @@ No deben permitirse criterios idénticos dentro de la misma competencia.
 
 ---
 
+## RN-34A. Pendientes de asignacion desde Excel
+Cuando el Excel canonico trae conocimientos o criterios sin competencia
+confiable, las filas deben conservarse como pendientes de asignacion manual y no
+deben bloquear todo el workbook.
+
+La ausencia de `rap_id`, o un `rap_id` que no pueda resolverse a un resultado,
+no convierte por si sola una fila en pendiente si la competencia esta clara.
+
 # 14. Reglas del proyecto formativo
 
 ## RN-35. Dependencia del programa
 No debe crearse funcionalmente un proyecto formativo sin un programa previamente completo.
+
+## RN-35A. Fuente estructurada del proyecto
+El proyecto formativo debe partir de una fuente estructurada tipo matriz/Excel, no de extraccion PDF ni captura manual como via principal.
 
 ## RN-36. Datos mínimos del proyecto
 El proyecto formativo debe registrar como mínimo:
@@ -524,10 +622,11 @@ Estas condiciones deben cumplirse siempre:
 
 La Fase 1 se considera exitosa cuando:
 
-- el programa puede cargarse manualmente o desde PDF,
+- el programa puede cargarse desde Excel canonico,
+- el PDF del programa puede conservarse como evidencia documental,
 - el programa puede revisarse y cerrarse,
 - el proyecto permanece bloqueado hasta ese momento,
-- el proyecto puede cargarse manualmente o desde PDF,
+- el proyecto puede cargarse mediante fuente estructurada (Excel/matriz),
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida,
@@ -554,8 +653,30 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 
 - la UX principal será tipo wizard,
 - siempre habrá guardado automático en borrador,
-- el sistema soportará enfoque híbrido PDF/manual,
+- el sistema soportara PDF como evidencia y Excel canonico como fuente estructurada unica,
+- el carril manual deja de existir como modo operativo,
 - el proyecto estará bloqueado hasta completar el programa,
 - la validación humana será obligatoria antes del cierre,
 - el alcance se limitará a la Fase 1,
 - la implementación se hará de forma incremental.
+
+## Formato oficial de planeacion pedagogica
+
+- La salida institucional obligatoria es `GPFI-F-134 V05` en `.xlsx`, generada desde la plantilla canónica y almacenada en MinIO.
+- La planeación individual materializa una fila por cada asignación única de fase y actividad.
+- El consolidado incluye solo planeaciones `COMPLETO`; los borradores se excluyen y se reportan.
+- La duración total debe coincidir con horas de trabajo directo más independiente; cualquier diferencia bloquea la generación.
+- Modalidad, fecha, clasificación, equipo curricular, regional y centro son obligatorios.
+- Saberes SABER y PROCESO se separan, incorporan temáticas adicionales y eliminan duplicados exactos conservando orden estable.
+
+## Múltiples actividades de aprendizaje por actividad de proyecto
+
+- Una `ActividadProyecto` puede asociarse a 1..N `PlaneacionPedagogica` (1:N), permitiendo crear y gestionar múltiples actividades de aprendizaje dentro de la misma actividad de proyecto formativo.
+- Cada `PlaneacionPedagogica` integra 1..N Competencias y 1..N Resultados de Aprendizaje (RAP).
+- Las horas didácticas se asignan por `PlaneacionPedagogica` y se escriben en la primera fila del bloque correspondientes a cada planeación en la exportación oficial.
+
+## Tipado estricto de tipo_resultado
+
+- El dominio de `tipo_resultado` en el proyecto formativo queda restringido exclusivamente al enum `TipoResultadoProyecto` con valores `ESPECIFICO` y `TRANSVERSAL`.
+- Se normalizan espacios y mayúsculas durante la carga del Excel canónico. Cualquier valor no equivalente (ej. `TECNICO`, `OTRO`, `TRANSVERS`) es rechazado con error claro indicando hoja, fila y campo, impidiendo la materialización.
+- No se aplica ninguna regla de inferencia basada en códigos o nombres de competencia; la matriz Excel es la única fuente autoritativa.

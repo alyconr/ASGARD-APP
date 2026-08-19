@@ -7,6 +7,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CORS_ALLOW_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
 
 
 class Settings(BaseSettings):
@@ -29,7 +30,14 @@ class Settings(BaseSettings):
     alembic_database_url: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/sena_guias_db",
     )
-    cors_allow_origins: str = Field(default="http://localhost:3000")
+    cors_allow_origins: str = Field(default=DEFAULT_CORS_ALLOW_ORIGINS)
+    storage_provider: str = Field(default="minio")
+    storage_bucket_name: str = Field(default="sena-programa-documentos")
+    storage_endpoint: str = Field(default="localhost:9000")
+    storage_access_key: str = Field(default="admin")
+    storage_secret_key: str = Field(default="admin123")
+    storage_secure: bool = Field(default=False)
+    storage_region: str | None = Field(default=None)
 
     @property
     def cors_allow_origin_list(self) -> list[str]:

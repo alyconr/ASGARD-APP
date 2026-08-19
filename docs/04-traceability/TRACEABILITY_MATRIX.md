@@ -4,6 +4,28 @@
 ## Estado: Matriz de trazabilidad inicial
 ## Última actualización: [YYYY-MM-DD]
 
+## Decision funcional TASK-UNICO-CARRIL
+
+La trazabilidad queda reinterpretada asi:
+
+- Upload Module PDF Evidencia: carga, validacion basica y MinIO para programa y proyecto.
+- Excel Import Module: validacion canonica `.xlsx`, preview, confirmacion e importacion relacional para programa y proyecto.
+- Curriculum Module: consume la base importada por competencia sin adelantar el CRUD manual de TASK-09.
+- Pending Reconciliation: solo atiende excepciones sin competencia confiable.
+- No existe trazabilidad para carril manual como fuente activa.
+- `datos-programa` y `datos-proyecto` quedan fuera de trazabilidad activa.
+- La revision post-importacion del programa se traza a resumen compacto y modal paginada de competencias.
+- La gestion curricular se traza a selector/filtro de competencia y seleccion progresiva de conocimientos/criterios.
+- Proyecto usa MinIO `proyectos-formativos/{referencia_id}/documentos/...` para PDF evidencia y `proyectos-formativos/{referencia_id}/excel/...` para matriz Excel.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+Se agrega trazabilidad para el dashboard maestro como entrada central de la Fase 1. Este componente agrega estado, metricas y mapa navegable, pero respeta las reglas existentes de cierre humano y dependencia entre modulos.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+Se agrega trazabilidad para un asistente visual reutilizable en los wizards de programa, proyecto y planeacion. Este asistente muestra instrucciones, faltantes, bloqueos y CTA derivados del estado real del sistema.
+
 ---
 
 # 1. Propósito
@@ -42,18 +64,24 @@ Si una funcionalidad no puede trazarse, debe considerarse fuera de alcance hasta
 | RN-04 | El flujo principal debe ser tipo wizard | RF-01, RF-13, RF-21 | HU-01, HU-13, HU-22 | Wizard UI | Validar navegación paso a paso |
 | RN-09 | Todo avance debe guardarse automáticamente | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Validar persistencia automática |
 | RN-10 | El borrador debe conservar paso actual y datos parciales | RF-30, RF-31 | HU-02, HU-23 | Draft Service | Recuperar borrador desde el mismo paso |
-| RN-13 | El sistema soporta extracción automática y manual | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Extraction Service | Validar extracción híbrida |
-| RN-14 | Si el PDF no es legible, debe habilitarse cargue manual | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual |
-| RN-15 | La extracción parcial debe conservar lo extraído y pedir lo faltante | RF-06, RF-07, RF-23, RF-24 | HU-05, HU-06, HU-18, HU-19 | Extraction Service | Validar extracción parcial |
+| RN-DASHBOARD-ASGARD | La home debe centralizar acceso, bloqueos, metricas y mapa navegable sin saltar reglas de negocio | RF-DASHBOARD | HU-02A | Dashboard Service / Master Dashboard UI | Validar modulos habilitados, metricas y grafo navegable |
+| RN-ASISTENTE-GUIADO | Los wizards deben mostrar guia contextual con severidad, checklist y acciones sin reemplazar validaciones reales | RF-GUIA-ASGARD | HU-02B | Wizard Guide Engine / WizardGuideAssistant | Validar mensajes por paso, bloqueos entre modulos y persistencia UX |
+| RN-13 / RN-13A / RN-UNICO-CARRIL | El programa y proyecto soportan PDF evidencia y Excel canonico como unica fuente estructurada; no existe carril manual ni pasos `datos-programa`/`datos-proyecto` | RF-04, RF-05, RF-06, RF-07, RF-21, RF-22, RF-23, RF-24 | HU-03, HU-04, HU-05, HU-06, HU-17, HU-18, HU-19 | Excel Import Service | Validar preview e importacion Excel por competencia |
+| RN-FLUJO-COMPACTO | El origen documental del programa muestra resumen compacto tras importacion y abre modal paginada de competencias | RF-06, RF-13 | HU-05, HU-13 | Programa Wizard / Excel Import UI | Validar resumen compacto, apertura de modal y paginacion |
+| RN-CURRICULO-FOCALIZADO | La estructura curricular carga una competencia seleccionada y conocimientos/criterios se eligen progresivamente | RF-08, RF-09, RF-10, RF-11, RF-12 | HU-07, HU-08, HU-09, HU-10, HU-11 | Curriculum Module | Validar selector de competencia y render progresivo |
+| RN-14 | Si la importacion Excel no resuelve campos, debe habilitarse cargue manual SOLO para lo faltante | RF-07, RF-24 | HU-06, HU-19 | Extraction Feedback UI | Validar fallback manual para lo faltante |
+| RN-15 | La validacion Excel debe conservar errores y habilitar fallback manual SOLO para lo estrictamente faltante | RF-06, RF-07 | HU-05, HU-06 | Excel Import Service | Validar workbook invalido y fallback manual para lo faltante |
 | RN-16 | La extracción automática no equivale a validación humana | RF-13, RF-27 | HU-13, HU-22 | Review Screen | Validar confirmación explícita |
 | RN-18 | El programa debe tener código y nombre | RF-02 | HU-01, HU-14 | Programa Form | Validar obligatorios mínimos |
 | RN-22 | Cada competencia debe tener código y nombre | RF-08 | HU-07 | Competencia Module | Validar estructura mínima de competencia |
-| RN-23 | Cada competencia debe tener resultados, saber, proceso y criterios | RF-09, RF-10, RF-11, RF-12, RF-14 | HU-08, HU-09, HU-10, HU-11, HU-14 | Curriculum Module | Validar completitud curricular |
+| RN-23 | Cada competencia debe tener resultados, saber, proceso y criterios para cierre, excepto etapa practica sin hijos | RF-09, RF-10, RF-11, RF-12, RF-14 | HU-08, HU-09, HU-10, HU-11, HU-14 | Curriculum Module | Validar completitud curricular |
 | RN-24 | El programa solo se completa cuando toda competencia está completa | RF-14, RF-15 | HU-13, HU-14 | Completion Validator | Validar cierre del programa |
 | RN-25 | Todo resultado pertenece a una competencia | RF-09 | HU-08 | Curriculum Module | Validar integridad relacional de resultados |
 | RN-28 | Saber y proceso se almacenan separados | RF-10, RF-11 | HU-09, HU-10 | Knowledge Module | Validar separación por tipo |
 | RN-32 | Todo criterio pertenece a una competencia | RF-12 | HU-11 | Criteria Module | Validar integridad relacional de criterios |
+| RN-34A | Solo conocimientos y criterios sin competencia confiable quedan pendientes de asignacion | RF-06, RF-07, RF-10, RF-12 | HU-05, HU-06, HU-10, HU-11 | Excel Import Service / Pending Reconciliation | Preview con importacion por competencia y pendientes reales |
 | RN-35 | El proyecto depende del programa completo | RF-16, RF-17, RF-18 | HU-15, HU-16 | State Gate / Access Control | Validar bloqueo del proyecto |
+| RN-35A | El proyecto debe partir de fuente estructurada (Excel/matriz) | RF-21, RF-22, RF-23, RF-24 | HU-17, HU-18, HU-19 | Fuente estructurada Proyecto | Validar importacion Excel del proyecto |
 | RN-36 | El proyecto debe tener código, nombre, versión, fases y actividades | RF-19, RF-25, RF-26, RF-28, RF-29 | HU-20, HU-21, HU-22 | Proyecto Module | Validar estructura mínima del proyecto |
 | RN-38 | Toda actividad debe pertenecer a una fase | RF-26 | HU-21 | Actividad Module | Validar relación fase-actividad |
 | RN-40 | El proyecto solo se cierra con estructura mínima válida | RF-28, RF-29 | HU-22 | Completion Validator Proyecto | Validar cierre del proyecto |
@@ -88,7 +116,7 @@ Componentes:
 
 ---
 
-## 4.2 Épica: Cargue híbrido del programa
+## 4.2 Épica: Carga y importacion del programa
 Incluye:
 - HU-03
 - HU-04
@@ -96,15 +124,16 @@ Incluye:
 - HU-06
 
 Relaciona principalmente:
-- RN-13
+- RN-13 / RN-UNICO-CARRIL
+- RN-13A
 - RN-14
 - RN-15
 - RN-16
 
 Componentes:
 - Upload Module
-- Extraction Service
-- Extraction Feedback UI
+- Excel Import Service
+- Curriculum Module
 
 ---
 
@@ -155,7 +184,7 @@ Componentes:
 
 ---
 
-## 4.5 Épica: Cargue híbrido del proyecto
+## 4.5 Épica: Carga y importacion del proyecto
 Incluye:
 - HU-17
 - HU-18
@@ -166,11 +195,12 @@ Relaciona principalmente:
 - RN-14
 - RN-15
 - RN-16
+- RN-35A
 - RN-36
 
 Componentes:
 - Upload Module Proyecto
-- Extraction Service Proyecto
+- Fuente estructurada Proyecto (Excel/matriz)
 - Proyecto Module
 
 ---
@@ -241,10 +271,10 @@ Relaciona:
 - HU-03
 - HU-17
 
-## Extraction Service
+## Excel Import Service
 Relaciona:
 - RN-13
-- RN-14
+- RN-13A
 - RN-15
 - RN-16
 - RF-05
@@ -361,24 +391,22 @@ Relaciona:
 
 # 6. Casos de prueba funcionales sugeridos
 
-## CP-01. Programa manual completo
+## CP-01. Programa desde Excel canonico completo
 Validar que un usuario pueda:
 - iniciar programa,
-- diligenciar datos mínimos,
-- crear competencias,
-- crear resultados,
-- crear saber,
-- crear proceso,
-- crear criterios,
+- cargar PDF como evidencia si existe,
+- cargar y confirmar Excel canonico,
+- revisar resumen compacto y modal de competencias,
+- gestionar una competencia seleccionada,
 - revisar consolidado,
 - cerrar programa.
 
-## CP-02. Programa con extracción parcial
+## CP-02. Programa con importacion Excel parcial
 Validar que el sistema:
 - reciba PDF,
-- detecte datos parciales,
-- conserve lo extraído,
-- permita completar manualmente,
+- conserve PDF como evidencia,
+- detecte pendientes de importacion Excel,
+- permita correccion puntual de faltantes,
 - y cierre el programa correctamente.
 
 ## CP-03. Proyecto bloqueado
@@ -395,8 +423,8 @@ Validar que al cerrar el programa:
 
 ## CP-05. Proyecto completo
 Validar que un usuario pueda:
-- crear proyecto,
-- registrar datos mínimos,
+- cargar PDF del proyecto como evidencia,
+- importar proyecto desde Excel/matriz,
 - crear fases,
 - crear actividades,
 - revisar consolidado,
@@ -452,3 +480,14 @@ Esta matriz se usa para:
 - organizar pruebas,
 - justificar decisiones de implementación,
 - y evitar desarrollo fuera de alcance.
+
+## Trazabilidad GPFI-F-134 V05
+
+| Requisito | Backend | Frontend | Prueba |
+|---|---|---|---|
+| Plantilla oficial inmutable | `PlaneacionFormatoExcelService` | Estado GPFI-F-134 V05 | `test_planeacion_formato_excel.py` |
+| Metadata compartida por proyecto | `PlaneacionDocumentoConfig` | Configuración documental | servicios y endpoints de planeación |
+| Exportación individual | generar/descargar por `planeacion_id` | Generar y Descargar Excel oficial | endpoints y API frontend |
+| Exportación consolidada | generar/descargar por `proyecto_id` | Contadores y descarga consolidada | endpoints y wizard |
+| Validación de horas y brechas | estado de formato oficial | Vista previa y asistente | servicio y guide engine |
+| MinIO real | `save_excel` / `read_excel` | descarga Blob | pruebas HTTP y API |

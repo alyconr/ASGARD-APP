@@ -30,6 +30,40 @@ Este archivo debe servir como base para construir:
 - contratos de API,
 - y lógica de completitud.
 
+## Decision funcional TASK-08.5
+
+El modelo relacional vigente ya soporta la importacion Excel canonica hacia `ProgramaFormacion`, `Competencia`, `ResultadoAprendizaje`, `Conocimiento` y `CriterioEvaluacion`.
+
+El PDF del programa permanece como evidencia documental en MinIO y solo deja metadata en `payload_json`. El Excel canonico `.xlsx` tambien se almacena en MinIO como soporte auditable; `payload_json` conserva metadata de preview, validacion, confirmacion e identificadores relacionales creados, nunca el binario.
+
+La organizacion curricular base queda centrada en `Competencia`. Los resultados
+se asocian a la competencia, y los conocimientos y criterios se insertan
+inicialmente asociados a la competencia aunque no tengan `rap_id`. Cuando pueda
+resolverse un resultado especifico se conserva `resultado_id`; cuando no, se
+guarda `resultado_id = NULL` para permitir asignacion secundaria posterior.
+
+Los conocimientos y criterios del Excel que no puedan enlazarse con seguridad a
+una competencia no se insertan aun en `Conocimiento` ni `CriterioEvaluacion`;
+se conservan en `ElementoCurricularPendiente` para conciliacion manual posterior.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+El modelo de borrador no debe conservar `datos-programa` ni `datos-proyecto` como pasos vivos. Los pasos canonicos son `origen-documental`, `estructura-curricular`, `revision-programa` para programa y `fuente-proyecto`, `estructura-proyecto`, `revision-proyecto` para proyecto.
+
+La metadata del proyecto debe diferenciar PDF evidencia y Excel estructurado. Los objetos documentales del proyecto usan `proyectos-formativos/{referencia_id}/documentos/...`; los Excel usan `proyectos-formativos/{referencia_id}/excel/...`.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El dashboard maestro no introduce una tabla nueva. Su estado agregado se calcula desde `BorradorSesion`, `ProgramaFormacion`, `Competencia`, `ResultadoAprendizaje`, `Conocimiento`, `CriterioEvaluacion`, `ProyectoFormativo`, `FaseProyecto`, `ActividadProyecto` y `PlaneacionPedagogica`.
+
+El contrato de lectura debe exponer modulos, metricas y nodos de grafo sin duplicar persistencia ni convertir estado local del frontend en fuente de verdad.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+El asistente guiado no introduce tablas nuevas. Su motor de reglas se calcula en frontend a partir de datos ya persistidos o consultados: payload del borrador, estado de programa/proyecto, disponibilidad de proyecto y contexto de planeacion.
+
+La unica persistencia adicional permitida es UX local ligera en el navegador, por ejemplo si el panel fue colapsado o si la ayuda inicial ya se vio. Esa persistencia local no es fuente de verdad de negocio.
+
 ---
 
 # 2. Alcance del modelo
@@ -68,13 +102,12 @@ Toda entidad hija debe tener una referencia válida a su entidad padre.
 ## PM-02. Persistencia incremental
 Programa y proyecto deben poder guardarse parcialmente en estado borrador.
 
-## PM-03. Soporte para extracción híbrida
+## PM-03. Soporte para evidencia documental e importacion estructurada
 Cada dato debe poder registrarse como:
 
-- extraído automáticamente,
-- ingresado manualmente,
+- importado desde Excel canonico,
 - corregido por el usuario,
-- pendiente de validación.
+- pendiente de validacion.
 
 ## PM-04. Trazabilidad mínima
 Las entidades principales deben registrar creación, actualización y estado actual.
@@ -97,9 +130,10 @@ Valores permitidos:
 ## 4.2 TipoFuenteCargue
 Valores permitidos:
 
-- PDF_EXTRACCION
-- MANUAL
-- MIXTO
+- PDF_EVIDENCIA
+- EXCEL_CANONICO
+
+`PDF_EXTRACCION`, `MANUAL` y `MIXTO` quedan como valores historicos/deprecated. Para TASK-08.5, TASK-UNICO-CARRIL y REFACTOR-FLUJO-PROGRAMA-PROYECTO, usar `PDF_EVIDENCIA` cuando aplique al soporte documental y `EXCEL_CANONICO` para materializacion desde workbook.
 
 ## 4.3 TipoConocimiento
 Valores permitidos:
@@ -111,7 +145,7 @@ Valores permitidos:
 Valores permitidos:
 
 - EXTRAIDO
-- MANUAL
+- MANUAL_DEPRECATED
 - CORREGIDO
 - PENDIENTE
 - VALIDADO
@@ -216,7 +250,7 @@ Representa un resultado de aprendizaje asociado a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
-- codigo_resultado: string nullable
+- codigo_resultado: string nullable; para importacion Excel canonica guarda el `rap_id` estable del workbook, no el `rap_numero` visible
 - descripcion: text
 - orden: integer nullable
 - estado: EstadoCampo
@@ -238,6 +272,7 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 ### Campos
 - id
 - competencia_id
+- resultado_id
 - tipo
 - descripcion
 - orden
@@ -249,6 +284,7 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
+- resultado_id: FK nullable a ResultadoAprendizaje
 - tipo: TipoConocimiento
 - descripcion: text
 - orden: integer nullable
@@ -259,9 +295,11 @@ Representa conocimientos de tipo saber o proceso asociados a una competencia.
 
 ### Restricciones
 - competencia_id es obligatorio
+- resultado_id es opcional; cuando existe, debe pertenecer a un ResultadoAprendizaje de la misma competencia
 - tipo es obligatorio
 - descripcion es obligatoria
-- no debe duplicarse la misma descripcion exacta dentro de la misma categoría y competencia
+- no debe duplicarse la misma descripcion exacta dentro de la misma categoría, competencia y RAP cuando resultado_id exista
+- los conocimientos sin resultado_id se validan a nivel de categoría y competencia
 
 ---
 
@@ -272,6 +310,7 @@ Representa criterios de evaluación asociados a una competencia.
 ### Campos
 - id
 - competencia_id
+- resultado_id
 - descripcion
 - orden
 - estado
@@ -282,6 +321,7 @@ Representa criterios de evaluación asociados a una competencia.
 ### Tipos sugeridos
 - id: UUID o bigint
 - competencia_id: FK
+- resultado_id: FK nullable a ResultadoAprendizaje
 - descripcion: text
 - orden: integer nullable
 - estado: EstadoCampo
@@ -291,8 +331,43 @@ Representa criterios de evaluación asociados a una competencia.
 
 ### Restricciones
 - competencia_id es obligatorio
+- resultado_id es opcional; cuando existe, debe pertenecer a un ResultadoAprendizaje de la misma competencia
 - descripcion es obligatoria
-- no debe duplicarse la misma descripcion exacta dentro de la misma competencia
+- no debe duplicarse la misma descripcion exacta dentro de la misma competencia y RAP cuando resultado_id exista
+- los criterios sin resultado_id se validan a nivel de competencia
+
+---
+
+## 5.5.1 ElementoCurricularPendiente
+
+Representa una fila de Excel canonico de tipo conocimiento o criterio que no
+tuvo competencia confiable y requiere asignacion manual antes de materializarse
+en la estructura final.
+
+### Campos
+- id
+- referencia_id
+- programa_id
+- tipo_elemento
+- tipo_conocimiento
+- descripcion
+- competencia_id_origen_excel
+- rap_id_origen_excel
+- motivo
+- estado
+- competencia_destino_id
+- resultado_destino_id
+- elemento_creado_id
+- orden
+- raw_excel
+- fecha_creacion
+- fecha_actualizacion
+
+### Restricciones
+- descripcion es obligatoria
+- tipo_elemento solo puede ser CONOCIMIENTO o CRITERIO
+- estado inicia en PENDIENTE y pasa a ASIGNADO cuando se crea el elemento final
+- la competencia de etapa practica puede existir sin hijos curriculares
 
 ---
 
@@ -448,6 +523,35 @@ Representa la trazabilidad mínima del sistema.
 - entidad_id es obligatorio
 - accion es obligatoria
 
+
+---
+
+## 5.11 PlaneacionPedagogica
+
+Representa la planeación pedagógica de una competencia para un proyecto formativo.
+
+### Campos
+- id (UUID, clave primaria)
+- proyecto_id (UUID, FK a `proyectos_formativos`, CASCADE)
+- competencia_id (UUID, FK a `competencias`, CASCADE)
+- fase_id (UUID, FK a `fases_proyecto`, nullable, SET NULL)
+- actividad_id (UUID, FK a `actividades_proyecto`, nullable, SET NULL)
+- estado (EstadoBloque: BORRADOR, COMPLETO)
+- datos_complementarios (JSONB, contiene campos extensibles como estrategias didácticas, ambientes, recursos, duración, e instructor)
+- storage_key (string nullable, ruta legible del Excel individual `planeaciones-pedagogicas/{programa}/{proyecto}/resultados/{codigo_resultado}/GPFI-F-134V05-planeacion.xlsx`)
+- file_name (string nullable, nombre del archivo generado)
+- content_type (string nullable, content-type del archivo)
+- checksum_sha256 (string nullable, hash del contenido del archivo)
+- fecha_generacion (datetime nullable, fecha en que se confirmó y cargó el archivo)
+- version (integer, versión del documento)
+- fecha_creacion (datetime)
+- fecha_actualizacion (datetime)
+
+### Relaciones M2M
+- `planeacion_resultados` (Many-to-Many entre `PlaneacionPedagogica` y `ResultadoAprendizaje`)
+- `planeacion_conocimientos` (Many-to-Many entre `PlaneacionPedagogica` y `Conocimiento`)
+- `planeacion_criterios` (Many-to-Many entre `PlaneacionPedagogica` y `CriterioEvaluacion`)
+
 ---
 
 # 6. Relaciones del modelo
@@ -455,27 +559,6 @@ Representa la trazabilidad mínima del sistema.
 ## ProgramaFormacion
 - 1:N con Competencia
 - 1:N con ProyectoFormativo
-
-## Competencia
-- 1:N con ResultadoAprendizaje
-- 1:N con Conocimiento
-- 1:N con CriterioEvaluacion
-
-## ProyectoFormativo
-- 1:N con FaseProyecto
-
-## FaseProyecto
-- 1:N con ActividadProyecto
-
----
-
-# 7. Reglas de integridad
-
-## RI-01
-No puede existir una competencia sin programa.
-
-## RI-02
-No puede existir un resultado sin competencia.
 
 ## RI-03
 No puede existir un conocimiento sin competencia.
@@ -536,13 +619,13 @@ No duplicar combinación lógica de codigo_programa + version_programa.
 No duplicar codigo_competencia dentro del mismo programa.
 
 ## U-03. Resultado
-No duplicar descripcion exacta dentro de la misma competencia.
+No duplicar `codigo_resultado`/`rap_id` dentro de la misma competencia cuando provenga de Excel canonico. Tampoco se debe duplicar la misma descripcion exacta dentro de la misma competencia.
 
 ## U-04. Conocimiento
-No duplicar descripcion exacta dentro de la misma categoría y competencia.
+No duplicar descripcion exacta dentro de la misma categoría y competencia. `resultado_id` es secundario y no debe permitir duplicados del mismo conocimiento dentro de la competencia.
 
 ## U-05. Criterio
-No duplicar descripcion exacta dentro de la misma competencia.
+No duplicar descripcion exacta dentro de la misma competencia. `resultado_id` es secundario y no debe permitir duplicados del mismo criterio dentro de la competencia.
 
 ## U-06. Actividad
 No duplicar descripcion exacta dentro de la misma fase.
@@ -660,11 +743,36 @@ El modelo no debe asumir por sí solo:
 
 Quedan cerradas para Fase 1 estas decisiones:
 
-- el programa es la raíz del dominio,
+- el programa es la raiz del dominio,
 - la competencia es el contenedor curricular directo,
 - saber y proceso se almacenan separados,
 - el proyecto depende del programa,
 - las actividades dependen de una fase,
 - los borradores son persistentes,
-- existe auditoría básica,
-- la completitud se calcula por reglas explícitas del dominio.
+- existe auditoria basica,
+- la completitud se calcula por reglas explicitas del dominio,
+- el Excel canonico es la unica fuente estructurada activa,
+- el PDF queda exclusivamente como evidencia documental.
+
+## PlaneacionDocumentoConfig
+
+Configuración 1:1 asociada a `ProyectoFormativo`:
+
+- `proyecto_id` único;
+- `fecha_elaboracion`;
+- `clasificacion_informacion`;
+- `equipo_gestion_curricular` JSONB;
+- `regional`;
+- `centro_formacion`;
+- metadata del consolidado: `storage_key`, `file_name`, `content_type`, `checksum_sha256`, `fecha_generacion`, `version`;
+- timestamps.
+
+`ProgramaFormacion.modalidad_formacion` conserva la modalidad como atributo intrínseco del programa. El Excel individual usa la ruta `planeaciones-pedagogicas/{programa}/{proyecto}/resultados/{codigo_resultado}/GPFI-F-134V05-planeacion.xlsx`; el consolidado usa `formato-oficial/GPFI-F-134V05-planeacion-pedagogica.xlsx`.
+
+## TipoResultadoProyecto
+
+Dominio cerrado de clasificación para asignaciones curriculares del proyecto formativo:
+
+- `ESPECIFICO`: Resultado de aprendizaje técnico/específico.
+- `TRANSVERSAL`: Resultado de aprendizaje transversal.
+- El valor es validado y normalizado en mayúsculas y sin espacios al procesar el Excel canónico. Cualquier otro valor genera rechazo inmediato y no se materializa en la base de datos.

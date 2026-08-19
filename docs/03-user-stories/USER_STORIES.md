@@ -3,7 +3,44 @@
 ## Fase: 1
 ## Última actualización: [YYYY-MM-DD]
 
+## Decision funcional TASK-UNICO-CARRIL
+
+Las historias de cargue se reinterpretan asi desde esta refactorizacion:
+
+- HU-01: ya no ofrece MANUAL como opcion de entrada.
+- HU-03 y HU-04: conservan PDF solo como soporte documental en MinIO.
+- HU-05: deja de ejecutarse desde PDF para el programa; se reemplaza por importacion Excel.
+- HU-06: se limita a completar lo estrictamente faltante, no como fuente alternativa.
+- HU-17, HU-18, HU-19: se reinterpretan para proyecto orientado a Excel/matriz.
+- `datos-programa` y `datos-proyecto` no existen como pasos de entrada manual.
+- La revision de competencias importadas se hace desde resumen compacto y modal paginada.
+- La estructura curricular se trabaja por competencia seleccionada, con conocimientos y criterios elegidos progresivamente.
+- El proyecto usa prefijos MinIO `proyectos-formativos/{referencia_id}/documentos/...` y `proyectos-formativos/{referencia_id}/excel/...`.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+El usuario entra por un dashboard maestro que permite seleccionar o continuar una referencia de programa, ver bloqueos reales y abrir solo los modulos habilitados. El dashboard no reemplaza la revision humana ni cambia la secuencia del wizard.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+El usuario cuenta con una guia visual persistente y no invasiva dentro de programa, proyecto y planeacion. La guia explica el paso actual, lista faltantes, muestra bloqueos reales y recomienda la accion siguiente sin reemplazar las validaciones del sistema.
+
 ---
+
+## HU - Descargar la planeacion en el formato institucional
+
+**Como** instructor o integrante del equipo de gestión curricular
+**Quiero** generar la planeación individual o consolidada en `GPFI-F-134 V05`
+**Para** obtener el documento institucional completo sin reconstruirlo manualmente.
+
+### Criterios de aceptación
+
+- El sistema conserva las hojas, logos, estilos, combinaciones y configuración de impresión de la plantilla.
+- La vista previa informa faltantes y permite regresar al campo correspondiente.
+- La generación individual repite una fila por asignación fase/actividad.
+- El consolidado incluye completas, excluye borradores y muestra ambos contadores.
+- El Excel se almacena en MinIO y se descarga como Blob desde el backend.
+- Una duración inconsistente o metadata faltante impide generar.
 
 # 1. Épica: Inicio y borradores
 
@@ -14,8 +51,9 @@
 
 ### Criterios de aceptación
 - Debe existir un botón u opción para iniciar el proceso.
-- Debe permitirse elegir entre PDF, manual o continuar borrador.
+- Debe permitirse cargar Excel canónico o continuar borrador.
 - El sistema debe abrir el wizard en el paso correspondiente.
+- NO debe existir opción de modo manual como fuente de captura.
 
 ---
 
@@ -31,60 +69,81 @@
 
 ---
 
+## HU-02A. Visualizar dashboard maestro del proceso
+**Como** usuario gestor pedagogico
+**Quiero** ver un panel maestro con programa, proyecto y planeacion
+**Para** entender el avance, bloqueos y acciones disponibles antes de abrir cada modulo.
+
+### Criterios de aceptacion
+- La ruta `/` debe mostrar el dashboard maestro ASGARD.
+- El usuario debe poder abrir `/programa` desde el panel.
+- El proyecto debe aparecer bloqueado hasta que el programa este `COMPLETO`.
+- La planeacion debe aparecer bloqueada hasta que programa y proyecto esten `COMPLETO`.
+- El panel debe mostrar metricas de programa, proyecto y planeacion.
+- El panel debe mostrar un mapa navegable con enlaces activos solo para modulos habilitados.
+
+---
+
 # 2. Épica: Cargue híbrido del programa
 
 ## HU-03. Cargar PDF del programa
 **Como** usuario gestor pedagógico  
 **Quiero** cargar el PDF del programa  
-**Para** que el sistema intente extraer la información automáticamente.
+**Para** conservarlo como evidencia documental en MinIO.
 
 ### Criterios de aceptación
 - Debe aceptarse un archivo PDF.
 - El archivo debe validarse antes de procesarlo.
-- Debe iniciarse el análisis del documento.
+- Debe almacenarse como evidencia documental.
+- NO se realiza extraccion curricular desde el PDF.
 
 ---
 
-## HU-04. Detectar legibilidad del PDF del programa
+## HU-04. Validar PDF del programa como evidencia
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema evalúe el PDF  
-**Para** saber si la extracción será automática o manual.
+**Quiero** que el sistema valide el PDF  
+**Para** verificar que el archivo se guardó correctamente como evidencia.
 
 ### Criterios de aceptación
-- El sistema debe clasificar el PDF como legible, parcial o no legible.
+- El sistema debe verificar que el PDF es un archivo valido.
 - Debe informarse el resultado al usuario.
-- Debe ofrecerse fallback manual si aplica.
+- NO se clasifica por legibilidad ni extraccion.
 
 ---
 
-## HU-05. Extraer automáticamente datos del programa
+## HU-05. Importar datos del programa desde Excel canonico
+Nota vigente: despues de confirmar la importacion, el origen documental debe mostrar un resumen compacto y abrir la revision de competencias importadas en una modal paginada.
+
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema extraiga los datos del programa  
-**Para** ahorrar tiempo de digitación.
+**Quiero** que el sistema importe los datos del programa desde Excel  
+**Para** ahorrar tiempo de digitacion y tener una base curricular estructurada.
 
 ### Criterios de aceptación
-- Deben intentarse extraer los campos definidos en SPECS.
-- Los datos deben quedar prellenados.
+- Deben importarse los campos definidos en SPECS desde Excel canonico.
+- Los datos deben quedar disponibles para revision.
 - Todo debe guardarse en borrador.
-- Debe requerirse revisión humana.
+- Debe requerirse confirmacion humana.
 
 ---
 
-## HU-06. Completar manualmente campos faltantes del programa
+## HU-06. Completar campos faltantes post-importacion
 **Como** usuario gestor pedagógico  
-**Quiero** completar manualmente los campos no extraídos  
+**Quiero** corregir puntualmente los campos no importados por Excel
 **Para** continuar el proceso sin bloqueos.
 
 ### Criterios de aceptación
-- Los campos faltantes deben marcarse como pendientes.
-- Debe mostrarse el motivo del fallo.
-- Debe existir una acción visible para diligenciarlos.
+- Solo se habilita para campos que la importacion Excel no resolvió.
+- Debe mostrarse el motivo de que un campo quede pendiente.
+- Debe existir una accion visible para diligenciarlo.
+- El ingreso manual NO es fuente alternativa de construccion curricular.
 
 ---
 
 # 3. Épica: Gestión curricular del programa
 
 ## HU-07. Registrar competencias
+Nota vigente: la gestion curricular inicia desde selector/filtro de competencia para evitar render masivo.
+
 **Como** usuario gestor pedagógico  
 **Quiero** registrar competencias  
 **Para** estructurar el programa correctamente.
@@ -97,6 +156,8 @@
 ---
 
 ## HU-08. Registrar resultados de aprendizaje
+Nota vigente: los resultados cargan al seleccionar una competencia concreta.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar resultados por competencia  
 **Para** completar la estructura curricular.
@@ -108,6 +169,8 @@
 ---
 
 ## HU-09. Registrar conocimientos de saber
+Nota vigente: los conocimientos SABER aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar conocimientos de saber  
 **Para** mantener la estructura mínima obligatoria.
@@ -119,6 +182,8 @@
 ---
 
 ## HU-10. Registrar conocimientos de proceso
+Nota vigente: los conocimientos PROCESO aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar conocimientos de proceso  
 **Para** completar la estructura mínima.
@@ -130,6 +195,8 @@
 ---
 
 ## HU-11. Registrar criterios de evaluación
+Nota vigente: los criterios aparecen primero en un selector eficiente y se renderizan solo al seleccionarse.
+
 **Como** usuario gestor pedagógico  
 **Quiero** agregar criterios de evaluación  
 **Para** cerrar la estructura curricular de cada competencia.
@@ -203,34 +270,31 @@
 ## HU-17. Cargar PDF del proyecto
 **Como** usuario gestor pedagógico  
 **Quiero** cargar el PDF del proyecto  
-**Para** intentar extraer sus datos automáticamente.
+**Para** conservarlo como evidencia documental en MinIO.
 
 ### Criterios de aceptación
-- Debe aceptarse un PDF válido.
-- Debe analizarse su legibilidad.
+- Debe aceptarse un PDF valido.
+- Debe almacenarse como evidencia documental.
 
----
-
-## HU-18. Extraer datos del proyecto
+## HU-18. Importar datos del proyecto desde fuente estructurada
 **Como** usuario gestor pedagógico  
-**Quiero** que el sistema extraiga nombre, código, versión, fases y actividades  
+**Quiero** que el sistema importe los datos del proyecto desde Excel/matriz  
 **Para** reducir el trabajo manual.
 
 ### Criterios de aceptación
-- Los datos extraídos deben prellenarse.
+- Los datos importados deben revisarse.
 - Deben guardarse en borrador.
-- Debe permitirse corrección manual.
+- Debe permitirse correccion post-importacion de lo faltante.
 
----
-
-## HU-19. Completar manualmente el proyecto
+## HU-19. Completar campos faltantes post-importacion del proyecto
 **Como** usuario gestor pedagógico  
-**Quiero** completar manualmente el proyecto  
-**Para** terminar la captura si la extracción no fue suficiente.
+**Quiero** corregir puntualmente faltantes del proyecto
+**Para** terminar la captura si la importacion no fue suficiente.
 
 ### Criterios de aceptación
-- Debe permitirse ingresar los campos faltantes.
-- Debe validarse la relación fase-actividad.
+- Debe permitirse ingresar los campos faltantes que la matriz no resolvió.
+- Debe validarse la relacion fase-actividad.
+- El ingreso manual NO es fuente alternativa de construccion curricular.
 
 ---
 
@@ -289,3 +353,20 @@
 ### Criterios de aceptación
 - Si el programa cambia y queda inconsistente, debe mostrarse advertencia.
 - Debe indicarse el posible impacto sobre el proyecto asociado.
+
+---
+
+## HU-02B. Recibir guia contextual durante los wizards
+**Como** usuario gestor pedagogico
+**Quiero** ver un asistente visual que me indique que hacer y que falta
+**Para** avanzar por programa, proyecto y planeacion sin saltar reglas de negocio.
+
+### Criterios de aceptacion
+- El asistente debe aparecer en los tres wizards.
+- Debe mostrar severidad `info`, `warning`, `blocked` o `success`.
+- Debe mostrar checklist de requisitos completos y pendientes.
+- Debe advertir que el proyecto requiere programa `COMPLETO`.
+- Debe advertir que la planeacion requiere proyecto `COMPLETO`.
+- Debe recordar si el usuario colapso la ayuda.
+
+---

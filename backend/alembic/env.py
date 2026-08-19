@@ -6,6 +6,7 @@ from sqlalchemy import Connection, engine_from_config, pool
 
 from alembic import context
 from src.infrastructure.config.settings import get_settings
+from src.infrastructure.db import models  # noqa: F401
 from src.infrastructure.db.base import Base
 
 # this is the Alembic Config object, which provides

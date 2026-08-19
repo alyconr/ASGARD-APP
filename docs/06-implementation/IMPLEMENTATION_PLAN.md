@@ -35,6 +35,39 @@ Antes de implementar cualquier módulo, el agente o desarrollador debe leer y re
 
 Ninguna implementación debe contradecir estos documentos.
 
+## Decision funcional TASK-UNICO-CARRIL
+
+Desde esta refactorizacion integral:
+
+- el Excel canonico `.xlsx` es la unica fuente estructurada activa para programa y proyecto;
+- el PDF queda exclusivamente como evidencia documental en MinIO para programa y proyecto;
+- el carril manual deja de existir como modo operativo;
+- TASK-05, TASK-06, TASK-07, TASK-18, TASK-19 y las fases tecnicas asociadas quedan reinterpretadas.
+
+## Decision funcional REFACTOR-FLUJO-PROGRAMA-PROYECTO
+
+- El paso `datos-programa` se elimina por completo; el programa inicia en `origen-documental`.
+- El origen documental del programa mantiene PDF evidencia y Excel canonico, pero tras importacion confirmada muestra resumen compacto y modal paginada de competencias.
+- `estructura-curricular` usa selector/filtro de competencia y seleccion progresiva de conocimientos/criterios.
+- El proyecto inicia en `fuente-proyecto`; no existe `datos-proyecto` como carril manual.
+- El almacenamiento del proyecto usa `proyectos-formativos/{referencia_id}/documentos/...` para PDF y `proyectos-formativos/{referencia_id}/excel/...` para Excel/matriz.
+
+## Decision funcional DASHBOARD-MAESTRO-ASGARD
+
+- La ruta `/` se implementa como dashboard maestro.
+- El wizard del programa se mueve a `/programa`.
+- Se agrega un servicio backend agregado para estado, metricas, gates y mapa navegable.
+- La regla de habilitacion queda centralizada: proyecto requiere programa `COMPLETO`; planeacion requiere programa y proyecto `COMPLETO`.
+- Las pruebas deben cubrir el agregado backend, el gate de proyecto, el acceso de planeacion y la UI del dashboard.
+
+## Decision funcional ASISTENTE-GUIADO-TRANSVERSAL
+
+- Se agrega un componente visual compartido para guiar programa, proyecto y planeacion.
+- Se agrega un motor de guia que traduce estados reales en severidad, mensaje, checklist y CTA.
+- El componente se integra sin alterar la secuencia de los wizards ni sus validaciones.
+- La experiencia persiste preferencias ligeras en `localStorage`.
+- Las pruebas deben cubrir motor, render, persistencia y mensajes de bloqueo entre wizards.
+
 ---
 
 # 3. Objetivo general de implementación
@@ -43,11 +76,13 @@ Construir la Fase 1 de una aplicación web que permita:
 
 - cargar información del programa de formación,
 - cargar información del proyecto formativo,
-- extraer datos desde PDF cuando sea posible,
-- permitir fallback manual cuando no sea posible,
+- conservar PDF como evidencia documental,
+- importar datos desde Excel canonico cuando aplique,
+- permitir correccion post-importacion cuando no sea posible,
 - guardar siempre el avance en borrador,
 - revisar y validar la información,
 - bloquear el proyecto hasta que el programa esté completo,
+- mostrar acceso centralizado, metricas y mapa navegable desde el dashboard maestro,
 - y persistir toda la estructura de forma trazable.
 
 ---
@@ -65,11 +100,12 @@ Construir la Fase 1 de una aplicación web que permita:
 - Wizard del programa
 - Wizard del proyecto
 - Guardado automático en borrador
-- Diagnóstico de legibilidad del PDF
-- Extracción híbrida de PDF
+- Carga PDF como evidencia documental
+- Importacion estructurada desde Excel canonico
 - Revisión consolidada editable
 - Validación de completitud
 - Bloqueo/desbloqueo del proyecto
+- Dashboard maestro ASGARD con metricas, gates y mapa navegable
 - Auditoría básica
 - Testing mínimo funcional
 
@@ -105,8 +141,8 @@ Los estados del programa y del proyecto deben manejarse de forma centralizada y 
 ## PI-06. Confirmación explícita
 El cierre de cada bloque debe requerir validación funcional y confirmación explícita del usuario.
 
-## PI-07. Soporte a extracción parcial
-La extracción automática debe diseñarse para convivir con edición manual sin romper el flujo.
+## PI-07. Soporte a correccion post-importacion
+La correccion editorial post-importacion debe diseñarse para convivir con la importacion Excel sin romper el flujo.
 
 ## PI-08. Preparación para crecimiento
 La arquitectura debe quedar lista para futuras fases sin necesidad de rehacer el núcleo de datos.
@@ -121,12 +157,12 @@ La implementación debe seguir este orden:
 2. Modelo de datos
 3. Persistencia de borradores
 4. Wizard del programa
-5. Extracción híbrida del programa
-6. Gestión curricular
-7. Revisión y cierre del programa
-8. Bloqueo/desbloqueo del proyecto
-9. Wizard del proyecto
-10. Extracción híbrida del proyecto
+5. Carga PDF del programa como evidencia
+6. Importacion estructurada desde Excel canonico organizada por competencia
+7. Gestión curricular
+8. Revisión y cierre del programa
+9. Bloqueo/desbloqueo del proyecto
+10. Wizard del proyecto
 11. Gestión de fases y actividades
 12. Revisión y cierre del proyecto
 13. Auditoría básica
@@ -164,12 +200,7 @@ Este orden respeta las dependencias del dominio:
 ## 7.4 ORM recomendado
 - SQLAlchemy
 
-## 7.5 Extracción documental
-- lectura PDF con capa de texto
-- OCR opcional si luego se decide habilitarlo
-- fallback manual obligatorio
-
-## 7.6 Almacenamiento de archivos
+## 7.5 Almacenamiento de archivos
 - local en desarrollo
 - S3-compatible en producción si se requiere
 
@@ -308,6 +339,7 @@ Implementar el flujo principal del programa de formación.
 ### Tareas
 - Crear vista inicial del wizard
 - Crear pasos del programa
+- Eliminar `datos-programa` de pasos, tipos, sidebar y navegacion
 - Implementar navegación entre pasos
 - Integrar autosave
 - Mostrar barra o indicador de progreso
@@ -320,41 +352,53 @@ Implementar el flujo principal del programa de formación.
 
 ---
 
-## Fase Técnica 5. Extracción híbrida del programa
+## Fase Técnica 5. Carga documental del programa como evidencia
 
 ### Objetivo
-Permitir el cargue por PDF del programa con fallback manual.
+Permitir la carga del PDF del programa como evidencia documental.
 
 ### Tareas
 - Crear endpoint de carga de PDF
 - Validar tipo de archivo
-- Analizar legibilidad del PDF
-- Intentar extracción de campos del programa
-- Marcar campos extraídos, pendientes o ambiguos
-- Mostrar motivo de fallo de extracción
-- Permitir completar manualmente los faltantes
-
-### Campos a extraer
-- código del programa
-- nombre del programa
-- competencias
-- resultados de aprendizaje
-- conocimientos de saber
-- conocimientos de proceso
-- criterios de evaluación
+- Almacenar en MinIO como evidencia
+- Registrar metadata en borrador
 
 ### Entregables
 - carga PDF funcional
-- diagnóstico de legibilidad
-- respuesta estructurada de extracción
-- fallback manual habilitado
+- almacenamiento en MinIO
+- metadata de validacion en borrador
 
 ---
 
-## Fase Técnica 6. Gestión curricular
+## Fase Técnica 6. Importacion estructurada desde Excel canonico organizada por competencia
 
 ### Objetivo
-Permitir CRUD completo de la estructura curricular del programa.
+Permitir la importacion estructurada desde Excel canonico del programa.
+
+### Tareas
+- Crear endpoint de preview de Excel canonico
+- Validar workbook `.xlsx` con hojas Programa, Competencias, Resultados, Conocimientos y Criterios
+- Generar preview sin persistencia relacional
+- Confirmar importacion para materializar datos
+- Organizar la estructura importada por competencia
+- Mostrar resumen compacto tras importacion confirmada
+- Abrir revision curricular importada en modal paginada por competencia
+
+### Entregables
+- preview funcional de Excel
+- confirmacion de importacion
+- estructura curricular importada por competencia
+- resumen compacto y modal de competencias
+
+La competencia es el contenedor principal de la estructura. Los resultados,
+conocimientos y criterios se muestran y gestionan bajo la competencia. La
+relacion de conocimientos y criterios con resultados de aprendizaje es opcional
+y secundaria.
+
+La UI curricular debe iniciar con selector/filtro de competencia. Resultados se
+muestran para la competencia seleccionada; conocimientos y criterios se exponen
+primero en selectores progresivos y solo se renderizan cuando el usuario los
+elige.
 
 ### Tareas
 - CRUD de competencias
@@ -402,6 +446,7 @@ Respetar la dependencia del proyecto con el programa.
 - Bloquear módulo del proyecto si el programa no está completo
 - Mostrar mensaje explicativo
 - Habilitar proyecto cuando el programa esté completo
+- Habilitar `fuente-proyecto` con PDF evidencia y Excel/matriz estructurada
 - Validar que el backend también impida acceso indebido
 
 ### Entregables
@@ -420,6 +465,7 @@ Implementar el flujo del proyecto formativo.
 - Crear wizard del proyecto
 - Integrar borradores del proyecto
 - Definir pasos del proyecto
+- Eliminar `datos-proyecto` como paso de entrada manual
 - Mostrar progreso y estados
 - Permitir navegación adelante/atrás
 
@@ -430,28 +476,41 @@ Implementar el flujo del proyecto formativo.
 
 ---
 
-## Fase Técnica 10. Extracción híbrida del proyecto
+## Fase Técnica 10. Carga documental del proyecto como evidencia
 
 ### Objetivo
-Permitir cargue por PDF del proyecto con fallback manual.
+Permitir la carga del PDF del proyecto como evidencia documental.
 
 ### Tareas
 - Crear endpoint de carga del PDF del proyecto
 - Validar tipo de archivo
-- Analizar legibilidad
-- Intentar extracción de:
-  - nombre del proyecto
-  - código del proyecto
-  - versión del proyecto
-  - fases del proyecto
-  - actividades del proyecto
-- Marcar campos faltantes
-- Permitir ingreso manual de campos no extraídos
+- Almacenar en MinIO como evidencia bajo `proyectos-formativos/{referencia_id}/documentos/...`
+- Registrar metadata en borrador
 
 ### Entregables
-- flujo híbrido del proyecto funcional
-- prellenado parcial o total
-- fallback manual activo
+- flujo de carga PDF del proyecto funcional
+- almacenamiento en MinIO con prefijo canonico de proyecto
+- metadata de validacion en borrador
+
+---
+
+## Fase Tecnica 10B. Importacion estructurada del proyecto
+
+### Objetivo
+Permitir la carga de Excel/matriz del proyecto como unica fuente estructurada.
+
+### Tareas
+- Crear endpoint de preview de Excel/matriz del proyecto
+- Validar hojas Proyecto, Fases y Actividades
+- Generar preview sin persistencia relacional
+- Confirmar importacion para materializar ProyectoFormativo, FaseProyecto y ActividadProyecto
+- Almacenar Excel bajo `proyectos-formativos/{referencia_id}/excel/...`
+
+### Entregables
+- preview funcional del proyecto
+- confirmacion de importacion
+- metadata de Excel en borrador
+- persistencia estructurada de proyecto, fases y actividades
 
 ---
 
@@ -558,8 +617,8 @@ Asegurar consistencia funcional del flujo punta a punta.
 - Base del wizard del programa
 
 ## Iteración 3
-- Extracción híbrida del programa
-- Fallback manual
+- Carga PDF como evidencia del programa
+- Importacion Excel canonico
 
 ## Iteración 4
 - CRUD curricular completo
@@ -570,7 +629,8 @@ Asegurar consistencia funcional del flujo punta a punta.
 
 ## Iteración 6
 - Wizard del proyecto
-- Extracción híbrida del proyecto
+- Carga PDF como evidencia del proyecto
+- Importacion Excel del proyecto
 
 ## Iteración 7
 - CRUD de fases y actividades
@@ -610,13 +670,13 @@ Validar:
 - cierre del proyecto
 
 ## 12.3 Pruebas end-to-end
-Escenarios mínimos:
-1. Programa manual completo
-2. Programa con extracción parcial + completado manual
+Escenarios minimos:
+1. Programa importado desde Excel canonico
+2. Programa con correccion post-importacion
 3. Proyecto bloqueado por programa incompleto
-4. Proyecto habilitado después del cierre del programa
+4. Proyecto habilitado despues del cierre del programa
 5. Proyecto completo con fases y actividades
-6. Programa editado después del cierre y advertencia de impacto
+6. Programa editado despues del cierre y advertencia de impacto
 
 ---
 
@@ -659,8 +719,8 @@ Una tarea se considera terminada cuando:
 - [ ] modelo programa
 - [ ] endpoints programa
 - [ ] wizard programa
-- [ ] extracción PDF programa
-- [ ] fallback manual
+- [ ] PDF evidencia programa
+- [ ] importacion Excel canonico programa
 - [ ] CRUD competencias
 - [ ] CRUD resultados
 - [ ] CRUD saber
@@ -673,8 +733,7 @@ Una tarea se considera terminada cuando:
 - [ ] bloqueo del proyecto
 - [ ] modelo proyecto
 - [ ] wizard proyecto
-- [ ] extracción PDF proyecto
-- [ ] fallback manual
+- [ ] fuente estructurada proyecto (Excel/matriz)
 - [ ] CRUD fases
 - [ ] CRUD actividades
 - [ ] revisión consolidada
@@ -711,3 +770,13 @@ Antes de generar código, Codex debe:
 6. leer este plan de implementación,
 7. implementar solo el módulo solicitado,
 8. reportar ambigüedades antes de asumir comportamientos no definidos.
+
+## Hito - Formato oficial GPFI-F-134 V05
+
+1. Incorporar plantilla canónica y configuración documental persistente.
+2. Generar Excel individual con una fila por asignación fase/actividad.
+3. Generar consolidado estable con planeaciones `COMPLETO`.
+4. Guardar y leer los artefactos mediante MinIO.
+5. Exponer generación, estado y descarga tipada.
+6. Integrar configuración, brechas, contadores y Blob en el wizard.
+7. Verificar OOXML, imágenes, merges, filas adicionales, impresión y regresiones.
