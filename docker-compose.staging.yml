@@ -1,11 +1,11 @@
 services:
-  nginx:
+  asgard-nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
-      - frontend
-      - backend
-      - minio
+      - asgard-frontend
+      - asgard-backend
+      - asgard-minio
     ports:
       - "${NGINX_HTTP_PORT:-8080}:80"
       - "${MINIO_CONSOLE_PORT:-9001}:81"
@@ -13,7 +13,7 @@ services:
       - ./deploy/staging/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./deploy/staging/nginx.htpasswd:/etc/nginx/.htpasswd:ro
 
-  frontend:
+  asgard-frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -26,9 +26,9 @@ services:
     environment:
       NODE_ENV: production
     depends_on:
-      - backend
+      - asgard-backend
 
-  backend:
+  asgard-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -40,22 +40,22 @@ services:
       APP_ENV: staging
       APP_HOST: 0.0.0.0
       APP_PORT: "8000"
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-sena_guias}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}@postgres:5432/${POSTGRES_DB:-sena_guias_db}"
-      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-sena_guias}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}@postgres:5432/${POSTGRES_DB:-sena_guias_db}"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-sena_guias}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}@asgard-postgres:5432/${POSTGRES_DB:-sena_guias_db}"
+      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-sena_guias}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}@asgard-postgres:5432/${POSTGRES_DB:-sena_guias_db}"
       CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}"
       STORAGE_PROVIDER: minio
       STORAGE_BUCKET_NAME: "${STORAGE_BUCKET_NAME:-sena-programa-documentos}"
-      STORAGE_ENDPOINT: "minio:9000"
+      STORAGE_ENDPOINT: "asgard-minio:9000"
       STORAGE_ACCESS_KEY: "${MINIO_ROOT_USER:?MINIO_ROOT_USER requerido}"
       STORAGE_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requerido}"
       STORAGE_SECURE: "false"
     depends_on:
-      postgres:
+      asgard-postgres:
         condition: service_healthy
-      minio:
+      asgard-minio:
         condition: service_healthy
 
-  postgres:
+  asgard-postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -70,7 +70,7 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
+  asgard-minio:
     image: quay.io/minio/minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
