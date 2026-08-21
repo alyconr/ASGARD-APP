@@ -1214,7 +1214,11 @@ class TestMaterializacionCurricular:
 
 
 class TestTipoResultadoValidation:
-    def _create_workbook_with_tipo_resultado(self, tipo_value: str | None) -> bytes:
+    def _create_workbook_with_tipo_resultado(
+        self,
+        tipo_value: str | None,
+        rap_numero: str | None = "1",
+    ) -> bytes:
         wb = openpyxl.Workbook()
         ws_proj = wb.active
         ws_proj.title = "Proyecto"
@@ -1241,7 +1245,7 @@ class TestTipoResultadoValidation:
             codigo_comp="220501094",
             comp_id="C1",
             rap_id="R10",
-            rap_num="1",
+            rap_num=rap_numero,
             rap_desc="Desc R10",
             orden_resultado=1,
         )
@@ -1294,6 +1298,30 @@ class TestTipoResultadoValidation:
         assert len(parsed.errores) == 0
         assert len(parsed.planeacion) == 1
         assert parsed.planeacion[0].tipo_resultado is None
+
+    async def test_rap_numero_blank_is_optional(self):
+        content = self._create_workbook_with_tipo_resultado(
+            "ESPECIFICO",
+            rap_numero=None,
+        )
+        parsed = parse_canonical_workbook(content)
+
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].rap_numero is None
+
+    async def test_rap_numero_column_is_optional(self):
+        content = self._create_workbook_with_tipo_resultado("ESPECIFICO")
+        workbook = openpyxl.load_workbook(io.BytesIO(content))
+        workbook["Planeacion_Proyecto"].delete_cols(11)
+        output = io.BytesIO()
+        workbook.save(output)
+
+        parsed = parse_canonical_workbook(output.getvalue())
+
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].rap_numero is None
 
     async def test_tipo_resultado_invalid_value_rejected(self):
         for invalid_val in ["TECNICO", "OTRO", "TRANSVERS", "INVALIDO"]:

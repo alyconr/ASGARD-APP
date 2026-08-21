@@ -54,7 +54,7 @@ export interface ExcelProjectPreview {
 
 export interface ExcelResultPreview {
   rap_id: string;
-  rap_numero: string;
+  rap_numero: string | null;
   resultado_aprendizaje: string;
   tipo_resultado: string | null;
   orden_resultado: number | null;

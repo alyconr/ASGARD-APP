@@ -348,7 +348,7 @@ function normalizeProyectoDocumental(
                                 return [
                                   {
                                     rap_id: asString(rap.rap_id),
-                                    rap_numero: asString(rap.rap_numero),
+                                    rap_numero: asNullableString(rap.rap_numero),
                                     resultado_aprendizaje: asString(rap.resultado_aprendizaje),
                                     tipo_resultado: asNullableString(rap.tipo_resultado),
                                     orden_resultado:

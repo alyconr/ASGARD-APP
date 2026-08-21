@@ -80,7 +80,7 @@ CANONICAL_SHEETS: dict[str, list[str]] = {
 }
 
 OPTIONAL_HEADERS: dict[str, set[str]] = {
-    "Planeacion_Proyecto": {"tipo_resultado"},
+    "Planeacion_Proyecto": {"tipo_resultado", "rap_numero"},
 }
 
 EXCEL_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -111,7 +111,7 @@ class ResultBuilder:
     def __init__(
         self,
         rap_id: str,
-        rap_numero: str,
+        rap_numero: str | None,
         resultado_aprendizaje: str,
         tipo_resultado: str | None,
         orden_resultado: int | None,
@@ -177,7 +177,7 @@ class PlaneacionRow:
     codigo_competencia: str
     nombre_competencia: str
     rap_id: str
-    rap_numero: str
+    rap_numero: str | None
     resultado_aprendizaje: str
     orden_fase: int | None
     orden_actividad: int | None
@@ -782,12 +782,19 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
             _cell_to_string(value)
             for value in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
         ]
+        optional_headers = OPTIONAL_HEADERS.get(sheet_name, set())
         required_headers = [
             header
             for header in expected_headers
-            if header not in OPTIONAL_HEADERS.get(sheet_name, set())
+            if header not in optional_headers
         ]
-        if header_values not in (expected_headers, required_headers):
+        canonical_present_headers = [
+            header for header in expected_headers if header in header_values
+        ]
+        if (
+            header_values != canonical_present_headers
+            or any(header not in header_values for header in required_headers)
+        ):
             errores.append(
                 ExcelValidationIssueDTO(
                     hoja=sheet_name,
@@ -937,13 +944,11 @@ def _parse_planeacion(
         rap_desc: str | None = None
         if is_practical:
             rap_id = _optional_string(row.get("rap_id")) or ""
-            rap_num = _optional_string(row.get("rap_numero")) or ""
+            rap_num = _optional_string(row.get("rap_numero"))
             rap_desc = _optional_string(row.get("resultado_aprendizaje")) or ""
         else:
             rap_id = _required_string(row, "Planeacion_Proyecto", "rap_id", errores)
-            rap_num = _required_string(
-                row, "Planeacion_Proyecto", "rap_numero", errores
-            )
+            rap_num = _optional_string(row.get("rap_numero"))
             rap_desc = _required_string(
                 row, "Planeacion_Proyecto", "resultado_aprendizaje", errores
             )
@@ -966,7 +971,6 @@ def _parse_planeacion(
             or cod_comp is None
             or nom_comp is None
             or rap_id is None
-            or rap_num is None
             or rap_desc is None
         ):
             continue
@@ -1142,7 +1146,7 @@ def build_fase_previews(planeacion: list[PlaneacionRow]) -> list[ExcelFasePrevie
                 res_dtos: list[ExcelResultPreviewDTO] = []
                 sorted_res_builders = sorted(
                     c.resultados.values(),
-                    key=lambda r: (r.orden_resultado or 9999, r.rap_numero),
+                    key=lambda r: (r.orden_resultado or 9999, r.rap_numero or ""),
                 )
                 for res in sorted_res_builders:
                     unique_rap_ids.add(res.rap_id)

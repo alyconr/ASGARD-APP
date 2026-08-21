@@ -317,7 +317,7 @@ function CurriculumFasesModal({
                                               >
                                                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-slate-100 pb-1.5">
                                                   <span className="font-semibold text-slate-800">
-                                                    RAP #{rap.rap_numero}
+                                                    {rap.rap_numero ? `RAP #${rap.rap_numero}` : "RAP sin número"}
                                                   </span>
                                                   <div className="flex gap-1.5">
                                                     <span className={cn(

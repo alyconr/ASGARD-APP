@@ -23,7 +23,7 @@ class ExcelResultPreviewDTO:
     """Preview data for a RAP from Planeacion_Proyecto."""
 
     rap_id: str
-    rap_numero: str
+    rap_numero: str | None
     resultado_aprendizaje: str
     tipo_resultado: TipoResultadoProyecto | None
     orden_resultado: int | None

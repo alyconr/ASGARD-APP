@@ -143,6 +143,7 @@ A partir del refactor de cardinalidad de la Planeación Pedagógica:
 A partir del refactor de tipado de `tipo_resultado`:
 
 - el campo `tipo_resultado` en `Planeacion_Proyecto` es opcional: la columna puede faltar o la celda puede estar vacía sin bloquear la carga;
+- `rap_numero` también es opcional: la columna puede faltar o la celda puede estar vacía; `rap_id` conserva la identidad estable del resultado;
 - cuando el campo viene informado, se restringe a los valores del enum de dominio `TipoResultadoProyecto`;
 - durante la lectura y previsualización del Excel canónico, el valor se normaliza eliminando espacios de los extremos y convirtiéndolo a mayúsculas;
 - todo valor no vacío por fuera del enum es rechazado con un issue de validación explícito indicando la hoja `Planeacion_Proyecto`, fila, campo `tipo_resultado` y mensaje descriptivo, evitando que la fila sea materializada en la base de datos;
