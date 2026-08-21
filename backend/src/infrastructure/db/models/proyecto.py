@@ -230,7 +230,7 @@ class AsignacionCurricularProyecto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
         nullable=True,
     )
-    tipo_resultado: Mapped[str] = mapped_column(String(50), nullable=False)
+    tipo_resultado: Mapped[str | None] = mapped_column(String(50), nullable=True)
     orden_resultado: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pagina_origen: Mapped[str | None] = mapped_column(String(100), nullable=True)
     observaciones: Mapped[str | None] = mapped_column(Text, nullable=True)

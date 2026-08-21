@@ -1143,6 +1143,29 @@ class TestMaterializacionCurricular:
         tipos = sorted(a.tipo_resultado for a in repo.created_asignaciones)
         assert tipos == ["ESPECIFICO", "ESPECIFICO", "TRANSVERSAL"]
 
+    async def test_missing_tipo_resultado_column_materializes_null(self):
+        competencias = [
+            _build_competencia(
+                codigo_competencia="220501094",
+                nombre="Estructurar propuesta",
+                rap_codigos=["R10", "R11"],
+            ),
+            _build_competencia(
+                codigo_competencia="240201524",
+                nombre="Comunicacion",
+                rap_codigos=["R20"],
+            ),
+        ]
+        workbook = create_multicompetencia_workbook()
+        workbook["Planeacion_Proyecto"].delete_cols(6)
+        service = self._build_service(competencias)
+
+        await self._preview_and_confirm(service, workbook)
+
+        repo = service._project_repository
+        assert len(repo.created_asignaciones) == 3
+        assert all(a.tipo_resultado is None for a in repo.created_asignaciones)
+
     async def test_unresolved_competencia_is_reported(self):
         competencias = [
             _build_competencia(
@@ -1191,7 +1214,7 @@ class TestMaterializacionCurricular:
 
 
 class TestTipoResultadoValidation:
-    def _create_workbook_with_tipo_resultado(self, tipo_value: str) -> bytes:
+    def _create_workbook_with_tipo_resultado(self, tipo_value: str | None) -> bytes:
         wb = openpyxl.Workbook()
         ws_proj = wb.active
         ws_proj.title = "Proyecto"
@@ -1251,6 +1274,26 @@ class TestTipoResultadoValidation:
         assert len(parsed.errores) == 0
         assert len(parsed.planeacion) == 1
         assert parsed.planeacion[0].tipo_resultado == "BASICO"
+
+    async def test_tipo_resultado_blank_is_optional(self):
+        content = self._create_workbook_with_tipo_resultado(None)
+        parsed = parse_canonical_workbook(content)
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].tipo_resultado is None
+
+    async def test_tipo_resultado_column_is_optional(self):
+        content = self._create_workbook_with_tipo_resultado("ESPECIFICO")
+        workbook = openpyxl.load_workbook(io.BytesIO(content))
+        workbook["Planeacion_Proyecto"].delete_cols(6)
+        output = io.BytesIO()
+        workbook.save(output)
+
+        parsed = parse_canonical_workbook(output.getvalue())
+
+        assert len(parsed.errores) == 0
+        assert len(parsed.planeacion) == 1
+        assert parsed.planeacion[0].tipo_resultado is None
 
     async def test_tipo_resultado_invalid_value_rejected(self):
         for invalid_val in ["TECNICO", "OTRO", "TRANSVERS", "INVALIDO"]:

@@ -350,7 +350,7 @@ function normalizeProyectoDocumental(
                                     rap_id: asString(rap.rap_id),
                                     rap_numero: asString(rap.rap_numero),
                                     resultado_aprendizaje: asString(rap.resultado_aprendizaje),
-                                    tipo_resultado: asString(rap.tipo_resultado),
+                                    tipo_resultado: asNullableString(rap.tipo_resultado),
                                     orden_resultado:
                                       typeof rap.orden_resultado === "number" && Number.isFinite(rap.orden_resultado)
                                         ? rap.orden_resultado

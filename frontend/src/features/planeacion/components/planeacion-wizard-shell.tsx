@@ -2200,7 +2200,7 @@ export function PlaneacionWizardShell({
                                             ? "bg-purple-100 text-purple-800"
                                             : "bg-amber-100 text-amber-800"
                                         )}>
-                                          {resultado.tipo_resultado}
+                                          {resultado.tipo_resultado || "Sin clasificar"}
                                         </span>
                                       </div>
                                       <p>{resultado.descripcion}</p>

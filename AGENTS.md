@@ -139,14 +139,15 @@ A partir del refactor de cardinalidad de la Planeación Pedagógica:
 - las carpetas y llaves físicas en MinIO para los formatos `.xlsx` individuales incorporan un sufijo determinístico derivado del UUID (`id`) de la entidad para evitar colisiones entre planeaciones de la misma actividad;
 - en la exportación consolidada del workbook `GPFI-F-134 V05`, todas las planeaciones en estado `COMPLETO` pertenecientes a la misma actividad de proyecto se generan como bloques secuenciales continuos sin duplicar horas entre RAPs ni entre actividades de aprendizaje.
 
-## Decision funcional TIPO-RESULTADO-PROYECTO-ESTRICTO
+## Decision funcional TIPO-RESULTADO-PROYECTO-OPCIONAL
 A partir del refactor de tipado de `tipo_resultado`:
 
-- el campo `tipo_resultado` en la materialización y vista previa de `Planeacion_Proyecto` se restringe estrictamente a los valores del enum de dominio `TipoResultadoProyecto`: `ESPECIFICO` y `TRANSVERSAL`;
+- el campo `tipo_resultado` en `Planeacion_Proyecto` es opcional: la columna puede faltar o la celda puede estar vacía sin bloquear la carga;
+- cuando el campo viene informado, se restringe a los valores del enum de dominio `TipoResultadoProyecto`;
 - durante la lectura y previsualización del Excel canónico, el valor se normaliza eliminando espacios de los extremos y convirtiéndolo a mayúsculas;
-- todo valor diferente a `ESPECIFICO` o `TRANSVERSAL` (ej. `TECNICO`, `OTRO`, `TRANSVERS`) es rechazado con un issue de validación explícito indicando la hoja `Planeacion_Proyecto`, fila, campo `tipo_resultado` y mensaje descriptivo, evitando que la fila sea materializada en la base de datos;
+- todo valor no vacío por fuera del enum es rechazado con un issue de validación explícito indicando la hoja `Planeacion_Proyecto`, fila, campo `tipo_resultado` y mensaje descriptivo, evitando que la fila sea materializada en la base de datos;
 - el tipo de resultado no se infiere jamás por nombre de competencia, código ni heurísticas; la fuente de verdad autoritativa es la columna `tipo_resultado` de la matriz Excel;
-- los DTOs, resúmenes y métricas de tablero utilizan la comparación directa contra los valores del enum `TipoResultadoProyecto`.
+- la ausencia del campo se persiste como `NULL`; los DTOs, resúmenes y métricas de tablero deben tolerarla.
 
 ## Decision funcional FORMATO-OFICIAL-PLANEACION-GPFI-F-134-V05
 

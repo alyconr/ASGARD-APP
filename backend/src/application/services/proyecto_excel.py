@@ -79,6 +79,10 @@ CANONICAL_SHEETS: dict[str, list[str]] = {
     ],
 }
 
+OPTIONAL_HEADERS: dict[str, set[str]] = {
+    "Planeacion_Proyecto": {"tipo_resultado"},
+}
+
 EXCEL_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -109,7 +113,7 @@ class ResultBuilder:
         rap_id: str,
         rap_numero: str,
         resultado_aprendizaje: str,
-        tipo_resultado: str,
+        tipo_resultado: str | None,
         orden_resultado: int | None,
         pagina_origen: str | None,
         observaciones: str | None,
@@ -168,7 +172,7 @@ class PlaneacionRow:
     fase_proyecto: str
     actividad_id: str
     actividad_proyecto: str
-    tipo_resultado: str
+    tipo_resultado: str | None
     competencia_id: str
     codigo_competencia: str
     nombre_competencia: str
@@ -296,7 +300,7 @@ class ProjectRepositoryProtocol(Protocol):
         actividad_proyecto_id: uuid.UUID,
         competencia_id: uuid.UUID,
         resultado_id: uuid.UUID | None,
-        tipo_resultado: str,
+        tipo_resultado: str | None,
         orden_resultado: int | None,
         pagina_origen: str | None,
         observaciones: str | None,
@@ -692,7 +696,7 @@ class ProyectoExcelImportService:
                 actividad_proyecto_id=actividad_db_id,
                 competencia_id=competencia.id,
                 resultado_id=resultado.id if resultado is not None else None,
-                tipo_resultado=row.tipo_resultado.strip(),
+                tipo_resultado=row.tipo_resultado,
                 orden_resultado=row.orden_resultado,
                 pagina_origen=row.pagina_origen,
                 observaciones=observaciones or None,
@@ -778,7 +782,12 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
             _cell_to_string(value)
             for value in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
         ]
-        if header_values != expected_headers:
+        required_headers = [
+            header
+            for header in expected_headers
+            if header not in OPTIONAL_HEADERS.get(sheet_name, set())
+        ]
+        if header_values not in (expected_headers, required_headers):
             errores.append(
                 ExcelValidationIssueDTO(
                     hoja=sheet_name,
@@ -798,7 +807,7 @@ def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
                 continue
             record: dict[str, object] = {
                 header: value
-                for header, value in zip(expected_headers, values, strict=False)
+                for header, value in zip(header_values, values, strict=False)
             }
             record["_row_index"] = row_index
             sheet_rows.append(record)
@@ -885,11 +894,10 @@ def _parse_planeacion(
             row, "Planeacion_Proyecto", "actividad_proyecto", errores
         )
 
-        tipo_res_raw = _required_string(
-            row, "Planeacion_Proyecto", "tipo_resultado", errores
-        )
+        tipo_res_raw = _optional_string(row.get("tipo_resultado"))
         tipo_res: str | None = None
-        if tipo_res_raw is not None:
+        tipo_res_valid = True
+        if tipo_res_raw:
             normalized_tipo = tipo_res_raw.strip().upper()
             if normalized_tipo in (
                 TipoResultadoProyecto.ESPECIFICO.value,
@@ -898,6 +906,7 @@ def _parse_planeacion(
             ):
                 tipo_res = normalized_tipo
             else:
+                tipo_res_valid = False
                 errores.append(
                     ExcelValidationIssueDTO(
                         hoja="Planeacion_Proyecto",
@@ -952,7 +961,7 @@ def _parse_planeacion(
             or fase_proj is None
             or aid is None
             or act_proj is None
-            or tipo_res is None
+            or not tipo_res_valid
             or comp_id is None
             or cod_comp is None
             or nom_comp is None
@@ -1142,7 +1151,11 @@ def build_fase_previews(planeacion: list[PlaneacionRow]) -> list[ExcelFasePrevie
                             rap_id=res.rap_id,
                             rap_numero=res.rap_numero,
                             resultado_aprendizaje=res.resultado_aprendizaje,
-                            tipo_resultado=TipoResultadoProyecto(res.tipo_resultado),
+                            tipo_resultado=(
+                                TipoResultadoProyecto(res.tipo_resultado)
+                                if res.tipo_resultado is not None
+                                else None
+                            ),
                             orden_resultado=res.orden_resultado,
                             pagina_origen=res.pagina_origen,
                             observaciones=res.observaciones,

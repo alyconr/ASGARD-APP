@@ -226,7 +226,11 @@ class PlaneacionPedagogicaService:
                     id=asignacion.resultado.id,
                     codigo_resultado=asignacion.resultado.codigo_resultado,
                     descripcion=asignacion.resultado.descripcion,
-                    tipo_resultado=TipoResultadoProyecto(asignacion.tipo_resultado),
+                    tipo_resultado=(
+                        TipoResultadoProyecto(asignacion.tipo_resultado)
+                        if asignacion.tipo_resultado is not None
+                        else None
+                    ),
                     orden_resultado=asignacion.orden_resultado,
                 )
             )
@@ -837,7 +841,7 @@ class PlaneacionPedagogicaService:
 
     async def _load_tipos_resultado(
         self, proyecto_id: uuid.UUID
-    ) -> dict[tuple[uuid.UUID | None, uuid.UUID | None], str]:
+    ) -> dict[tuple[uuid.UUID | None, uuid.UUID | None], str | None]:
         statement = select(AsignacionCurricularProyecto).where(
             AsignacionCurricularProyecto.proyecto_id == proyecto_id
         )
@@ -1582,7 +1586,7 @@ class PlaneacionPedagogicaService:
         self, entity: PlaneacionPedagogica
     ) -> PlaneacionResponseDTO:
         """Map PlaneacionPedagogica ORM model to PlaneacionResponseDTO."""
-        tipos: dict[uuid.UUID, str] = {}
+        tipos: dict[uuid.UUID, str | None] = {}
         if entity.actividad_id is not None:
             asignaciones = await self._load_asignaciones_for_actividad(
                 entity.actividad_id
@@ -1595,15 +1599,17 @@ class PlaneacionPedagogicaService:
         grupos: dict[uuid.UUID, PlaneacionCompetenciaResumenDTO] = {}
         for resultado in entity.resultados:
             competencia = resultado.competencia
+            tipo_value = tipos.get(resultado.id)
+            tipo_resultado = (
+                TipoResultadoProyecto(tipo_value) if tipo_value is not None else None
+            )
             resumen = grupos.setdefault(
                 competencia.id,
                 PlaneacionCompetenciaResumenDTO(
                     competencia_id=competencia.id,
                     codigo_competencia=competencia.codigo_competencia,
                     nombre_competencia=competencia.nombre_competencia,
-                    tipo_resultado=TipoResultadoProyecto(
-                        tipos.get(resultado.id, TipoResultadoProyecto.ESPECIFICO.value)
-                    ),
+                    tipo_resultado=tipo_resultado,
                 ),
             )
             resumen.resultados.append(
@@ -1611,9 +1617,7 @@ class PlaneacionPedagogicaService:
                     id=resultado.id,
                     codigo_resultado=resultado.codigo_resultado,
                     descripcion=resultado.descripcion,
-                    tipo_resultado=TipoResultadoProyecto(
-                        tipos.get(resultado.id, TipoResultadoProyecto.ESPECIFICO.value)
-                    ),
+                    tipo_resultado=tipo_resultado,
                 )
             )
         return PlaneacionResponseDTO(

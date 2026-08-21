@@ -326,7 +326,7 @@ function CurriculumFasesModal({
                                                         ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
                                                         : "bg-slate-100 text-slate-600"
                                                     )}>
-                                                      {rap.tipo_resultado}
+                                                      {rap.tipo_resultado || "Sin clasificar"}
                                                     </span>
                                                     {rap.pagina_origen && (
                                                       <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">
