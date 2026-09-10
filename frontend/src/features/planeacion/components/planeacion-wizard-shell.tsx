@@ -260,6 +260,12 @@ const COMPLEMENTARY_FIELD_MAP = new Map(
   COMPLEMENTARY_FIELDS.map((field) => [field.id, field]),
 );
 
+// "ambientes_tipificados" is a section title grouping ambiente/materiales/instructores,
+// not an editable field, so it's excluded from value summaries.
+const COMPLEMENTARY_VALUE_FIELDS = COMPLEMENTARY_FIELDS.filter(
+  (field) => field.id !== "ambientes_tipificados",
+);
+
 export interface ComplementaryDataPerRap {
   actividades_aprendizaje?: string;
   estrategias_didacticas?: string;
@@ -313,6 +319,30 @@ function getNumberValue(record: Record<string, unknown>, ...keys: string[]): num
     }
   }
   return 0;
+}
+
+function hasTextValue(value?: string): boolean {
+  return Boolean(value && value.trim().length > 0);
+}
+
+// Mirrors the backend completeness check (_collect_gaps) per RAP, so the UI can
+// warn about pending RAPs before the user reaches the preview/generation step.
+function isRapDataComplete(data: ComplementaryDataPerRap | undefined): boolean {
+  if (!data) return false;
+  const hasAmbiente = hasTextValue(data.ambiente) || hasTextValue(data.ambientes_tipificados);
+  const total = data.duracion_actividad_horas ?? 0;
+  const directo = data.horas_trabajo_directo ?? 0;
+  const independiente = data.horas_trabajo_independiente ?? 0;
+  const horasCompletas = total > 0 && Math.abs(total - (directo + independiente)) < 0.001;
+  return (
+    hasTextValue(data.actividades_aprendizaje) &&
+    hasTextValue(data.descripcion_evidencia_aprendizaje) &&
+    hasTextValue(data.estrategias_didacticas) &&
+    hasTextValue(data.materiales_formacion) &&
+    hasTextValue(data.instructores) &&
+    hasAmbiente &&
+    horasCompletas
+  );
 }
 
 function formatCodigoVersion(codigo: string, version?: string | null): string {
@@ -535,24 +565,41 @@ export function PlaneacionWizardShell({
     if (targetRapId === currentRapId) return;
 
     if (currentRapId) {
-      setRapComplementaryMap((prev) => ({
-        ...prev,
-        [currentRapId]: {
-          actividades_aprendizaje: actividadesAprendizaje,
-          estrategias_didacticas: estrategias,
-          ambientes_tipificados: ambientesTipificados,
-          ambiente,
-          materiales_formacion: materialesFormacion,
-          descripcion_evidencia_aprendizaje: descripcionEvidencia,
-          observaciones,
-          duracion_actividad_horas: duracionHoras,
-          horas_trabajo_directo: horasTrabajoDirecto,
-          horas_trabajo_independiente: horasTrabajoIndependiente,
-          instructores,
-          tematicas_saber: tematicasSaber,
-          tematicas_proceso: tematicasProceso,
-        },
-      }));
+      const currentData: ComplementaryDataPerRap = {
+        actividades_aprendizaje: actividadesAprendizaje,
+        estrategias_didacticas: estrategias,
+        ambientes_tipificados: ambientesTipificados,
+        ambiente,
+        materiales_formacion: materialesFormacion,
+        descripcion_evidencia_aprendizaje: descripcionEvidencia,
+        observaciones,
+        duracion_actividad_horas: duracionHoras,
+        horas_trabajo_directo: horasTrabajoDirecto,
+        horas_trabajo_independiente: horasTrabajoIndependiente,
+        instructores,
+        tematicas_saber: tematicasSaber,
+        tematicas_proceso: tematicasProceso,
+      };
+      const updatedMap = { ...rapComplementaryMap, [currentRapId]: currentData };
+      setRapComplementaryMap(updatedMap);
+
+      if (isRapDataComplete(currentData)) {
+        const pendientes = selectedResultadoIds.filter(
+          (id) => id !== currentRapId && !isRapDataComplete(updatedMap[id]),
+        );
+        if (pendientes.length > 0) {
+          const codigos = pendientes
+            .map(
+              (id) =>
+                selectedResultados.find((r) => r.id === id)?.codigo_resultado ||
+                "RAP",
+            )
+            .join(", ");
+          toast.info(
+            `RAP diligenciado. Aún faltan ${pendientes.length} resultado(s) de aprendizaje por planear (${codigos}). No podrás generar ni descargar el formato hasta completarlos.`,
+          );
+        }
+      }
     }
 
     setActiveRapIdForComplementary(targetRapId);
@@ -931,6 +978,23 @@ export function PlaneacionWizardShell({
       await loadPlannings();
       if (!silent) {
         toast.success("Borrador guardado correctamente");
+      }
+      if (selectedResultadoIds.length > 1) {
+        const pendientes = selectedResultadoIds.filter(
+          (id) => !isRapDataComplete(finalRapMap[id]),
+        );
+        if (pendientes.length > 0) {
+          const codigos = pendientes
+            .map(
+              (id) =>
+                selectedResultados.find((r) => r.id === id)?.codigo_resultado ||
+                "RAP",
+            )
+            .join(", ");
+          toast.info(
+            `Aún faltan ${pendientes.length} resultado(s) de aprendizaje por planear (${codigos}). No podrás generar ni descargar el formato hasta completarlos.`,
+          );
+        }
       }
       return res.id;
     } catch (error) {
@@ -1963,9 +2027,42 @@ export function PlaneacionWizardShell({
                 </div>
                 
                 <div className="grid gap-6">
-                  {/* Primary Selection: Actividad del Proyecto */}
                   <div className="rounded-lg border border-[color:var(--card-border)] bg-slate-50/50 p-4 grid gap-4">
+                    {/* Step 1: Fase del Proyecto Formativo (Filtro Opcional) */}
                     <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <label htmlFor="fase-selector" className="block text-xs font-bold uppercase tracking-wider text-slate-800">
+                            1. Selecciona la Fase del Proyecto Formativo
+                          </label>
+                          <span className="text-[10px] font-normal text-slate-500">(Filtro Opcional)</span>
+                        </div>
+                        {faseId && selectedFase && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                            Fase activa: {selectedFase.nombre_fase}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[var(--muted)] mb-2.5">
+                        Selecciona la fase para filtrar las actividades del proyecto disponibles a continuación.
+                      </p>
+                      <select
+                        id="fase-selector"
+                        value={faseId}
+                        onChange={(e) => handleSelectFase(e.target.value)}
+                        className="min-h-11 w-full rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] font-medium shadow-xs"
+                      >
+                        <option value="">-- Todas las Fases del Proyecto --</option>
+                        {contexto.fases.map((fase) => (
+                          <option key={fase.id} value={fase.id}>
+                            {fase.nombre_fase}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Step 2: Actividad del Proyecto */}
+                    <div className="border-t border-slate-200/80 pt-3">
                       <label htmlFor="actividad-selector" className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-800">
                         2. Selecciona la Actividad del Proyecto
                       </label>
@@ -1988,38 +2085,6 @@ export function PlaneacionWizardShell({
                           );
                         })}
                       </select>
-                    </div>
-
-                    {/* Secondary Filter: Fase (Optional / Auto-filled) */}
-                    <div className="border-t border-slate-200/80 pt-3 flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex-1 min-w-[200px]">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-1.5">
-                            <label htmlFor="fase-selector" className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                              1. Selecciona la Fase del Proyecto Formativo
-                            </label>
-                            <span className="text-[10px] font-normal text-slate-500">(Filtro Opcional)</span>
-                          </div>
-                          {faseId && selectedFase && (
-                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
-                              Fase activa: {selectedFase.nombre_fase}
-                            </span>
-                          )}
-                        </div>
-                        <select
-                          id="fase-selector"
-                          value={faseId}
-                          onChange={(e) => handleSelectFase(e.target.value)}
-                          className="min-h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-[var(--accent)]"
-                        >
-                          <option value="">-- Todas las Fases del Proyecto --</option>
-                          {contexto.fases.map((fase) => (
-                            <option key={fase.id} value={fase.id}>
-                              {fase.nombre_fase}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
                     </div>
                   </div>
 
@@ -2619,6 +2684,24 @@ export function PlaneacionWizardShell({
 
                 <div className="grid gap-4">
                   {COMPLEMENTARY_FIELDS.map((field) => {
+                    if (field.id === "ambientes_tipificados") {
+                      return (
+                        <div
+                          key={field.id}
+                          className="mt-2 flex items-start gap-2 border-t border-[var(--line)] pt-4 first:mt-0 first:border-t-0"
+                        >
+                          <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-strong)]" />
+                          <div>
+                            <h3 className="text-sm font-bold uppercase tracking-wide text-[var(--accent-strong)]">
+                              {field.label}
+                            </h3>
+                            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                              {field.intro}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
                     const hasReadInstruction = readComplementaryFields.has(field.id);
                     const value = getComplementaryFieldValue(field.id);
                     return (
@@ -2917,7 +3000,7 @@ export function PlaneacionWizardShell({
                   </div>
 
                   <div className="border-t pt-4 grid gap-3 text-sm text-slate-700">
-                    {COMPLEMENTARY_FIELDS.map((field) => (
+                    {COMPLEMENTARY_VALUE_FIELDS.map((field) => (
                       <div key={field.id}>
                         <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">{field.label}</h4>
                         <p className="whitespace-pre-wrap">
@@ -3128,7 +3211,7 @@ export function PlaneacionWizardShell({
 
                         {/* Campos Complementarios */}
                         <div className="grid gap-4 text-sm">
-                          {COMPLEMENTARY_FIELDS.map((field) => (
+                          {COMPLEMENTARY_VALUE_FIELDS.map((field) => (
                             <div key={field.id}>
                               <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                                 {field.label}

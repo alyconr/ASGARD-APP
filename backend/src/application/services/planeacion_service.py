@@ -1124,7 +1124,86 @@ class PlaneacionPedagogicaService:
                     "complementario",
                 )
             )
+
+        gaps.extend(
+            self._per_rap_gaps(entity, data, required_text, aliases)
+        )
         return self._unique_gaps(gaps)
+
+    def _per_rap_gaps(
+        self,
+        entity: PlaneacionPedagogica,
+        data: dict[str, object],
+        required_text: tuple[tuple[str, str, str], ...],
+        aliases: dict[str, str],
+    ) -> list[FormatoOficialFaltanteDTO]:
+        """Verify that every selected RAP has its own didactic data filled.
+
+        Saving a planning only mirrors the first RAP into the top-level
+        fields, so relying solely on those fields lets a planning with
+        several RAPs look "complete" while the rest were never planned.
+        Legacy plannings saved before the per-RAP breakdown existed have no
+        "raps" map at all: for those, fall back to the top-level mirror so
+        already-complete plannings are not retroactively broken.
+        """
+        raps_data_raw = data.get("raps")
+        raps_data = raps_data_raw if isinstance(raps_data_raw, dict) else {}
+        uses_per_rap_data = bool(raps_data)
+
+        gaps: list[FormatoOficialFaltanteDTO] = []
+        for resultado in entity.resultados:
+            rap_id = str(resultado.id)
+            raw_rap_data = raps_data.get(rap_id)
+            if isinstance(raw_rap_data, dict) and raw_rap_data:
+                rap_data: dict[str, object] = raw_rap_data
+            elif not uses_per_rap_data:
+                rap_data = data
+            else:
+                rap_data = {}
+
+            is_incomplete = False
+            for _, key, _ in required_text:
+                value = rap_data.get(key) or rap_data.get(aliases.get(key, ""))
+                if not self._has_text(value):
+                    is_incomplete = True
+                    break
+
+            if not is_incomplete and not (
+                self._has_text(rap_data.get("ambiente"))
+                or self._has_text(rap_data.get("ambientes_aprendizaje"))
+                or self._has_text(rap_data.get("ambientes_tipificados"))
+            ):
+                is_incomplete = True
+
+            if not is_incomplete:
+                rap_total = self._number(
+                    rap_data.get(
+                        "duracion_actividad_horas", rap_data.get("duracion_horas")
+                    )
+                )
+                rap_direct = self._number(rap_data.get("horas_trabajo_directo"))
+                rap_independent = self._number(
+                    rap_data.get("horas_trabajo_independiente")
+                )
+                if (
+                    rap_total is None
+                    or rap_direct is None
+                    or rap_independent is None
+                    or rap_total <= 0
+                ):
+                    is_incomplete = True
+
+            if is_incomplete:
+                codigo_rap = resultado.codigo_resultado or str(resultado.id)[:8]
+                gaps.append(
+                    self._gap(
+                        f"RAP_PENDIENTE_{resultado.id}",
+                        f"Falta completar la orientacion didactica del "
+                        f"resultado de aprendizaje {codigo_rap}.",
+                        "complementario",
+                    )
+                )
+        return gaps
 
     @staticmethod
     def _metadata_gaps(
