@@ -6,7 +6,6 @@ import {
   BookOpenCheck,
   CheckCircle2,
   ClipboardCheck,
-  Edit3,
   FileSpreadsheet,
   FileText,
   Layers3,
@@ -30,7 +29,6 @@ import type {
   ProgramaCompletitudResponse,
   ProgramaExcelImportState,
   ProgramaPdfUploadResult,
-  ProgramaWizardStepId,
 } from "@/features/programa/types";
 
 type FieldOrigin = "MANUAL" | "EXTRAIDO" | "CORREGIDO" | "PENDIENTE" | "VALIDADO";
@@ -81,7 +79,6 @@ export function ProgramaConsolidadoRevision(
     competencias: ProgramaCompetencia[];
     pdfResult: ProgramaPdfUploadResult | null;
     excelResult: ProgramaExcelImportState | null;
-    onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
     onProgramaCerrado?: (result: ProgramaCierreResponse) => void;
     onSyncNeeded?: () => void;
   }>,
@@ -95,7 +92,6 @@ export function ProgramaConsolidadoRevision(
     competencias,
     pdfResult,
     excelResult,
-    onNavigateToStep,
     onProgramaCerrado = () => {},
     onSyncNeeded,
   } = props;
@@ -205,19 +201,6 @@ export function ProgramaConsolidadoRevision(
 
   return (
     <div className="grid gap-6">
-      <CompletionPanel
-        closeMessage={closeMessage}
-        estadoBorrador={estadoBorrador}
-        isClosing={isClosing}
-        isCompleted={isCompleted}
-        isValidating={isValidating}
-        onCloseProgram={() => void handleCloseProgram()}
-        onNavigateToStep={onNavigateToStep}
-        onValidate={() => void runValidation()}
-        validation={validation}
-        validationError={validationError}
-      />
-
       <SummaryBanner
         totalResultados={totalResultados}
         totalSaber={totalSaber}
@@ -250,14 +233,6 @@ export function ProgramaConsolidadoRevision(
               evidencia documental en MinIO.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigateToStep("origen-documental")}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            <Edit3 className="h-4 w-4" />
-            Revisar origen
-          </button>
         </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -410,6 +385,18 @@ export function ProgramaConsolidadoRevision(
         </div>
       </section>
 
+      <CompletionPanel
+        closeMessage={closeMessage}
+        estadoBorrador={estadoBorrador}
+        isClosing={isClosing}
+        isCompleted={isCompleted}
+        isValidating={isValidating}
+        onCloseProgram={() => void handleCloseProgram()}
+        onValidate={() => void runValidation()}
+        validation={validation}
+        validationError={validationError}
+      />
+
       {isRevisionModalOpen && (
         <CurriculumRevisionModal
           competencias={competencias}
@@ -427,7 +414,6 @@ function CompletionPanel({
   isCompleted,
   isValidating,
   onCloseProgram,
-  onNavigateToStep,
   onValidate,
   validation,
   validationError,
@@ -438,7 +424,6 @@ function CompletionPanel({
   isCompleted: boolean;
   isValidating: boolean;
   onCloseProgram: () => void;
-  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onValidate: () => void;
   validation: ProgramaCompletitudResponse | null;
   validationError: string | null;
@@ -541,7 +526,6 @@ function CompletionPanel({
             <MissingList
               faltantes={validation.faltantes ?? []}
               pendingCount={pendingCount}
-              onNavigateToStep={onNavigateToStep}
             />
           ) : null}
         </div>
@@ -565,11 +549,9 @@ function CompletionMetric({
 function MissingList({
   faltantes,
   pendingCount,
-  onNavigateToStep,
 }: Readonly<{
   faltantes: ProgramaCompletitudFaltante[];
   pendingCount: number;
-  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
 }>): React.JSX.Element {
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
@@ -577,16 +559,6 @@ function MissingList({
         <p className="text-sm font-semibold text-amber-900">
           Faltantes para cierre: {pendingCount}
         </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onNavigateToStep("origen-documental")}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:text-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-          >
-            <Edit3 className="h-4 w-4" />
-            Revisar origen
-          </button>
-        </div>
       </div>
       <ul className="mt-3 grid gap-2">
         {faltantes.map((item) => (

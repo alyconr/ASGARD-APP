@@ -27,19 +27,14 @@ function mockInactiveController(overrides = {}) {
   vi.spyOn(useProyectoWizardModule, "useProyectoWizard").mockReturnValue({
     activeReferenceId: null,
     autosave: { state: "idle", message: "Listo" },
-    canMoveNext: false,
-    canMovePrevious: false,
     clearKnownDrafts: vi.fn(),
     continueReferenceInput: "",
-    currentStepId: "fuente-proyecto",
+    currentStepId: "revision-proyecto",
     currentStepIndex: 0,
     draftStatus: "BORRADOR",
     errorMessage: null,
     closeProject: vi.fn(),
     forgetKnownDraft: vi.fn(),
-    goToNextStep: vi.fn(),
-    goToPreviousStep: vi.fn(),
-    goToStep: vi.fn(),
     isBootstrapping: false,
     isClosing: false,
     isRecovering: false,
@@ -114,7 +109,7 @@ describe("ProyectoWizardShell", () => {
       knownDrafts: [
         {
           referenciaId: projectReferenceId,
-          pasoActual: "fuente-proyecto",
+          pasoActual: "revision-proyecto",
           updatedAt: "2026-05-16T10:00:00.000Z",
           estado: "BORRADOR",
           label: "Borrador de proyecto",
@@ -133,15 +128,9 @@ describe("ProyectoWizardShell", () => {
     });
   });
 
-  it("starts the enabled project wizard in the document source step", () => {
-    const goToNextStep = vi.fn();
-    const goToPreviousStep = vi.fn();
+  it("shows the document source step without the PDF upload before the matrix is imported", () => {
     mockInactiveController({
       activeReferenceId: projectReferenceId,
-      canMoveNext: true,
-      canMovePrevious: false,
-      goToNextStep,
-      goToPreviousStep,
       isWizardActive: true,
       lastSavedAt: "2026-05-16T10:00:00.000Z",
       payload: {
@@ -149,7 +138,7 @@ describe("ProyectoWizardShell", () => {
           referenciaId: projectReferenceId,
           programaReferenciaId: availability.referencia_id,
           programaId: availability.programa_id,
-          touchedSteps: ["fuente-proyecto"],
+          touchedSteps: ["revision-proyecto"],
           startedAt: "2026-05-16T09:00:00.000Z",
           lastInteractionAt: "2026-05-16T09:00:00.000Z",
         },
@@ -170,22 +159,14 @@ describe("ProyectoWizardShell", () => {
     expect(screen.queryByText("PDF del proyecto formativo")).not.toBeInTheDocument();
     expect(screen.getByText("Matriz Excel del proyecto formativo")).toBeInTheDocument();
     expect(screen.queryByText("Slot reservado")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
-
-    expect(goToNextStep).toHaveBeenCalledOnce();
-    expect(goToPreviousStep).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /confirmar y cerrar proyecto/i }),
+    ).toBeDisabled();
   });
 
   it("renders the PDF upload component once the project matrix is imported", () => {
-    const goToNextStep = vi.fn();
-    const goToPreviousStep = vi.fn();
     mockInactiveController({
       activeReferenceId: projectReferenceId,
-      canMoveNext: true,
-      canMovePrevious: false,
-      goToNextStep,
-      goToPreviousStep,
       isWizardActive: true,
       lastSavedAt: "2026-05-16T10:00:00.000Z",
       payload: {
@@ -193,7 +174,7 @@ describe("ProyectoWizardShell", () => {
           referenciaId: projectReferenceId,
           programaReferenciaId: availability.referencia_id,
           programaId: availability.programa_id,
-          touchedSteps: ["fuente-proyecto"],
+          touchedSteps: ["revision-proyecto"],
           startedAt: "2026-05-16T09:00:00.000Z",
           lastInteractionAt: "2026-05-16T09:00:00.000Z",
         },
@@ -238,17 +219,13 @@ describe("ProyectoWizardShell", () => {
     mockInactiveController({
       activeReferenceId: projectReferenceId,
       closeProject,
-      canMoveNext: false,
-      canMovePrevious: true,
-      currentStepId: "revision-proyecto",
-      currentStepIndex: 1,
       isWizardActive: true,
       payload: {
         meta: {
           referenciaId: projectReferenceId,
           programaReferenciaId: availability.referencia_id,
           programaId: availability.programa_id,
-          touchedSteps: ["fuente-proyecto", "revision-proyecto"],
+          touchedSteps: ["revision-proyecto"],
           startedAt: "2026-05-16T09:00:00.000Z",
           lastInteractionAt: "2026-05-16T09:00:00.000Z",
         },
@@ -301,10 +278,6 @@ describe("ProyectoWizardShell", () => {
   it("renders a link to the pedagogical planning wizard when the project is complete", () => {
     mockInactiveController({
       activeReferenceId: projectReferenceId,
-      canMoveNext: false,
-      canMovePrevious: true,
-      currentStepId: "revision-proyecto",
-      currentStepIndex: 1,
       draftStatus: "COMPLETO",
       isWizardActive: true,
       payload: {
@@ -312,7 +285,7 @@ describe("ProyectoWizardShell", () => {
           referenciaId: projectReferenceId,
           programaReferenciaId: availability.referencia_id,
           programaId: availability.programa_id,
-          touchedSteps: ["fuente-proyecto", "revision-proyecto"],
+          touchedSteps: ["revision-proyecto"],
           startedAt: "2026-05-16T09:00:00.000Z",
           lastInteractionAt: "2026-05-16T09:00:00.000Z",
         },

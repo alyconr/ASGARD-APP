@@ -1,8 +1,6 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
-export type ProyectoWizardStepId =
-  | "fuente-proyecto"
-  | "revision-proyecto";
+export type ProyectoWizardStepId = "revision-proyecto";
 
 export interface ProyectoWizardStepDefinition {
   id: ProyectoWizardStepId;
@@ -10,7 +8,6 @@ export interface ProyectoWizardStepDefinition {
   label: string;
   shortLabel: string;
   description: string;
-  taskRef: string;
 }
 
 export interface ProyectoStoredDocument {
