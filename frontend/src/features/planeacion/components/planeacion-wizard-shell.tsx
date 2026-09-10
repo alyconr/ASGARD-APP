@@ -3019,15 +3019,23 @@ export function PlaneacionWizardShell({
                   >
                     Anterior
                   </button>
-                  <button
-                    type="button"
-                    disabled={isSaving || officialStatus?.listo !== true}
-                    onClick={() => void handleConfirmAndApprove()}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Generar formato oficial
-                  </button>
+                  {officialStatus?.listo === true ? (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => void handleConfirmAndApprove()}
+                      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Generar formato oficial
+                    </button>
+                  ) : (
+                    <p className="max-w-sm text-right text-xs leading-5 text-amber-800">
+                      Completa los campos pendientes de todos los resultados de
+                      aprendizaje para habilitar la generación del formato
+                      oficial.
+                    </p>
+                  )}
                 </div>
               </section>
             )}
