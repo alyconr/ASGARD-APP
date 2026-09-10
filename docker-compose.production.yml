@@ -10,8 +10,8 @@ services:
       - "${NGINX_HTTP_PORT:-8080}:80"
       - "${MINIO_CONSOLE_PORT:-9001}:81"
     volumes:
-      - ./deploy/staging/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./deploy/staging/nginx.htpasswd:/etc/nginx/.htpasswd:ro
+      - ./deploy/production/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/production/nginx.htpasswd:/etc/nginx/.htpasswd:ro
 
   asgard-frontend:
     build:
@@ -19,7 +19,7 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: "/api/v1"
-        NEXT_PUBLIC_APP_ENV: "staging"
+        NEXT_PUBLIC_APP_ENV: "production"
     restart: unless-stopped
     expose:
       - "3000"
@@ -37,7 +37,7 @@ services:
       - "8000"
     environment:
       APP_NAME: "SENA Guia Aprendizaje API"
-      APP_ENV: staging
+      APP_ENV: production
       APP_HOST: 0.0.0.0
       APP_PORT: "8000"
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-sena_guias}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido}@asgard-postgres:5432/${POSTGRES_DB:-sena_guias_db}"

@@ -317,7 +317,7 @@ function CurriculumFasesModal({
                                               >
                                                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-slate-100 pb-1.5">
                                                   <span className="font-semibold text-slate-800">
-                                                    RAP #{rap.rap_numero}
+                                                    {rap.rap_numero ? `RAP #${rap.rap_numero}` : "RAP sin número"}
                                                   </span>
                                                   <div className="flex gap-1.5">
                                                     <span className={cn(
@@ -326,7 +326,7 @@ function CurriculumFasesModal({
                                                         ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
                                                         : "bg-slate-100 text-slate-600"
                                                     )}>
-                                                      {rap.tipo_resultado}
+                                                      {rap.tipo_resultado || "Sin clasificar"}
                                                     </span>
                                                     {rap.pagina_origen && (
                                                       <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">

@@ -675,8 +675,10 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 - Cada `PlaneacionPedagogica` integra 1..N Competencias y 1..N Resultados de Aprendizaje (RAP).
 - Las horas didácticas se asignan por `PlaneacionPedagogica` y se escriben en la primera fila del bloque correspondientes a cada planeación en la exportación oficial.
 
-## Tipado estricto de tipo_resultado
+## Tipado opcional de tipo_resultado
 
-- El dominio de `tipo_resultado` en el proyecto formativo queda restringido exclusivamente al enum `TipoResultadoProyecto` con valores `ESPECIFICO` y `TRANSVERSAL`.
-- Se normalizan espacios y mayúsculas durante la carga del Excel canónico. Cualquier valor no equivalente (ej. `TECNICO`, `OTRO`, `TRANSVERS`) es rechazado con error claro indicando hoja, fila y campo, impidiendo la materialización.
+- `tipo_resultado` es opcional en la matriz del proyecto: la columna puede faltar o la celda puede estar vacía sin bloquear la carga.
+- `rap_numero` también es opcional: puede faltar la columna o quedar vacía la celda; `rap_id` continúa siendo el identificador estable del resultado.
+- Cuando viene informado, su dominio queda restringido al enum `TipoResultadoProyecto`; se normalizan espacios y mayúsculas durante la carga del Excel canónico y cualquier valor no equivalente es rechazado con error claro indicando hoja, fila y campo.
 - No se aplica ninguna regla de inferencia basada en códigos o nombres de competencia; la matriz Excel es la única fuente autoritativa.
+- La ausencia de `tipo_resultado` se conserva como `NULL` y no invalida la fila ni la importación.

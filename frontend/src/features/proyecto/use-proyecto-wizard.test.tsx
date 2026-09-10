@@ -47,13 +47,13 @@ function buildProjectPayload(referenceId = projectReferenceId): DraftPayloadProy
       referenciaId: referenceId,
       programaReferenciaId: programReferenceId,
       programaId: programId,
-      touchedSteps: ["fuente-proyecto"],
+      touchedSteps: ["revision-proyecto"],
       startedAt: "2026-05-16T09:00:00.000Z",
       lastInteractionAt: "2026-05-16T09:30:00.000Z",
     },
     wizard: {
       notesByStep: {
-        "fuente-proyecto": "Revisar soporte despues",
+        "revision-proyecto": "Revisar soporte despues",
       },
     },
     proyecto: {
@@ -100,9 +100,9 @@ describe("useProyectoWizard", () => {
     });
 
     expect(result.current.activeReferenceId).toBe(projectReferenceId);
-    expect(result.current.currentStepId).toBe("fuente-proyecto");
+    expect(result.current.currentStepId).toBe("revision-proyecto");
     expect(mockSaveDraft).toHaveBeenCalledWith("PROYECTO", projectReferenceId, {
-      paso_actual: "fuente-proyecto",
+      paso_actual: "revision-proyecto",
       payload_json: expect.objectContaining({
         meta: expect.objectContaining({
           programaReferenciaId: programReferenceId,
@@ -123,7 +123,7 @@ describe("useProyectoWizard", () => {
     mockGetDraft.mockResolvedValue(
       buildDraftResponse(
         {
-          paso_actual: "fuente-proyecto",
+          paso_actual: "revision-proyecto",
           payload_json: payload as unknown as Record<string, unknown>,
           estado_borrador: "BORRADOR",
         },
@@ -146,8 +146,8 @@ describe("useProyectoWizard", () => {
     });
 
     expect(mockGetDraft).toHaveBeenCalledWith("PROYECTO", projectReferenceId);
-    expect(result.current.currentStepId).toBe("fuente-proyecto");
-    expect(result.current.payload?.wizard.notesByStep["fuente-proyecto"]).toBe(
+    expect(result.current.currentStepId).toBe("revision-proyecto");
+    expect(result.current.payload?.wizard.notesByStep["revision-proyecto"]).toBe(
       "Revisar soporte despues",
     );
     expect(result.current.payload?.proyecto.codigo_proyecto).toBe("PR-001");
@@ -174,10 +174,10 @@ describe("useProyectoWizard", () => {
     });
 
     act(() => {
-      result.current.updateStepNote("fuente-proyecto", "PDF evidencia listo");
+      result.current.updateStepNote("revision-proyecto", "PDF evidencia listo");
     });
 
-    expect(result.current.payload?.wizard.notesByStep["fuente-proyecto"]).toBe(
+    expect(result.current.payload?.wizard.notesByStep["revision-proyecto"]).toBe(
       "PDF evidencia listo",
     );
 
@@ -190,11 +190,11 @@ describe("useProyectoWizard", () => {
         "PROYECTO",
         projectReferenceId,
         expect.objectContaining({
-          paso_actual: "fuente-proyecto",
+          paso_actual: "revision-proyecto",
           payload_json: expect.objectContaining({
             wizard: expect.objectContaining({
               notesByStep: expect.objectContaining({
-                "fuente-proyecto": "PDF evidencia listo",
+                "revision-proyecto": "PDF evidencia listo",
               }),
             }),
           }),
@@ -203,43 +203,7 @@ describe("useProyectoWizard", () => {
     });
   });
 
-  it("navigates and autosaves the current project step", async () => {
-    mockGetDraft.mockImplementation(async () => {
-      const payload = buildProjectPayload();
-      payload.documental.fuente_estructurada = {
-        documento: null,
-        preview: {
-          valid: true,
-          proyecto: {
-            codigo_proyecto: "PR-001",
-            nombre_proyecto: "Proyecto formativo base",
-            version_proyecto: "1",
-          },
-        },
-        confirmacion: {
-          estado: "IMPORTADO",
-          confirmed_at: "2026-05-16T10:00:00.000Z",
-        },
-      } as unknown as NonNullable<DraftPayloadProyecto["documental"]["fuente_estructurada"]>;
-      payload.documental.proyecto_pdf = {
-        documento: {
-          original_filename: "proyecto.pdf",
-          storage_key: "proyectos-formativos/some-key.pdf",
-          size_bytes: 1024,
-          content_type: "application/pdf",
-          checksum_sha256: "some-sha",
-          etag: "some-etag",
-        },
-        uso: "EVIDENCIA_DOCUMENTAL",
-        updated_at: "2026-05-16T10:00:00.000Z",
-      } as unknown as NonNullable<DraftPayloadProyecto["documental"]["proyecto_pdf"]>;
-      return buildDraftResponse({
-        paso_actual: "fuente-proyecto",
-        payload_json: payload as unknown as Record<string, unknown>,
-        estado_borrador: "BORRADOR",
-      });
-    });
-
+  it("autosaves the single project step after importing the matrix and PDF", async () => {
     const { result } = renderHook(() =>
       useProyectoWizard({
         programaId: programId,
@@ -254,6 +218,8 @@ describe("useProyectoWizard", () => {
     await act(async () => {
       await result.current.startNewFlow();
     });
+
+    expect(result.current.currentStepId).toBe("revision-proyecto");
 
     await act(async () => {
       result.current.updateProyectoExcelImport({
@@ -283,10 +249,6 @@ describe("useProyectoWizard", () => {
         uso: "EVIDENCIA_DOCUMENTAL",
         updated_at: "2026-05-16T10:00:00.000Z",
       } as unknown as Parameters<typeof result.current.updateProyectoPdfResult>[0]);
-    });
-
-    act(() => {
-      result.current.goToNextStep();
     });
 
     expect(result.current.currentStepId).toBe("revision-proyecto");

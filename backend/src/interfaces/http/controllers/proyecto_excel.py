@@ -120,7 +120,7 @@ class ProjectRepository:
         actividad_proyecto_id: uuid.UUID,
         competencia_id: uuid.UUID,
         resultado_id: uuid.UUID | None,
-        tipo_resultado: str,
+        tipo_resultado: str | None,
         orden_resultado: int | None,
         pagina_origen: str | None,
         observaciones: str | None,

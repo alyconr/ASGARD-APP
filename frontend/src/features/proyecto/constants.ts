@@ -11,22 +11,12 @@ import type {
 
 export const PROYECTO_WIZARD_STEPS: ProyectoWizardStepDefinition[] = [
   {
-    id: "fuente-proyecto",
+    id: "revision-proyecto",
     index: 0,
-    label: "Origen documental",
+    label: "Revisión del proyecto formativo",
     shortLabel: "01",
     description:
-      "PDF como evidencia y matriz Excel como fuente estructurada del proyecto formativo.",
-    taskRef: "TASK-18 / TASK-19",
-  },
-  {
-    id: "revision-proyecto",
-    index: 1,
-    label: "Revisión del proyecto formativo",
-    shortLabel: "02",
-    description:
-      "Lugar del consolidado editable antes del cierre del proyecto formativo.",
-    taskRef: "TASK-22",
+      "Carga el PDF de evidencia y la matriz Excel, y revisa el consolidado antes de cerrar el proyecto formativo.",
   },
 ];
 
@@ -348,9 +338,9 @@ function normalizeProyectoDocumental(
                                 return [
                                   {
                                     rap_id: asString(rap.rap_id),
-                                    rap_numero: asString(rap.rap_numero),
+                                    rap_numero: asNullableString(rap.rap_numero),
                                     resultado_aprendizaje: asString(rap.resultado_aprendizaje),
-                                    tipo_resultado: asString(rap.tipo_resultado),
+                                    tipo_resultado: asNullableString(rap.tipo_resultado),
                                     orden_resultado:
                                       typeof rap.orden_resultado === "number" && Number.isFinite(rap.orden_resultado)
                                         ? rap.orden_resultado
