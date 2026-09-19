@@ -1,4 +1,4 @@
-﻿"""Organization, Executing Teams, and Process Assignment controller."""
+"""Organization, Executing Teams, and Process Assignment controller."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from src.infrastructure.db.models.organizacion import (
     ProcesoCurricular,
 )
 from src.infrastructure.db.session import get_async_session
+from src.infrastructure.repositories.audit import AuditRepository
 from src.interfaces.http.controllers.auth import _map_user_response
 from src.interfaces.http.deps import get_current_user, require_roles
 from src.interfaces.http.schemas.organizacion import (
@@ -131,6 +132,7 @@ async def list_equipos(
 )
 async def create_equipo(
     payload: EquipoEjecutorCreate,
+    current_user: Annotated[Usuario, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> EquipoEjecutorResponse:
     """Create a new executing team enforcing leader and specialty integrity."""
@@ -168,6 +170,15 @@ async def create_equipo(
         estado=EstadoEquipo.ACTIVO,
     )
     session.add(equipo)
+    await session.flush()
+
+    audit_repo = AuditRepository(session)
+    await audit_repo.add_event(
+        entidad="EquipoEjecutor",
+        entidad_id=equipo.id,
+        accion="TEAM_CREATED",
+        detalle={"creado_por": str(current_user.id), "nombre": equipo.nombre, "lider_id": str(equipo.lider_id)},
+    )
     await session.commit()
 
     reloaded = await session.get(
@@ -193,7 +204,7 @@ async def add_miembro_equipo(
     session: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> MiembroResponse:
-    """Attach an additional user to an executing team."""
+    """Attach an additional user to an executing team, validating organizational consistency."""
     equipo = await session.get(EquipoEjecutor, equipo_id)
     if equipo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
@@ -202,7 +213,14 @@ async def add_miembro_equipo(
     if usuario is None or not usuario.activo:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Usuario no válido o inactivo")
 
-    # Check if already member
+    # Invariant: Usuario de apoyo debe pertenecer a la misma coordinación y especialidad
+    if usuario.coordinacion_id != equipo.coordinacion_id or usuario.especialidad_id != equipo.especialidad_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El usuario de apoyo debe pertenecer a la misma coordinación y especialidad del equipo ejecutor",
+        )
+
+    audit_repo = AuditRepository(session)
     stmt = select(EquipoEjecutorMiembro).where(
         EquipoEjecutorMiembro.equipo_id == equipo_id,
         EquipoEjecutorMiembro.usuario_id == payload.usuario_id,
@@ -211,6 +229,12 @@ async def add_miembro_equipo(
     existing = res.scalar_one_or_none()
     if existing:
         existing.activo = True
+        await audit_repo.add_event(
+            entidad="EquipoEjecutorMiembro",
+            entidad_id=existing.id,
+            accion="TEAM_MEMBER_ADDED",
+            detalle={"equipo_id": str(equipo_id), "usuario_id": str(payload.usuario_id), "reactivado": True},
+        )
         await session.commit()
         await session.refresh(existing)
         return MiembroResponse(
@@ -229,6 +253,14 @@ async def add_miembro_equipo(
         asignado_por=current_user.id,
     )
     session.add(miembro)
+    await session.flush()
+
+    await audit_repo.add_event(
+        entidad="EquipoEjecutorMiembro",
+        entidad_id=miembro.id,
+        accion="TEAM_MEMBER_ADDED",
+        detalle={"equipo_id": str(equipo_id), "usuario_id": str(payload.usuario_id)},
+    )
     await session.commit()
     await session.refresh(miembro)
 
@@ -268,6 +300,13 @@ async def update_miembro_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membresía no encontrada")
 
     miembro.activo = payload.activo
+    audit_repo = AuditRepository(session)
+    await audit_repo.add_event(
+        entidad="EquipoEjecutorMiembro",
+        entidad_id=miembro.id,
+        accion="TEAM_MEMBER_DISABLED" if not payload.activo else "TEAM_MEMBER_ENABLED",
+        detalle={"equipo_id": str(equipo_id), "usuario_id": str(usuario_id), "activo": payload.activo},
+    )
     await session.commit()
     await session.refresh(miembro)
     return MiembroResponse(
@@ -290,7 +329,7 @@ async def asignar_proceso(
     payload: ProcesoAsignarRequest,
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> ProcesoCurricularResponse:
-    """Assign a curricular process to an executing team and leader."""
+    """Assign or reassign a curricular process to an executing team and leader."""
     equipo = await session.get(EquipoEjecutor, payload.equipo_ejecutor_id)
     if equipo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
@@ -300,6 +339,9 @@ async def asignar_proceso(
     stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
     res = await session.execute(stmt)
     proceso = res.scalar_one_or_none()
+
+    audit_repo = AuditRepository(session)
+    accion = "PROCESS_REASSIGNED" if proceso and proceso.equipo_ejecutor_id else "PROCESS_ASSIGNED"
 
     if proceso is None:
         proceso = ProcesoCurricular(
@@ -318,6 +360,13 @@ async def asignar_proceso(
         proceso.lider_id = lider_id
         proceso.estado_scope = EstadoScopeProceso.ASIGNADO
 
+    await session.flush()
+    await audit_repo.add_event(
+        entidad="ProcesoCurricular",
+        entidad_id=proceso.id,
+        accion=accion,
+        detalle={"referencia_id": str(referencia_id), "equipo_id": str(equipo.id), "lider_id": str(lider_id)},
+    )
     await session.commit()
     await session.refresh(proceso)
     return ProcesoCurricularResponse.model_validate(proceso)

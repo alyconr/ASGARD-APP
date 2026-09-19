@@ -1,4 +1,4 @@
-﻿"""Authentication and authorization FastAPI dependencies."""
+"""Authentication and authorization FastAPI dependencies."""
 
 from __future__ import annotations
 
@@ -80,6 +80,14 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="La cuenta de usuario está desactivada",
+        )
+
+    token_ver = payload.get("token_version")
+    if token_ver is not None and token_ver != getattr(user, "token_version", 1):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La sesión ha expirado o fue cerrada",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return user

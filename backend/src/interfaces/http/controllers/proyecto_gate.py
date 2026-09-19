@@ -7,14 +7,17 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.proyecto_gate import (
     ProyectoBloqueadoError,
     ProyectoGateDraftNotFoundError,
     ProyectoGateService,
 )
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.proyecto_gate import ProyectoGateRepository
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.proyecto_gate import (
     ProyectoDisponibilidadResponse,
 )
@@ -39,8 +42,13 @@ def get_proyecto_gate_service(
 async def consultar_disponibilidad_proyecto(
     referencia_id: uuid.UUID,
     service: ProyectoGateService = Depends(get_proyecto_gate_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoDisponibilidadResponse:
     """Return whether the project module is currently blocked."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.consultar_disponibilidad(referencia_id)
     except ProyectoGateDraftNotFoundError as error:
@@ -55,8 +63,13 @@ async def consultar_disponibilidad_proyecto(
 async def validar_acceso_proyecto(
     referencia_id: uuid.UUID,
     service: ProyectoGateService = Depends(get_proyecto_gate_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoDisponibilidadResponse:
     """Reject access attempts when the program is not complete."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.validar_acceso(referencia_id)
     except ProyectoGateDraftNotFoundError as error:

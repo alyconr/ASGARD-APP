@@ -1,5 +1,7 @@
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
 
+let inMemoryAccessToken: string | null = null;
+
 export function getApiBaseUrl(): string {
   return (
     process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -8,8 +10,11 @@ export function getApiBaseUrl(): string {
 }
 
 export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("asgard_token");
+  return inMemoryAccessToken;
+}
+
+export function setAuthToken(token: string | null): void {
+  inMemoryAccessToken = token;
 }
 
 export async function authFetch(
@@ -23,6 +28,7 @@ export async function authFetch(
   }
   return fetch(input, {
     ...init,
+    credentials: init?.credentials ?? "include",
     headers,
   });
 }

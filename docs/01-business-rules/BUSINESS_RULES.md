@@ -707,8 +707,34 @@ A partir del refactor de seguridad y control de acceso multiusuario, el sistema 
 
 ## 26.4 Vinculación y Auto-anclaje de Procesos Curriculares
 - La entidad `ProcesoCurricular` correlaciona el `referencia_id` (UUID canónico del borrador/flujo) con su `EquipoEjecutor`.
-- Cuando un `LIDER_EQUIPO_EJECUTOR` inicia y guarda un nuevo borrador o flujo de programa, el sistema auto-vincula automáticamente la referencia al equipo ejecutor activo del líder (`ensure_proceso_for_referencia`).
+- Cuando un `LIDER_EQUIPO_EJECUTOR` inicia y guarda un nuevo borrador o flujo de programa:
+  - Si el líder tiene 0 equipos ejecutores activos: la solicitud es rechazada con HTTP 422 ("El usuario no tiene un equipo ejecutor activo asignado.").
+  - Si el líder tiene exactamente 1 equipo ejecutor activo: el proceso se auto-ancla automáticamente a dicho equipo.
+  - Si el líder lidera 2 o más equipos activos: el payload debe indicar explícitamente `equipo_ejecutor_id`. De lo contrario se rechaza con HTTP 422 para evitar ambigüedad en el ownership.
 - Si un proceso es creado sin usuario autenticado en entornos de migración/compatibilidad, queda con `equipo_id = NULL` (estado `SIN_ASIGNAR`) y solo es visible y reasignable por roles `ADMIN` o `SUPERADMIN`.
+- Si un equipo ejecutor pasa a estado `INACTIVO`, se bloquea el acceso operativo al proceso curricular para el líder y los miembros del equipo (HTTP 403).
 
-## 26.5 Protección contra IDOR
-- Todos los endpoints en controladores de planeación (`/planeacion/...`), borradores (`/drafts/...`) y dashboard (`/dashboard/...`) verifican de manera estricta los permisos de acceso antes de leer, modificar o eliminar recursos. Intentos de acceso no autorizados arrojan código HTTP 403 Forbidden.
+## 26.5 Protección Integral contra IDOR
+- Todos los endpoints en controladores de programa (`/programas/...`), proyectos (`/proyectos/...`), planeación (`/planeaciones/...`), borradores (`/drafts/...`) y dashboard (`/dashboard/...`) verifican de manera estricta los permisos de acceso antes de leer, crear, modificar o eliminar recursos (`AccessScopeService.require_process_access`, `require_project_access`, `require_planning_access`). Intentos de acceso no autorizados arrojan código HTTP 403 Forbidden.
+
+# 27. Endurecimiento de Seguridad, Sesiones y Autenticación (Sprint RBAC-6)
+
+## 27.1 Revocación Inmediata de Sesiones (`token_version`)
+- Cada usuario posee una columna `token_version` (entero incremental) en base de datos.
+- Todo JWT emitido incluye el claim `token_version`.
+- La dependencia de autenticación (`get_current_user`) compara en cada petición el claim `token_version` del token contra el valor actual en base de datos.
+- Las operaciones de logout (`POST /api/v1/auth/logout`) y cambio de contraseña (`POST /api/v1/auth/change-password`) incrementan `token_version` en base de datos, revocando instantáneamente todos los access tokens y refresh tokens emitidos con anterioridad.
+
+## 27.2 Manejo de Tokens en Frontend y Rotación de Refresh Tokens
+- El frontend almacena el `access_token` estrictamente en memoria volátil de la aplicación (`inMemoryAccessToken`). No se persiste ningún token en `localStorage` o `sessionStorage`.
+- El `refresh_token` se maneja mediante cookies seguras `HttpOnly` (`asgard_refresh_token`), protegidas contra robo mediante ataques XSS.
+- Cada invocación a `POST /api/v1/auth/refresh` rota el `refresh_token` y entrega un nuevo `access_token` en memoria.
+
+## 27.3 Prevención de Escalamiento de Privilegios
+- Los administradores (`ADMIN`) tienen prohibido crear o asignar el rol `SUPERADMIN` a cualquier usuario (HTTP 403 Forbidden).
+- Solo un usuario autenticado con rol `SUPERADMIN` puede asignar dicho rol.
+- Líderes de equipo y usuarios adicionales no pueden acceder a endpoints administrativos ni alterar membresías o asignaciones ajenas.
+
+## 27.4 Rate Limiting en Autenticación
+- El endpoint de inicio de sesión (`POST /api/v1/auth/login`) implementa una ventana deslizante de rate limiting por dirección IP / correo institucional: un máximo de 5 intentos fallidos por minuto. Al superar el límite, se bloquean intentos adicionales con HTTP 429 Too Many Requests.
+

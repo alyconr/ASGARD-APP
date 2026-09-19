@@ -7,15 +7,18 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.proyecto_cierre import (
     ProyectoCierreDraftNotFoundError,
     ProyectoCierreService,
     ProyectoCierreValidationError,
 )
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.proyecto_cierre import ProyectoCierreRepository
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.proyecto_cierre import (
     ProyectoCierreResponse,
     ProyectoCompletitudResponse,
@@ -44,8 +47,13 @@ def get_proyecto_cierre_service(
 async def validar_completitud_proyecto(
     referencia_id: uuid.UUID,
     service: ProyectoCierreService = Depends(get_proyecto_cierre_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoCompletitudResponse:
     """Return structured readiness details for closing a project."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.validar_completitud(referencia_id)
     except ProyectoCierreDraftNotFoundError as error:
@@ -61,8 +69,13 @@ async def validar_completitud_proyecto(
 async def cerrar_proyecto(
     referencia_id: uuid.UUID,
     service: ProyectoCierreService = Depends(get_proyecto_cierre_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoCierreResponse:
     """Close a project after explicit UI confirmation."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.cerrar_proyecto(referencia_id)
     except ProyectoCierreDraftNotFoundError as error:

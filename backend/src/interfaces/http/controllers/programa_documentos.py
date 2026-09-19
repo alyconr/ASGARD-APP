@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.pdf_diagnostics import (
     InvalidPdfError,
     PdfLegibilityDiagnosticService,
@@ -17,10 +18,12 @@ from src.application.services.programa_documentos import (
     ProgramaDraftMissingError,
 )
 from src.infrastructure.config.settings import Settings, get_settings
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.programa_documentos import (
     ProgramaPdfUploadResponse,
 )
@@ -51,8 +54,13 @@ async def upload_program_pdf(
     referencia_id: uuid.UUID,
     file: UploadFile = File(...),
     service: ProgramaDocumentService = Depends(get_programa_document_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaPdfUploadResponse:
     """Upload a program PDF, store it and return a legibility diagnosis."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     filename = file.filename or ""
     content_type = file.content_type or "application/octet-stream"
     content = await file.read()

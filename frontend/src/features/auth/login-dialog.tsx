@@ -96,45 +96,47 @@ export function LoginDialog({ isOpen, onClose }: LoginDialogProps): React.JSX.El
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            Accesos de prueba rápidos:
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("admin.pedagogico@sena.edu.co")}
-              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-            >
-              <div className="font-semibold text-slate-800 dark:text-slate-200">Admin Pedagógico</div>
-              <div className="text-[10px] text-slate-500">Visibilidad global</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("lider.redes1@sena.edu.co")}
-              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-            >
-              <div className="font-semibold text-slate-800 dark:text-slate-200">Líder Redes 01</div>
-              <div className="text-[10px] text-slate-500">Aislamiento Equipo 1</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("lider.redes2@sena.edu.co")}
-              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-            >
-              <div className="font-semibold text-slate-800 dark:text-slate-200">Líder Redes 02</div>
-              <div className="text-[10px] text-slate-500">Aislamiento Equipo 2</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("apoyo.redes1@sena.edu.co")}
-              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
-            >
-              <div className="font-semibold text-slate-800 dark:text-slate-200">Usuario Adicional</div>
-              <div className="text-[10px] text-slate-500">Miembro Equipo 1</div>
-            </button>
+        {process.env.NODE_ENV !== "production" && (
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Accesos de prueba rápidos:
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("admin.pedagogico@sena.edu.co")}
+                className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <div className="font-semibold text-slate-800 dark:text-slate-200">Admin Pedagógico</div>
+                <div className="text-[10px] text-slate-500">Visibilidad global</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("lider.redes1@sena.edu.co")}
+                className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <div className="font-semibold text-slate-800 dark:text-slate-200">Líder Redes 01</div>
+                <div className="text-[10px] text-slate-500">Aislamiento Equipo 1</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("lider.redes2@sena.edu.co")}
+                className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <div className="font-semibold text-slate-800 dark:text-slate-200">Líder Redes 02</div>
+                <div className="text-[10px] text-slate-500">Aislamiento Equipo 2</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickLogin("apoyo.redes1@sena.edu.co")}
+                className="rounded-md border border-slate-200 bg-slate-50 p-2 text-left hover:bg-emerald-50 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <div className="font-semibold text-slate-800 dark:text-slate-200">Usuario Adicional</div>
+                <div className="text-[10px] text-slate-500">Miembro Equipo 1</div>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

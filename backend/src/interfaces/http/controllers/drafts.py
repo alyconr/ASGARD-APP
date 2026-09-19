@@ -14,9 +14,10 @@ from src.application.dto.drafts import SaveDraftCommand
 from src.application.services.access_scope import AccessScopeService
 from src.application.services.drafts import DraftNotFoundError, DraftService
 from src.domain.drafts.types import TipoBloqueBorrador
-from src.domain.shared.enums import RolUsuario
+from src.domain.shared.enums import EstadoEquipo, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
@@ -56,26 +57,68 @@ async def save_draft(
 ) -> DraftResponse:
     """Create or update the draft for a program or project reference."""
     if current_user is not None:
-        # Check if process exists and if user can access it
         can_access = await scope_service.can_access_process(current_user, referencia_id)
         if not can_access:
-            # If not yet created, auto-anchor to leader's team or creator
-            equipo_id = (
-                current_user.equipos_liderados[0].id
-                if current_user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
-                and current_user.equipos_liderados
-                else None
-            )
-            lider_id = current_user.id if equipo_id else None
+            # Check if process already exists
+            stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+            proc_res = await scope_service._session.execute(stmt)
+            existing_proc = proc_res.scalar_one_or_none()
+            if existing_proc is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes autorización para modificar este borrador",
+                )
+
+            # Process is new. Resolve team assignment
+            if current_user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
+                active_teams = [
+                    t for t in current_user.equipos_liderados
+                    if t.estado == EstadoEquipo.ACTIVO
+                ]
+                if len(active_teams) == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="El usuario no tiene un equipo ejecutor activo asignado.",
+                    )
+                if len(active_teams) == 1:
+                    target_team = active_teams[0]
+                else:
+                    if not request.equipo_ejecutor_id:
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="El usuario lidera múltiples equipos ejecutores. Debe especificar equipo_ejecutor_id.",
+                        )
+                    matching = [t for t in active_teams if t.id == request.equipo_ejecutor_id]
+                    if not matching:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="No tienes autorización sobre el equipo ejecutor especificado",
+                        )
+                    target_team = matching[0]
+
+                equipo_id = target_team.id
+                coordinacion_id = target_team.coordinacion_id
+                especialidad_id = target_team.especialidad_id
+                lider_id = current_user.id
+            elif current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                equipo_id = None
+                coordinacion_id = current_user.coordinacion_id
+                especialidad_id = current_user.especialidad_id
+                lider_id = None
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permisos para crear un nuevo proceso curricular",
+                )
+
             await scope_service.ensure_proceso_for_referencia(
                 referencia_id=referencia_id,
                 creado_por=current_user.id,
-                coordinacion_id=current_user.coordinacion_id,
-                especialidad_id=current_user.especialidad_id,
+                coordinacion_id=coordinacion_id,
+                especialidad_id=especialidad_id,
                 equipo_ejecutor_id=equipo_id,
                 lider_id=lider_id,
             )
-            # Re-check
             if not await scope_service.can_access_process(current_user, referencia_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

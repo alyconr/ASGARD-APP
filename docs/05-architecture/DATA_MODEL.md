@@ -794,6 +794,7 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NULL para administradores globales)
   - `especialidad_id` (UUID, FK -> `especialidades.id`, NULL para administradores globales)
   - `activo` (BOOLEAN, DEFAULT TRUE)
+  - `token_version` (INTEGER, NOT NULL, DEFAULT 1) — Versión de token para revocación instantánea en logout y cambio de clave
   - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
 
 - **`roles`**:
@@ -836,15 +837,21 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `usuario_id` (UUID, FK -> `usuarios.id`, NOT NULL)
   - `activo` (BOOLEAN, DEFAULT TRUE)
   - Unique Constraint: `(equipo_id, usuario_id)`
+  - Index: `ix_equipos_ejecutores_miembros_activo` sobre `activo`
 
 - **`procesos_curriculares`**:
   - `id` (UUID, PK)
-  - `referencia_id` (VARCHAR 64, UNIQUE, NOT NULL) — Correlaciona el borrador / flujo canónico de programa, proyecto y planeación
-  - `equipo_id` (UUID, FK -> `equipos_ejecutores.id`, NULL para procesos sin asignar)
-  - `tipo_necesidad` (VARCHAR 50, NOT NULL, DEFAULT 'NUEVA_OFERTA')
-  - `estado_scope` (VARCHAR 50, NOT NULL, DEFAULT 'BORRADOR')
+  - `referencia_id` (UUID, UNIQUE, NOT NULL) — Correlaciona el borrador / flujo canónico de programa, proyecto y planeación
+  - `equipo_ejecutor_id` (UUID, FK -> `equipos_ejecutores.id`, NULL para procesos sin asignar)
+  - `lider_id` (UUID, FK -> `usuarios.id`, NULL)
+  - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NULL)
+  - `especialidad_id` (UUID, FK -> `especialidades.id`, NULL)
+  - `tipo_necesidad` (VARCHAR 50, NOT NULL, DEFAULT 'CREAR_PLANEACION')
+  - `estado_scope` (VARCHAR 50, NOT NULL, DEFAULT 'SIN_ASIGNAR')
   - `programa_id` (UUID, FK -> `programas_formacion.id`, NULL)
   - `proyecto_id` (UUID, FK -> `proyectos_formativos.id`, NULL)
-  - `creado_por_id` (UUID, FK -> `usuarios.id`, NULL)
+  - `creado_por` (UUID, FK -> `usuarios.id`, NULL)
   - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
+  - Indexes: `ix_procesos_curriculares_programa_id`, `ix_procesos_curriculares_proyecto_id`
+
 

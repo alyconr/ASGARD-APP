@@ -7,6 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.proyecto_excel import (
     InvalidProjectExcelUploadError,
     ProjectExcelDraftMissingError,
@@ -17,6 +18,7 @@ from src.application.services.proyecto_excel import (
 )
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.config.settings import Settings, get_settings
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
     AsignacionCurricularProyecto,
@@ -27,6 +29,7 @@ from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.proyecto_excel import (
     ProyectoExcelImportResponse,
     ProyectoExcelPreviewResponse,
@@ -163,8 +166,13 @@ async def preview_project_excel(
     referencia_id: uuid.UUID,
     file: UploadFile = File(...),
     service: ProyectoExcelImportService = Depends(get_proyecto_excel_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoExcelPreviewResponse:
     """Preview a project Excel workbook without relational writes."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     filename = file.filename or ""
     content_type = file.content_type or "application/octet-stream"
     content = await file.read()
@@ -198,8 +206,13 @@ async def preview_project_excel(
 async def confirm_project_excel_import(
     referencia_id: uuid.UUID,
     service: ProyectoExcelImportService = Depends(get_proyecto_excel_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoExcelImportResponse:
     """Confirm and materialize a previously validated project Excel import."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.confirm_project_excel_import(
             referencia_id=referencia_id,

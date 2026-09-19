@@ -1,11 +1,11 @@
-﻿"""ORM models for users, roles, and user assignments."""
+"""ORM models for users, roles, and user assignments."""
 
 from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -95,6 +95,7 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
     )
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    token_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     roles: Mapped[list[Rol]] = relationship(
         "Rol",

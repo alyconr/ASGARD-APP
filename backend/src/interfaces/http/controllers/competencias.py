@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.competencias import CompetenciaPayloadDTO
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.competencias import (
     CompetenciaDraftNotFoundError,
     CompetenciaDuplicateCodeError,
@@ -16,10 +17,12 @@ from src.application.services.competencias import (
     CompetenciaValidationError,
     ProgramaCompetenciaService,
 )
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.competencias import CompetenciaRepository
 from src.infrastructure.repositories.drafts import DraftRepository
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.competencias import (
     CompetenciaDeleteResponse,
     CompetenciaListResponse,
@@ -49,8 +52,13 @@ def get_programa_competencia_service(
 async def list_competencias(
     referencia_id: uuid.UUID,
     service: ProgramaCompetenciaService = Depends(get_programa_competencia_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CompetenciaListResponse:
     """List competences for the current program draft."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.list_competencias(referencia_id)
     except CompetenciaDraftNotFoundError as error:
@@ -67,8 +75,13 @@ async def create_competencia(
     referencia_id: uuid.UUID,
     request: CompetenciaRequest,
     service: ProgramaCompetenciaService = Depends(get_programa_competencia_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CompetenciaListResponse:
     """Create a competence linked to the current program draft."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.create_competencia(
             referencia_id,
@@ -99,8 +112,13 @@ async def update_competencia(
     competencia_id: uuid.UUID,
     request: CompetenciaRequest,
     service: ProgramaCompetenciaService = Depends(get_programa_competencia_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CompetenciaListResponse:
     """Update a competence without moving it to another program."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.update_competencia(
             referencia_id,
@@ -133,8 +151,13 @@ async def delete_competencia(
     referencia_id: uuid.UUID,
     competencia_id: uuid.UUID,
     service: ProgramaCompetenciaService = Depends(get_programa_competencia_service),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CompetenciaDeleteResponse:
     """Delete a competence selected from the current program draft."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.delete_competencia(referencia_id, competencia_id)
     except CompetenciaDraftNotFoundError as error:

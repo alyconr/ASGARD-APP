@@ -1,12 +1,12 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AuthState, User } from "./types";
-import { authFetch, getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl, setAuthToken } from "@/lib/api";
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasRole: (...roleNames: string[]) => boolean;
 }
 
@@ -21,32 +21,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   });
 
   useEffect(() => {
-    const token = localStorage.getItem("asgard_token");
-    if (!token) {
-      setState({
-        user: null,
-        token: null,
-        isLoading: false,
-        isAuthenticated: false,
-      });
-      return;
-    }
-
-    authFetch(`${getApiBaseUrl()}/auth/me`)
+    // Attempt silent refresh using HttpOnly cookie on mount
+    fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
       .then(async (res) => {
         if (!res.ok) {
-          throw new Error("Token expirado");
+          throw new Error("No active session");
         }
-        const user = (await res.json()) as User;
+        const data = await res.json();
+        setAuthToken(data.access_token);
         setState({
-          user,
-          token,
+          user: data.user,
+          token: data.access_token,
           isLoading: false,
           isAuthenticated: true,
         });
       })
       .catch(() => {
-        localStorage.removeItem("asgard_token");
+        setAuthToken(null);
         setState({
           user: null,
           token: null,
@@ -59,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const login = async (email: string, password: string): Promise<User> => {
     const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
@@ -69,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     }
 
     const data = await res.json();
-    localStorage.setItem("asgard_token", data.access_token);
+    setAuthToken(data.access_token);
     setState({
       user: data.user,
       token: data.access_token,
@@ -79,14 +76,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     return data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem("asgard_token");
-    setState({
-      user: null,
-      token: null,
-      isLoading: false,
-      isAuthenticated: false,
-    });
+  const logout = async (): Promise<void> => {
+    try {
+      await authFetch(`${getApiBaseUrl()}/auth/logout`, {
+        method: "POST",
+      });
+    } catch {
+      // Ignorar errores de red al cerrar sesión
+    } finally {
+      setAuthToken(null);
+      setState({
+        user: null,
+        token: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+    }
   };
 
   const hasRole = (...roleNames: string[]): boolean => {

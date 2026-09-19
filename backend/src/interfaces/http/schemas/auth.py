@@ -1,4 +1,4 @@
-﻿"""Pydantic schemas for authentication and user management."""
+"""Pydantic schemas for authentication and user management."""
 
 from __future__ import annotations
 
@@ -49,7 +49,13 @@ class TokenResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_new_password: str
 
 
 class UserCreateRequest(BaseModel):
