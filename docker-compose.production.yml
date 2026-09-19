@@ -11,7 +11,7 @@ services:
       - "${MINIO_CONSOLE_PORT:-9001}:81"
     volumes:
       - ./deploy/production/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./deploy/production/nginx.htpasswd:/etc/nginx/.htpasswd:ro
+      #- ./deploy/production/nginx.htpasswd:/etc/nginx/.htpasswd:ro
 
   asgard-frontend:
     build:

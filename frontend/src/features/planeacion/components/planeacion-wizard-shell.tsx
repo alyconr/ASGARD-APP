@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Layers,
   Copy,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -561,6 +562,59 @@ export function PlaneacionWizardShell({
     return selectedResultadoIds[0] ?? null;
   }, [activeRapIdForComplementary, selectedResultadoIds]);
 
+  const applyRapDataToForm = (targetData: ComplementaryDataPerRap | undefined) => {
+    const data = targetData ?? {};
+    setActividadesAprendizaje(data.actividades_aprendizaje ?? "");
+    setEstrategias(data.estrategias_didacticas ?? "");
+    setAmbientesTipificados(data.ambientes_tipificados ?? "");
+    setAmbiente(data.ambiente ?? "");
+    setMaterialesFormacion(data.materiales_formacion ?? "");
+    setDescripcionEvidencia(data.descripcion_evidencia_aprendizaje ?? "");
+    setObservaciones(data.observaciones ?? "");
+    setDuracionHoras(data.duracion_actividad_horas ?? 0);
+    setHorasTrabajoDirecto(data.horas_trabajo_directo ?? 0);
+    setHorasTrabajoIndependiente(data.horas_trabajo_independiente ?? 0);
+    setInstructores(data.instructores ?? "");
+    setTematicasSaber(data.tematicas_saber ?? []);
+    setTematicasProceso(data.tematicas_proceso ?? []);
+  };
+
+  const handleRemoveRap = async (resultadoId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (selectedResultadoIds.length <= 1) {
+      toast.error(
+        "Debes conservar al menos un resultado de aprendizaje en la planeación.",
+      );
+      return;
+    }
+    const resultado = selectedResultados.find((r) => r.id === resultadoId);
+    const confirmed = await confirm({
+      title: "Quitar resultado de aprendizaje",
+      message: `¿Deseas quitar el RAP ${resultado?.codigo_resultado ?? ""} de esta planeación? El resto de los RAP y su información se conservan intactos.`,
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
+    const nextResultadoIds = selectedResultadoIds.filter(
+      (id) => id !== resultadoId,
+    );
+    const nextRapMap = { ...rapComplementaryMap };
+    delete nextRapMap[resultadoId];
+    setRapComplementaryMap(nextRapMap);
+    setSelectedResultadoIds(nextResultadoIds);
+
+    if (currentRapId === resultadoId) {
+      const nextRapId = nextResultadoIds[0] ?? null;
+      setActiveRapIdForComplementary(nextRapId);
+      applyRapDataToForm(nextRapId ? nextRapMap[nextRapId] : undefined);
+    }
+
+    if (activePlanningId) {
+      await handleSaveDraft(true);
+    }
+    toast.success("RAP eliminado de la planeación.");
+  };
+
   const handleSelectRapForComplementary = (targetRapId: string) => {
     if (targetRapId === currentRapId) return;
 
@@ -603,21 +657,7 @@ export function PlaneacionWizardShell({
     }
 
     setActiveRapIdForComplementary(targetRapId);
-
-    const targetData = rapComplementaryMap[targetRapId] || {};
-    setActividadesAprendizaje(targetData.actividades_aprendizaje ?? "");
-    setEstrategias(targetData.estrategias_didacticas ?? "");
-    setAmbientesTipificados(targetData.ambientes_tipificados ?? "");
-    setAmbiente(targetData.ambiente ?? "");
-    setMaterialesFormacion(targetData.materiales_formacion ?? "");
-    setDescripcionEvidencia(targetData.descripcion_evidencia_aprendizaje ?? "");
-    setObservaciones(targetData.observaciones ?? "");
-    setDuracionHoras(targetData.duracion_actividad_horas ?? 0);
-    setHorasTrabajoDirecto(targetData.horas_trabajo_directo ?? 0);
-    setHorasTrabajoIndependiente(targetData.horas_trabajo_independiente ?? 0);
-    setInstructores(targetData.instructores ?? "");
-    setTematicasSaber(targetData.tematicas_saber ?? []);
-    setTematicasProceso(targetData.tematicas_proceso ?? []);
+    applyRapDataToForm(rapComplementaryMap[targetRapId]);
   };
 
   const handleCopyCurrentRapDataToAll = () => {
@@ -2638,44 +2678,67 @@ export function PlaneacionWizardShell({
                         );
 
                         return (
-                          <button
+                          <div
                             key={res.id}
-                            type="button"
-                            onClick={() => handleSelectRapForComplementary(res.id)}
                             className={cn(
-                              "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition border text-left",
+                              "flex items-center gap-1 rounded-lg border pl-3 pr-1.5 py-2 text-xs font-semibold transition",
                               isSelected
                                 ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-sm"
                                 : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/50",
                             )}
                           >
-                            <span
+                            <button
+                              type="button"
+                              onClick={() => handleSelectRapForComplementary(res.id)}
+                              className="flex items-center gap-2 text-left"
+                            >
+                              <span
+                                className={cn(
+                                  "inline-flex h-2 w-2 shrink-0 rounded-full",
+                                  isFilled
+                                    ? isSelected
+                                      ? "bg-emerald-300"
+                                      : "bg-emerald-500"
+                                    : isSelected
+                                    ? "bg-amber-300"
+                                    : "bg-amber-400",
+                                )}
+                              />
+                              <span className="font-mono">{res.codigo_resultado || "RAP"}</span>
+                              <span className="max-w-[200px] truncate opacity-90">{res.descripcion}</span>
+                              <span
+                                className={cn(
+                                  "rounded px-1.5 py-0.5 text-[10px] uppercase font-bold",
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : isFilled
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-amber-50 text-amber-700",
+                                )}
+                              >
+                                {isFilled ? "Diligenciado" : "Pendiente"}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={selectedResultados.length <= 1}
+                              onClick={(event) => void handleRemoveRap(res.id, event)}
+                              title={
+                                selectedResultados.length <= 1
+                                  ? "Debes conservar al menos un RAP en la planeación"
+                                  : "Quitar este RAP de la planeación"
+                              }
+                              aria-label={`Quitar RAP ${res.codigo_resultado ?? res.descripcion} de la planeación`}
                               className={cn(
-                                "inline-flex h-2 w-2 rounded-full",
-                                isFilled
-                                  ? isSelected
-                                    ? "bg-emerald-300"
-                                    : "bg-emerald-500"
-                                  : isSelected
-                                  ? "bg-amber-300"
-                                  : "bg-amber-400",
-                              )}
-                            />
-                            <span className="font-mono">{res.codigo_resultado || "RAP"}</span>
-                            <span className="max-w-[200px] truncate opacity-90">{res.descripcion}</span>
-                            <span
-                              className={cn(
-                                "rounded px-1.5 py-0.5 text-[10px] uppercase font-bold",
+                                "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-40",
                                 isSelected
-                                  ? "bg-white/20 text-white"
-                                  : isFilled
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-amber-50 text-amber-700",
+                                  ? "text-white/80 hover:bg-white/20 hover:text-white"
+                                  : "text-slate-400 hover:bg-rose-50 hover:text-rose-600",
                               )}
                             >
-                              {isFilled ? "Diligenciado" : "Pendiente"}
-                            </span>
-                          </button>
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -3247,6 +3310,19 @@ export function PlaneacionWizardShell({
                     >
                       <Download className="h-4 w-4" />
                       Descargar Excel oficial
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.info(
+                          "Al guardar cambios, la planeación vuelve a borrador y deberás confirmarla de nuevo para regenerar el formato oficial.",
+                        );
+                        setActiveStep("curricular");
+                      }}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-strong)] hover:bg-white transition"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Editar planeación
                     </button>
                     {activePlanningId && (
                       <button
