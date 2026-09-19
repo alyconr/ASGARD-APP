@@ -1,6 +1,7 @@
 """Import all ORM models so SQLAlchemy metadata is fully registered."""
 
 from src.infrastructure.db.models.audit import EventoAuditoria
+from src.infrastructure.db.models.auth import Rol, Usuario, UsuarioRol
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
@@ -10,6 +11,13 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.organizacion import (
+    Coordinacion,
+    EquipoEjecutor,
+    EquipoEjecutorMiembro,
+    Especialidad,
+    ProcesoCurricular,
+)
 from src.infrastructure.db.models.planeacion import (
     PlaneacionDocumentoConfig,
     PlaneacionPedagogica,
@@ -27,13 +35,22 @@ __all__ = [
     "BorradorSesion",
     "Competencia",
     "Conocimiento",
+    "Coordinacion",
     "CriterioEvaluacion",
     "ElementoCurricularPendiente",
+    "EquipoEjecutor",
+    "EquipoEjecutorMiembro",
+    "Especialidad",
     "EventoAuditoria",
     "FaseProyecto",
     "PlaneacionDocumentoConfig",
     "PlaneacionPedagogica",
+    "ProcesoCurricular",
     "ProgramaFormacion",
     "ProyectoFormativo",
     "ResultadoAprendizaje",
+    "Rol",
+    "Usuario",
+    "UsuarioRol",
 ]
+

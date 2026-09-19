@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     storage_secret_key: str = Field(default="admin123")
     storage_secure: bool = Field(default=False)
     storage_region: str | None = Field(default=None)
+    jwt_secret_key: str = Field(default="asgard-super-secret-key-change-in-production-2026")
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_access_token_expire_minutes: int = Field(default=480)
+    jwt_refresh_token_expire_days: int = Field(default=7)
+
 
     @property
     def cors_allow_origin_list(self) -> list[str]:

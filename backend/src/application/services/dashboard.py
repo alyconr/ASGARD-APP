@@ -44,8 +44,16 @@ from src.infrastructure.db.models.proyecto import (
 )
 
 
+from src.application.services.access_scope import AccessScopeService
+from src.infrastructure.db.models.auth import Usuario
+
+
 class DashboardDraftNotFoundError(Exception):
     """Raised when the dashboard cannot resolve the program reference."""
+
+
+class DashboardAccessForbiddenError(Exception):
+    """Raised when user does not have permission to view the process."""
 
 
 class ProgramaCleanupProtocol(Protocol):
@@ -53,6 +61,7 @@ class ProgramaCleanupProtocol(Protocol):
 
     async def eliminar_cargue_completo(self, referencia_id: uuid.UUID) -> None:
         """Delete relational data and stored documents for a program."""
+
 
 
 @dataclass(frozen=True)
@@ -79,8 +88,20 @@ class DashboardService:
         self._session = session
         self._cleanup_service = cleanup_service
 
-    async def consultar(self, referencia_id: uuid.UUID) -> DashboardDTO:
+    async def consultar(
+        self,
+        referencia_id: uuid.UUID,
+        user: Usuario | None = None,
+    ) -> DashboardDTO:
         """Return the full dashboard state for a program draft reference."""
+        if user is not None:
+            scope_service = AccessScopeService(self._session)
+            can_access = await scope_service.can_access_process(user, referencia_id)
+            if not can_access:
+                raise DashboardAccessForbiddenError(
+                    f"No tienes autorización para acceder al proceso {referencia_id}"
+                )
+
         draft = await self._get_program_draft(referencia_id)
         programa_id = _extract_programa_id(draft.payload_json)
 
@@ -148,7 +169,10 @@ class DashboardService:
             graph_edges=edges,
         )
 
-    async def listar_flujos_programa(self) -> list[DashboardProgramFlowDTO]:
+    async def listar_flujos_programa(
+        self,
+        user: Usuario | None = None,
+    ) -> list[DashboardProgramFlowDTO]:
         """Return open program drafts available from the master panel."""
         statement = (
             select(BorradorSesion)
@@ -157,7 +181,15 @@ class DashboardService:
         )
         result = await self._session.execute(statement)
         drafts = result.scalars().all()
+
+        if user is not None:
+            scope_service = AccessScopeService(self._session)
+            candidate_refs = [d.referencia_id for d in drafts]
+            allowed_refs = await scope_service.get_allowed_referencias(user, candidate_refs)
+            drafts = [d for d in drafts if d.referencia_id in allowed_refs]
+
         flows: list[DashboardProgramFlowDTO] = []
+
 
         for draft in drafts:
             programa_id = _extract_programa_id(draft.payload_json)

@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export interface DashboardModule {
   id: "programa" | "proyecto" | "planeacion" | string;
@@ -88,7 +88,7 @@ async function parseDashboardError(response: Response): Promise<string> {
 export async function fetchDashboard(
   referenciaId: string,
 ): Promise<DashboardResponse> {
-  const response = await fetch(`${getApiBaseUrl()}/dashboard/${referenciaId}`, {
+  const response = await authFetch(`${getApiBaseUrl()}/dashboard/${referenciaId}`, {
     method: "GET",
     cache: "no-store",
   });
@@ -101,7 +101,7 @@ export async function fetchDashboard(
 }
 
 export async function fetchProgramFlows(): Promise<DashboardProgramFlow[]> {
-  const response = await fetch(`${getApiBaseUrl()}/dashboard/programas`, {
+  const response = await authFetch(`${getApiBaseUrl()}/dashboard/programas`, {
     method: "GET",
     cache: "no-store",
   });
@@ -114,7 +114,7 @@ export async function fetchProgramFlows(): Promise<DashboardProgramFlow[]> {
 }
 
 export async function deleteProgramFlow(referenciaId: string): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/dashboard/programas/${referenciaId}`,
     {
       method: "DELETE",
@@ -126,3 +126,4 @@ export async function deleteProgramFlow(referenciaId: string): Promise<void> {
     throw new Error(await parseDashboardError(response));
   }
 }
+

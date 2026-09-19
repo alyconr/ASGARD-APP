@@ -776,3 +776,75 @@ Dominio cerrado de clasificación para asignaciones curriculares del proyecto fo
 - `ESPECIFICO`: Resultado de aprendizaje técnico/específico.
 - `TRANSVERSAL`: Resultado de aprendizaje transversal.
 - El valor es validado y normalizado en mayúsculas y sin espacios al procesar el Excel canónico. Cualquier otro valor genera rechazo inmediato y no se materializa en la base de datos.
+
+---
+
+# 17. Modelo de Control de Acceso, Organización y Aislamiento de Procesos
+
+A fin de garantizar la autenticación de usuarios, roles multinivel y el aislamiento estricto de procesos y planeaciones por equipo ejecutor, se incorporan las siguientes entidades relacionales en la base de datos:
+
+## 17.1 Seguridad y Usuarios
+- **`usuarios`**:
+  - `id` (UUID, PK)
+  - `email` (VARCHAR 255, UNIQUE, NOT NULL)
+  - `password_hash` (VARCHAR 255, NOT NULL) — Argon2id
+  - `nombre` (VARCHAR 100, NOT NULL)
+  - `apellido` (VARCHAR 100, NOT NULL)
+  - `telefono` (VARCHAR 20, NULL)
+  - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NULL para administradores globales)
+  - `especialidad_id` (UUID, FK -> `especialidades.id`, NULL para administradores globales)
+  - `activo` (BOOLEAN, DEFAULT TRUE)
+  - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
+
+- **`roles`**:
+  - `id` (UUID, PK)
+  - `codigo` (VARCHAR 50, UNIQUE, NOT NULL): `SUPERADMIN`, `ADMIN`, `LIDER_EQUIPO_EJECUTOR`, `USUARIO_ADICIONAL`
+  - `nombre` (VARCHAR 100, NOT NULL)
+  - `descripcion` (TEXT, NULL)
+
+- **`usuarios_roles`**:
+  - `usuario_id` (UUID, FK -> `usuarios.id`, PK)
+  - `rol_id` (UUID, FK -> `roles.id`, PK)
+
+## 17.2 Estructura Organizacional
+- **`coordinaciones`**:
+  - `id` (UUID, PK)
+  - `codigo` (VARCHAR 50, UNIQUE, NOT NULL)
+  - `nombre` (VARCHAR 200, NOT NULL)
+  - `activo` (BOOLEAN, DEFAULT TRUE)
+
+- **`especialidades`**:
+  - `id` (UUID, PK)
+  - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NOT NULL)
+  - `codigo` (VARCHAR 50, NOT NULL)
+  - `nombre` (VARCHAR 200, NOT NULL)
+  - `activo` (BOOLEAN, DEFAULT TRUE)
+  - Unique Constraint: `(coordinacion_id, codigo)`
+
+## 17.3 Equipos Ejecutores y Aislamiento
+- **`equipos_ejecutores`**:
+  - `id` (UUID, PK)
+  - `nombre` (VARCHAR 200, NOT NULL)
+  - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NOT NULL)
+  - `especialidad_id` (UUID, FK -> `especialidades.id`, NOT NULL)
+  - `lider_id` (UUID, FK -> `usuarios.id`, NOT NULL)
+  - `estado` (VARCHAR 20, NOT NULL, DEFAULT 'ACTIVO'): `ACTIVO`, `INACTIVO`
+
+- **`equipos_ejecutores_miembros`**:
+  - `id` (UUID, PK)
+  - `equipo_id` (UUID, FK -> `equipos_ejecutores.id`, NOT NULL)
+  - `usuario_id` (UUID, FK -> `usuarios.id`, NOT NULL)
+  - `activo` (BOOLEAN, DEFAULT TRUE)
+  - Unique Constraint: `(equipo_id, usuario_id)`
+
+- **`procesos_curriculares`**:
+  - `id` (UUID, PK)
+  - `referencia_id` (VARCHAR 64, UNIQUE, NOT NULL) — Correlaciona el borrador / flujo canónico de programa, proyecto y planeación
+  - `equipo_id` (UUID, FK -> `equipos_ejecutores.id`, NULL para procesos sin asignar)
+  - `tipo_necesidad` (VARCHAR 50, NOT NULL, DEFAULT 'NUEVA_OFERTA')
+  - `estado_scope` (VARCHAR 50, NOT NULL, DEFAULT 'BORRADOR')
+  - `programa_id` (UUID, FK -> `programas_formacion.id`, NULL)
+  - `proyecto_id` (UUID, FK -> `proyectos_formativos.id`, NULL)
+  - `creado_por_id` (UUID, FK -> `usuarios.id`, NULL)
+  - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
+

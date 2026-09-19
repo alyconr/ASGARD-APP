@@ -682,3 +682,33 @@ Quedan cerradas para la Fase 1 las siguientes decisiones:
 - Cuando viene informado, su dominio queda restringido al enum `TipoResultadoProyecto`; se normalizan espacios y mayúsculas durante la carga del Excel canónico y cualquier valor no equivalente es rechazado con error claro indicando hoja, fila y campo.
 - No se aplica ninguna regla de inferencia basada en códigos o nombres de competencia; la matriz Excel es la única fuente autoritativa.
 - La ausencia de `tipo_resultado` se conserva como `NULL` y no invalida la fila ni la importación.
+
+---
+
+# 26. RBAC, Equipos Ejecutores y Aislamiento de Procesos Curriculares
+
+A partir del refactor de seguridad y control de acceso multiusuario, el sistema adopta una arquitectura de aislamiento basada en:
+`RBAC` + `EquipoEjecutor` + `Membership` + `ProcesoCurricular` + `Ownership` + `AccessScopeService`.
+
+## 26.1 Roles del Sistema (`RolUsuario`)
+- **SUPERADMIN**: Administrador de plataforma y sistema con visibilidad y control global absoluto.
+- **ADMIN**: Administrador pedagógico. Gestiona coordinaciones, especialidades, equipos ejecutores, asignaciones de procesos curriculares y supervisa todos los programas y planeaciones.
+- **LIDER_EQUIPO_EJECUTOR**: Instructor líder a cargo de un equipo ejecutor. Requiere asignación obligatoria de coordinación y especialidad. Tiene visibilidad y control exclusivo sobre los procesos asignados a su equipo.
+- **USUARIO_ADICIONAL**: Instructor o apoyo vinculado a un equipo ejecutor. Requiere coordinación y especialidad. Accede a los procesos del equipo mientras su membresía esté en estado activo (`activo == True`).
+
+## 26.2 Regla de Aislamiento Estricto por Equipo Ejecutor
+- El aislamiento de datos **no** depende únicamente de `coordinacion_id` y `especialidad_id`.
+- **Dos líderes de la misma coordinación y de la misma especialidad NO deben ver ni editar las planeaciones o procesos del otro.** Cada líder gestiona exclusivamente los procesos curriculares asignados a su propio equipo ejecutor.
+- Toda consulta de flujos, programas, proyectos, borradores y planeaciones pedagógicas valida el alcance mediante `AccessScopeService`.
+
+## 26.3 Ciclo de Vida y Membresía (`EquipoEjecutorMiembro`)
+- Un equipo ejecutor agrupa 1 líder y 0..N miembros adicionales (`USUARIO_ADICIONAL`).
+- Un `USUARIO_ADICIONAL` solo puede acceder a un proceso curricular si existe un registro `EquipoEjecutorMiembro` con `activo = True` para el equipo ejecutor propietario del proceso. Si el administrador o líder desactiva al miembro (`activo = False`), el acceso se revoca de manera inmediata.
+
+## 26.4 Vinculación y Auto-anclaje de Procesos Curriculares
+- La entidad `ProcesoCurricular` correlaciona el `referencia_id` (UUID canónico del borrador/flujo) con su `EquipoEjecutor`.
+- Cuando un `LIDER_EQUIPO_EJECUTOR` inicia y guarda un nuevo borrador o flujo de programa, el sistema auto-vincula automáticamente la referencia al equipo ejecutor activo del líder (`ensure_proceso_for_referencia`).
+- Si un proceso es creado sin usuario autenticado en entornos de migración/compatibilidad, queda con `equipo_id = NULL` (estado `SIN_ASIGNAR`) y solo es visible y reasignable por roles `ADMIN` o `SUPERADMIN`.
+
+## 26.5 Protección contra IDOR
+- Todos los endpoints en controladores de planeación (`/planeacion/...`), borradores (`/drafts/...`) y dashboard (`/dashboard/...`) verifican de manera estricta los permisos de acceso antes de leer, modificar o eliminar recursos. Intentos de acceso no autorizados arrojan código HTTP 403 Forbidden.
