@@ -21,5 +21,10 @@ done
 echo "[entrypoint] aplicando migraciones Alembic..."
 alembic upgrade head
 
+echo "[entrypoint] asegurando catalogo organizacional y usuarios iniciales..."
+python scripts/seed_organization_catalog.py || true
+python scripts/seed_rbac_demo.py || true
+
 echo "[entrypoint] iniciando API..."
 exec uvicorn src.main:app --host 0.0.0.0 --port "${APP_PORT:-8000}"
+

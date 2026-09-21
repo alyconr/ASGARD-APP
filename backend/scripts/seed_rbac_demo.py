@@ -10,7 +10,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.append(str(BACKEND_ROOT))
 
 from sqlalchemy import select
-from src.domain.shared.enums import EstadoEquipo, RolUsuario
+from src.domain.shared.enums import EstadoEquipo, EstadoUsuario, RolUsuario
 from src.infrastructure.db.models.auth import Rol, Usuario
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
@@ -77,6 +77,14 @@ async def seed() -> None:
         default_pw = hash_password("password123")
         users_spec = [
             {
+                "email": "superadmin@sena.edu.co",
+                "nombre": "Super",
+                "apellido": "Administrador",
+                "roles": [RolUsuario.SUPERADMIN.value],
+                "coord_id": None,
+                "esp_id": None,
+            },
+            {
                 "email": "admin.pedagogico@sena.edu.co",
                 "nombre": "Admin",
                 "apellido": "Pedagógico",
@@ -119,12 +127,13 @@ async def seed() -> None:
                 user = Usuario(
                     id=uuid.uuid4(),
                     email=spec["email"],
-                    password_hash=default_pw,
+                    hashed_password=default_pw,
                     nombre=spec["nombre"],
                     apellido=spec["apellido"],
                     coordinacion_id=spec["coord_id"],
                     especialidad_id=spec["esp_id"],
-                    activo=True,
+                    estado=EstadoUsuario.ACTIVO,
+                    debe_cambiar_password=False,
                 )
                 session.add(user)
                 await session.flush()
