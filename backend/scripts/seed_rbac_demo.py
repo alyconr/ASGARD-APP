@@ -43,13 +43,13 @@ async def seed() -> None:
             role_map[role_name.value] = role
 
         print("2. Ensuring Coordination and Specialty...")
-        coord_stmt = select(Coordinacion).where(Coordinacion.codigo == "COORD-TELEINFO")
+        coord_stmt = select(Coordinacion).where(Coordinacion.codigo.in_(["TEL", "COORD-TELEINFO"]))
         coord_res = await session.execute(coord_stmt)
         coordinacion = coord_res.scalar_one_or_none()
         if not coordinacion:
             coordinacion = Coordinacion(
                 id=uuid.uuid4(),
-                codigo="COORD-TELEINFO",
+                codigo="TEL",
                 nombre="Coordinación Teleinformática",
                 activo=True,
             )
@@ -58,7 +58,7 @@ async def seed() -> None:
 
         esp_stmt = select(Especialidad).where(
             Especialidad.coordinacion_id == coordinacion.id,
-            Especialidad.codigo == "ESP-REDES",
+            Especialidad.codigo.in_(["REDES", "ESP-REDES"]),
         )
         esp_res = await session.execute(esp_stmt)
         especialidad = esp_res.scalar_one_or_none()
@@ -66,7 +66,7 @@ async def seed() -> None:
             especialidad = Especialidad(
                 id=uuid.uuid4(),
                 coordinacion_id=coordinacion.id,
-                codigo="ESP-REDES",
+                codigo="REDES",
                 nombre="Redes de Datos",
                 activo=True,
             )
