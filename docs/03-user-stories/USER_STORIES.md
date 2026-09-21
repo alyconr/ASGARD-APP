@@ -420,3 +420,42 @@ Nota vigente: los criterios aparecen primero en un selector eficiente y se rende
 - Los miembros de apoyo deben tener rol `USUARIO_ADICIONAL` y pertenecer a la misma coordinación y especialidad.
 - Al cambiar el líder de un equipo, el sistema actualiza de forma transaccional `usuario_lider_id` en todos los procesos curriculares vinculados al equipo.
 
+---
+
+## HU-29. Supervisión jerárquica de procesos formativos
+**Como** directivo institucional (SUPERADMIN o ADMIN)  
+**Quiero** visualizar un tablero centralizado con filtros jerárquicos (Coordinación → Especialidad → Equipo → Líder)  
+**Para** supervisar el estado global de programas, proyectos y planeaciones pedagógicas, identificando procesos huérfanos o rezagados.
+
+### Criterios de aceptación
+- Tarjetas KPI con totales agregados, procesos sin asignar y porcentaje de avance.
+- Filtros reactivos en cascada que recalculan métricas y actualizan la lista paginada.
+- Drawer lateral de inspección técnica con desglose de equipo y planeaciones vinculadas.
+- Acceso restringido exclusivamente a roles directivos (`SUPERADMIN`, `ADMIN`).
+
+---
+
+## HU-30. Visor institucional de auditoría inmutable
+**Como** oficial de cumplimiento y control institucional  
+**Quiero** consultar la bitácora inmutable de eventos con identificación del actor y proceso  
+**Para** realizar seguimiento forense de acciones y modificaciones curriculares sin riesgo de alteración del registro.
+
+### Criterios de aceptación
+- Registro con actor (`id`, `nombre`, `email`, `roles`), acción, entidad, fecha y proceso referenciado.
+- Redacción recursiva automática de contraseñas, secretos y tokens en el payload JSON.
+- Modal de inspección detallada con formateo JSON y función de copiado.
+- Inmutabilidad total: ausencia de endpoints o capacidades de modificación/borrado (`405 Method Not Allowed`).
+
+---
+
+## HU-31. Verificación integral de flujo curricular y roles (E2E)
+**Como** equipo de calidad y aseguramiento de la plataforma  
+**Quiero** contar con pruebas End-to-End automatizadas sobre navegadores reales  
+**Para** certificar que los 4 roles canónicos, el control de primer acceso y el flujo curricular completo (Programa → Proyecto → Planeación → GPFI) funcionan armónicamente sin regresiones.
+
+### Criterios de aceptación
+- Escenarios de autenticación y autorización para `SUPERADMIN`, `ADMIN`, `LIDER` y `USUARIO_ADICIONAL`.
+- Verificación del modal obligatorio de primer acceso (`debe_cambiar_password = true`).
+- Ejecución automatizada de supervisión, auditoría y flujo curricular completo.
+
+

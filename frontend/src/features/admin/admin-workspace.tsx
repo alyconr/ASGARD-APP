@@ -1,19 +1,21 @@
 "use client";
 
 import React, { useState } from "react";
-import { Users, Building2, Shield, Network } from "lucide-react";
+import { Users, Building2, Shield, Network, BarChart3, History } from "lucide-react";
+import { AdminDashboard } from "./supervision/admin-dashboard";
 import { UsersAdmin } from "./users-admin";
 import { OrganizationAdmin } from "./organization-admin";
 import { EquiposAdmin } from "./equipos-admin";
+import { AuditViewer } from "./audit/audit-viewer";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "usuarios" | "organizacion" | "equipos";
+type AdminTab = "supervision" | "usuarios" | "organizacion" | "equipos" | "auditoria";
 
 interface AdminWorkspaceProps {
   initialTab?: AdminTab;
 }
 
-export function AdminWorkspace({ initialTab = "usuarios" }: AdminWorkspaceProps): React.JSX.Element {
+export function AdminWorkspace({ initialTab = "supervision" }: AdminWorkspaceProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
 
   return (
@@ -25,14 +27,14 @@ export function AdminWorkspace({ initialTab = "usuarios" }: AdminWorkspaceProps)
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <Shield className="h-5 w-5" />
               <span className="text-xs font-bold uppercase tracking-wider">
-                Módulo de Administración Organizacional
+                Módulo de Administración & Supervisión Institucional
               </span>
             </div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               Administración Central ASGARD
             </h1>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-              Gestión multiusuario, catálogo de coordinaciones y especialidades, y control de equipos ejecutores bajo el modelo de alcance curricular.
+              Supervisión de procesos curriculares, gestión multiusuario, catálogo organizacional, control de equipos ejecutores y visor institucional de auditoría.
             </p>
           </div>
 
@@ -43,13 +45,27 @@ export function AdminWorkspace({ initialTab = "usuarios" }: AdminWorkspaceProps)
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               <span className="h-2 w-2 rounded-full bg-sky-500" />
-              Ámbito Multiusuario
+              Supervisión Global
             </span>
           </div>
         </div>
 
         {/* Workspace Navigation Tabs */}
         <div className="mt-6 flex border-b border-slate-200 gap-2 sm:gap-6 overflow-x-auto dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setActiveTab("supervision")}
+            className={cn(
+              "inline-flex items-center gap-2 pb-3 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition whitespace-nowrap",
+              activeTab === "supervision"
+                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Supervisión Institucional
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab("usuarios")}
@@ -91,14 +107,30 @@ export function AdminWorkspace({ initialTab = "usuarios" }: AdminWorkspaceProps)
             <Network className="h-4 w-4" />
             Equipos Ejecutores & Procesos
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("auditoria")}
+            className={cn(
+              "inline-flex items-center gap-2 pb-3 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition whitespace-nowrap",
+              activeTab === "auditoria"
+                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            )}
+          >
+            <History className="h-4 w-4" />
+            Visor de Auditoría
+          </button>
         </div>
       </div>
 
       {/* Tab Panels */}
       <div>
+        {activeTab === "supervision" && <AdminDashboard />}
         {activeTab === "usuarios" && <UsersAdmin />}
         {activeTab === "organizacion" && <OrganizationAdmin />}
         {activeTab === "equipos" && <EquiposAdmin />}
+        {activeTab === "auditoria" && <AuditViewer />}
       </div>
     </div>
   );

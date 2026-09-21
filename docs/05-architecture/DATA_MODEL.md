@@ -884,6 +884,45 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
 - El consumo de tokens es estrictamente atómico: una sola transacción por `jti` puede completar la rotación. Intentos simultáneos con el mismo `jti` detectan `revoked_at IS NOT NULL`, revocan todas las sesiones asociadas a `token_family` y rechazan con HTTP 401.
 - El refresh token no se persiste en claro en ningún campo ni se transmite en el cuerpo de respuestas JSON.
 
+---
+
+# 18. Modelo de Auditoría Institucional y Read Models Jerárquicos (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 18.1 Evolución de `EventoAuditoria` (`eventos_auditoria`)
+- **`eventos_auditoria`**:
+  - `id` (UUID, PK)
+  - `fecha_evento` (TIMESTAMPTZ, NOT NULL, DEFAULT now())
+  - `actor_usuario_id` (UUID, FK -> `usuarios.id` ON DELETE SET NULL, NULL) — Identificador relacional del actor
+  - `accion` (VARCHAR 100, NOT NULL) — Ej: `CREACION`, `MODIFICACION`, `ELIMINACION`, `LOGIN`, `LOGOUT`
+  - `entidad` (VARCHAR 100, NOT NULL) — Ej: `PROCESO_CURRICULAR`, `USUARIO`, `EQUIPO_EJECUTOR`
+  - `registro_id` (VARCHAR 100, NOT NULL)
+  - `referencia_id` (UUID, NULL) — Correlación directa con el proceso curricular o borrador activo
+  - `origen` (VARCHAR 100, NOT NULL, DEFAULT 'APP')
+  - `ip_origen` (VARCHAR 45, NULL)
+  - `user_agent` (TEXT, NULL)
+  - `detalle` (JSONB, NOT NULL, DEFAULT {}) — Payload de cambios (saneado en capa de consulta)
+  - Relationship: `actor` -> `Usuario` (lazy="joined")
+  - Indexes:
+    - `ix_eventos_auditoria_fecha_evento` (sobre `fecha_evento DESC`)
+    - `ix_eventos_auditoria_accion`
+    - `ix_eventos_auditoria_entidad`
+    - `ix_eventos_auditoria_actor_usuario_id`
+    - `ix_eventos_auditoria_referencia_id`
+
+## 18.2 Índices Jerárquicos en `procesos_curriculares`
+- Optimización de consultas de supervisión agregada mediante índices específicos:
+  - `ix_procesos_curriculares_coordinacion_id`
+  - `ix_procesos_curriculares_especialidad_id`
+  - Relaciones bidireccionales `programa` y `proyecto` hacia `ProgramaFormacion` y `ProyectoFormativo` respectivamente.
+
+## 18.3 Read Models en Capa de Aplicación
+- `AdminDashboardQueryService`: Realiza consultas agregadas multi-tabla con `OUTER JOIN` sobre `ProcesoCurricular`, `ProgramaFormacion`, `ProyectoFormativo`, `EquipoEjecutor`, `Usuario` y `PlaneacionPedagogica` para suministrar:
+  - Resumen KPI reactivo (`AdminDashboardResumenDTO`).
+  - Lista paginada con proyección relacional limpia (`AdminProcesoItemDTO`).
+  - Inspección técnica en profundidad por `referencia_id` (`AdminProcesoDetailDTO`).
+- `AuditQueryService`: Consulta paginada con filtros sobre `eventos_auditoria` con resolución de actor y saneamiento recursivo de campos sensibles (`AuditPaginatedResponseDTO`, `AuditItemDTO`).
+
+
 
 
 

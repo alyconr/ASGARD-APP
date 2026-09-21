@@ -227,6 +227,14 @@ A partir de Sprint B:
 - En Equipos Ejecutores, el cambio de líder actualiza atómicamente la columna `usuario_lider_id` en todos los procesos curriculares vinculados a dicho equipo.
 - No se alteran modelos ni lógica de negocio de los dominios curriculares (`Programa`, `Proyecto`, `Planeacion`, `GPFI-F-134 V05`).
 
+## Decision funcional SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD
+A partir de Sprint C:
+- Supervisión administrativa jerárquica: `AdminDashboardQueryService` implementa agregaciones reactivas y listado paginado server-side (`Coordinación → Especialidad → Programa/Proceso → Proyecto → Equipo → Líder → Planeaciones/Estado`) sin alterar el dashboard operativo existente (`/api/v1/dashboard/{referencia_id}`).
+- Visor institucional de auditoría inmutable: `AuditQueryService` ofrece trazabilidad estructurada con orden descendente por fecha, filtrado multidimensional y sanitización recursiva obligatoria de claves sensibles (`password`, `token`, `secret`, `cookie`, `key`, `credencial`).
+- Invariante de auditoría de solo lectura: queda estrictamente prohibida la creación de endpoints de eliminación o mutación (`DELETE`/`PUT`/`PATCH`) para registros de auditoría (la API responde 405 Method Not Allowed).
+- Evolución del modelo `EventoAuditoria`: adición de claves `actor_usuario_id` (FK `usuarios.id` con `ondelete="SET NULL"`) y `referencia_id` respaldados por migración Alembic `a1b2c3d4e5f6` e índices de alto rendimiento.
+- Suite E2E real: validación con Playwright sobre los 4 roles canónicos, aislamiento estricto de equipos en `AccessScopeService`, cambio forzado de contraseña en primer acceso y happy path curricular integral desde Programa hasta la descarga de `GPFI-F-134 V05`.
+
 ---
 
 # 1. Prioridad de instrucciones

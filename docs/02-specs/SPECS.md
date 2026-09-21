@@ -892,5 +892,53 @@ La Fase 1 se considera terminada cuando el sistema permite:
   3. **Equipos Ejecutores & Procesos**: Cuadrícula de equipos, asignación de líderes, gestión de miembros de apoyo y asignación de procesos curriculares huérfanos.
 - `ForceChangePasswordDialog`: Modal no cancelable montado globalmente en el dashboard maestro cuando `user.debe_cambiar_password == true`. Exige ingresar clave actual y nueva contraseña de al menos 8 caracteres con confirmación idéntica antes de desbloquear el acceso a la plataforma.
 
+---
+
+# 24. Especificación de Supervisión Jerárquica Institucional, Visor de Auditoría y Verificación E2E (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 24.1 Endpoints del Dashboard Administrativo Jerárquico
+- `GET /api/v1/admin/dashboard/resumen`:
+  - Retorna métricas cuantitativas consolidadas (`total_procesos`, `procesos_sin_asignar`, `programas_completos`, `proyectos_completos`, `planeaciones_totales`, `planeaciones_completas`, `porcentaje_avance_global`).
+  - Parámetros de consulta opcionales: `coordinacion_id`, `especialidad_id`, `equipo_id`, `estado_programa`, `estado_proyecto`, `solo_sin_asignar`, `search`.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/dashboard/procesos`:
+  - Retorna listado paginado de procesos con resolución relacional completa (`referencia_id`, coordinación, especialidad, programa, proyecto, equipo ejecutor, líder asignado, contadores de planeaciones y estado global).
+  - Parámetros de consulta: `page`, `page_size`, `coordinacion_id`, `especialidad_id`, `equipo_id`, `estado_programa`, `estado_proyecto`, `solo_sin_asignar`, `search`.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/dashboard/procesos/{referencia_id}`:
+  - Retorna vista en profundidad (drill-down) del proceso curricular: configuración del borrador, miembros del equipo, planeaciones pedagógicas y enlaces a artefactos documentales generados.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+
+## 24.2 Endpoints del Visor Institucional de Auditoría
+- `GET /api/v1/admin/audit`:
+  - Retorna historial paginado de eventos de auditoría ordenado descendentemente por `fecha_evento`.
+  - Parámetros de consulta: `page`, `page_size`, `actor_id`, `accion`, `entidad`, `referencia_id`, `fecha_desde`, `fecha_hasta`.
+  - Cada evento incluye: `id`, `fecha_evento`, `accion`, `entidad`, `registro_id`, `referencia_id`, `ip_origen`, `actor` (`id`, `email`, `nombre_completo`, `roles`) y `detalle` saneado (sin secretos ni contraseñas).
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/audit/{event_id}`:
+  - Retorna detalle JSON completo del evento con payload formateado e información forense ampliada.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- Inmutabilidad estricta: No existen endpoints de modificación (`DELETE`, `PATCH`, `PUT`) para el log de auditoría. Peticiones HTTP en estos verbos responden `HTTP 405 Method Not Allowed`.
+
+## 24.3 Frontend de Supervisión y Auditoría
+- Componentes de Supervisión:
+  - `SummaryCards`: Tarjetas reactivas de KPIs con soporte de estado vacío y alertas sobre procesos sin equipo asignado.
+  - `ProcessFilters`: Filtros en cascada con selectores dinámicos de coordinación, especialidad, equipo y estados curriculares.
+  - `ProcessesTable`: Tabla institucional paginada con insignias de estado, barras de progreso y acción de inspección.
+  - `ProcessDetailDrawer`: Drawer lateral que expone el detalle del proceso, asignación de equipo y planeaciones vinculadas.
+- Componentes de Auditoría:
+  - `AuditFilters`: Búsqueda por texto libre, filtros de acción (`CREACION`, `MODIFICACION`, `ELIMINACION`, `LOGIN`, `LOGOUT`), entidad y rango de fechas.
+  - `AuditTable`: Tabla de auditoría con identificación de actor, acción etiquetada y botón de inspección técnica.
+  - `AuditDetailDialog`: Modal con visor formateado de payload JSON y copiado seguro al portapapeles.
+- Pestañas en `AdminWorkspace`: Integración de `Supervisión` y `Auditoría` junto a las existentes (`Usuarios`, `Organización`, `Equipos`).
+
+## 24.4 Arquitectura y Especificación de Pruebas E2E (Playwright)
+- Configuración: Playwright configurado en `frontend/playwright.config.ts` apuntando a `http://localhost:3000`.
+- Especificaciones de prueba:
+  - `auth.spec.ts`: Login para los 4 roles, bloqueo por rol, forzado de cambio de clave para usuarios con `debe_cambiar_password = true`, y deslogueo con destrucción de cookies HttpOnly.
+  - `supervision-audit.spec.ts`: Visualización de tarjetas KPI, filtrado reactivo de procesos, inspección drawer, visor de auditoría, paginación y modal de inspección de payload saneado.
+  - `curricular-flow.spec.ts`: Flujo completo desde creación/selección de programa, confirmación de matriz Excel estructurada, desbloqueo y confirmación de proyecto formativo, planeación pedagógica integrada multi-RAP y exportación oficial GPFI-F-134 V05 en MinIO.
+
+
 
 

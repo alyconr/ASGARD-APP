@@ -14,6 +14,10 @@ from src.infrastructure.runtime import configure_asyncio_event_loop_policy
 configure_asyncio_event_loop_policy()
 
 
+from src.interfaces.http.controllers.admin_dashboard import (
+    router as admin_dashboard_router,
+)
+from src.interfaces.http.controllers.audit import router as audit_router
 from src.interfaces.http.controllers.auth import router as auth_router
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
@@ -115,6 +119,8 @@ def create_application() -> FastAPI:
     application.include_router(health_router)
     application.include_router(auth_router)
     application.include_router(equipos_router)
+    application.include_router(admin_dashboard_router)
+    application.include_router(audit_router)
     application.include_router(dashboard_router)
     application.include_router(drafts_router)
 

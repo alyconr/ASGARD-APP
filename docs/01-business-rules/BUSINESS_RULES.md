@@ -866,6 +866,40 @@ A partir del refactor de seguridad y control de acceso multiusuario, el sistema 
 ## 30.7 Intactibilidad del Dominio Curricular
 - La administración organizacional opera de manera desacoplada de la lógica pedagógica: no se mutan modelos ni estructuras de `Programa`, `Proyecto`, `PlaneacionPedagogica` ni la generación oficial del formato `GPFI-F-134 V05`.
 
+---
+
+# 31. Supervisión Jerárquica Institucional, Visor de Auditoría y Verificación E2E (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 31.1 Supervisión Jerárquica y Panel Directivo
+- El panel de supervisión directiva consolida la trazabilidad institucional bajo la estructura jerárquica estricta: `Coordinación -> Especialidad -> Programa / Proceso -> Proyecto -> Equipo Ejecutor -> Líder -> Planeaciones / Estado`.
+- Los roles autorizados para consultar este nivel de agregación institucional son exclusivamente `SUPERADMIN` y `ADMIN`. Los roles operativos (`LIDER_EQUIPO_EJECUTOR`, `USUARIO_ADICIONAL`) reciben `HTTP 403 Forbidden`.
+- El panel no sustituye el dashboard operativo del líder (`/api/v1/dashboard/{referencia_id}`), el cual permanece intacto para la gestión individual de borradores.
+- Métricas consolidadas en tiempo real:
+  - Total de procesos curriculares activos y porcentaje global de avance institucional.
+  - Procesos sin equipo ejecutor asignado (huérfanos de gestión directiva).
+  - Tasa de completitud de planeaciones pedagógicas oficiales.
+  - Distribución agregada de estados de programa y proyecto (`BORRADOR`, `EN_REVISION`, `COMPLETO`).
+- Los filtros en cascada (`coordinacion_id`, `especialidad_id`, `equipo_id`, `estado_programa`, `estado_proyecto`, `solo_sin_asignar`, `search`) aplican de forma reactiva tanto al listado paginado como al recálculo de tarjetas resumen institucionales.
+
+## 31.2 Visor Institucional de Auditoría Inmutable
+- Todos los eventos de auditoría (`EventoAuditoria`) incorporan la identificación explícita del actor del cambio (`actor_usuario_id`), correlacionada con el proceso curricular (`referencia_id`).
+- El visor de auditoría es estrictamente de solo lectura:
+  - Solo los roles `SUPERADMIN` y `ADMIN` pueden consultar el log de auditoría.
+  - Queda terminantemente prohibido cualquier endpoint o mutación que permita modificar o eliminar registros de auditoría (`HTTP 405 Method Not Allowed` ante `DELETE` o `PATCH`).
+- Sanitización y Redacción de Secretos en Payload:
+  - Todo payload de auditoría (`detalle`) es saneado recursivamente antes de su serialización JSON.
+  - Claves sensibles que contengan o coincidan con patrones (`password`, `token`, `secret`, `cookie`, `key`, `credencial`, `hash`) son ofuscadas irrevocablemente a `[REDACTED]`.
+  - La inspección forense en la interfaz institucional permite visualizar el detalle JSON formateado con resaltado de sintaxis y búsqueda rápida de eventos por actor, entidad, acción y rango de fechas.
+
+## 31.3 Cobertura y Verificación E2E de Flujo Completo
+- La plataforma cuenta con una suite integral de pruebas End-to-End basada en Playwright que verifica los 4 roles canónicos del sistema:
+  - `SUPERADMIN`: Control global de usuarios, jerarquía institucional, catálogo organizacional y visor de auditoría.
+  - `ADMIN`: Gestión de coordinación, especialidades, equipos ejecutores y supervisión jerárquica sin privilegios sobre `SUPERADMIN`.
+  - `LIDER_EQUIPO_EJECUTOR`: Aislamiento estricto de ámbito (`AccessScopeService`), flujo completo de Programa -> Proyecto -> Planeación Pedagógica Integrada -> Generación de formato oficial GPFI-F-134 V05 en MinIO.
+  - `USUARIO_ADICIONAL`: Acceso restringido como miembro de apoyo sin permisos de mutación administrativa u horizontal sobre otros equipos.
+- Validación E2E del flujo de primer acceso: usuarios con flag `debe_cambiar_password = true` deben completar obligatoriamente el cambio de credenciales antes de interactuar con cualquier módulo de la aplicación.
+
+
 
 
 

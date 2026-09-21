@@ -1015,5 +1015,22 @@ Una tarea se considera terminada cuando:
 - [x] Conectar `AdminWorkspace` y `ForceChangePasswordDialog` en `MasterDashboard` para roles autorizados.
 - [x] Pruebas exhaustivas: 22 tests en backend (`test_sprint_b_admin.py`), tests unitarios en frontend (`admin-workspace.test.tsx`), typecheck y build de producción limpios.
 
+## TASK-SPRINT-C-SUPERVISION-AUDIT-E2E. Dashboard Jerárquico, Visor de Auditoría y Pruebas E2E
+- [x] Extender modelo `EventoAuditoria` con `actor_usuario_id`, `referencia_id`, relación relacional `actor` e índices.
+- [x] Optimizar `ProcesoCurricular` con índices de jerarquía (`coordinacion_id`, `especialidad_id`) y relaciones `programa`/`proyecto`.
+- [x] Crear y verificar migración Alembic append-only `a1b2c3d4e5f6_sprint_c_audit_evolution.py` con single head.
+- [x] Implementar DTOs y servicio de lectura `AdminDashboardQueryService` (resumen reactivo, procesos paginados, detalle).
+- [x] Implementar DTOs y servicio de lectura `AuditQueryService` con saneamiento y redacción recursiva de secretos.
+- [x] Crear controladores `/api/v1/admin/dashboard` y `/api/v1/admin/audit` protegidos por `require_roles(SUPERADMIN, ADMIN)`.
+- [x] Garantizar inmutabilidad estricta del log de auditoría (sin rutas de modificación, rechazo 405 Method Not Allowed).
+- [x] Construir frontend de Supervisión Jerárquica: `SummaryCards`, `ProcessFilters`, `ProcessesTable`, `ProcessDetailDrawer`, `AdminDashboard`.
+- [x] Construir frontend de Visor de Auditoría: `AuditFilters`, `AuditTable`, `AuditDetailDialog`, `AuditViewer`.
+- [x] Integrar pestañas en `AdminWorkspace` (`supervision`, `usuarios`, `organizacion`, `equipos`, `auditoria`).
+- [x] Instalar y configurar Playwright en `frontend/playwright.config.ts`.
+- [x] Crear suites E2E: `auth.spec.ts`, `supervision-audit.spec.ts` y `curricular-flow.spec.ts`.
+- [x] Ejecutar suites de pruebas: backend (352 passing), frontend unitario (135 passing), typecheck limpio y build de producción exitoso.
+- [x] Actualizar documentación institucional en `AGENTS.md` y `docs/01` a `docs/06`.
+
+
 
 

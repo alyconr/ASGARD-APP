@@ -503,3 +503,14 @@ Esta matriz se usa para:
 | Jerarquía y Anti-Escalación | `UserAdminService` (invariantes ADMIN vs SUPERADMIN) | Condicionales de rol en UI | `test_sprint_b_admin.py` |
 | Revocación Atómica de Sesiones | `token_version` + `UserSession.revoked_at` | Redirección y bloqueo central | `test_sprint_b_admin.py` |
 
+## Trazabilidad Sprint C — Supervisión Jerárquica, Visor de Auditoría y Pruebas E2E
+
+| Requisito / Historia | Backend | Frontend | Prueba |
+|---|---|---|---|
+| HU-29: Supervisión Jerárquica | `AdminDashboardQueryService`, `/api/v1/admin/dashboard/*` | `SummaryCards`, `ProcessFilters`, `ProcessesTable`, `ProcessDetailDrawer` | `test_sprint_c_admin_dashboard.py`, `supervision-audit.spec.ts` |
+| HU-30: Visor de Auditoría Inmutable | `AuditQueryService`, `/api/v1/admin/audit/*` | `AuditFilters`, `AuditTable`, `AuditDetailDialog`, `AuditViewer` | `test_sprint_c_audit.py`, `supervision-audit.spec.ts` |
+| HU-31: Verificación E2E de Roles y Flujo | Configuración Playwright (`playwright.config.ts`) | E2E specs en `frontend/e2e/` | `auth.spec.ts`, `supervision-audit.spec.ts`, `curricular-flow.spec.ts` |
+| Redacción Recursiva de Secretos | `sanitize_audit_payload` en `audit_admin.py` | Visor de payload JSON | `test_sprint_c_audit.py` |
+| Inmutabilidad de Auditoría | Bloqueo nativo (sin rutas DELETE/PATCH en router) | Ausencia de acciones destructivas en UI | `test_sprint_c_audit.py` (405 Method Not Allowed) |
+
+
