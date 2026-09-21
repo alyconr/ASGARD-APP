@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+export PYTHONPATH="/app:${PYTHONPATH}"
+
 echo "[entrypoint] esperando PostgreSQL..."
 for i in $(seq 1 30); do
   if python -c "
