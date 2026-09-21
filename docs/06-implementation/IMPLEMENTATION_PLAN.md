@@ -803,3 +803,25 @@ Antes de generar código, Codex debe:
 5. **Frontend Concurrency Hardening**:
    - Función `refreshTokenSingleFlight` en `frontend/src/lib/api.ts` para coalescencia de reintentos concurrentes de 401.
 
+---
+
+# 18. Hito de Cierre Definitivo de Seguridad (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+## 18.1 Entregables Técnicos
+1. **Autenticación Obligatoria en Endpoints Privados**:
+   - Sustitución completa de `get_optional_current_user` por `get_current_user` en todos los controladores privados.
+   - Eliminación de bypasses silenciosos: toda solicitud anónima a un endpoint privado resulta en `401 Unauthorized`.
+   - Invocaciones a `AccessScopeService` ejecutadas de forma incondicional sobre el usuario autenticado.
+2. **Confinamiento Estricto de Refresh Token**:
+   - Remoción de `refresh_token` en el esquema de respuesta `TokenResponse` y en las rutas `/login` y `/refresh`.
+   - Transmisión exclusiva vía cookie `asgard_refresh_token` (`HttpOnly=True`).
+3. **Consumo Atómico en PostgreSQL**:
+   - Inclusión de `.with_for_update()` en la consulta de `UserSession` por `jti` y en la revocación de la familia en `/api/v1/auth/refresh`.
+4. **CORS en Manejador Global de Errores 500**:
+   - Validación estricta de `Origin` contra `settings.cors_allow_origin_list` antes de emitir encabezado `Access-Control-Allow-Origin`.
+5. **Fail-Fast en Producción y Staging**:
+   - Validador en `Settings` que aborta el arranque si se usan secretos JWT o credenciales MinIO por defecto.
+6. **Reducción de TTL de Access Token**:
+   - Expiración de Access Token ajustada a 30 minutos por defecto.
+
+

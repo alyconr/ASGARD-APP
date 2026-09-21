@@ -17,8 +17,12 @@ from src.application.dto.planeacion import (
     PlaneacionResponseDTO,
     PlaneacionSaveDTO,
 )
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.planeacion import get_planeacion_service
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakePlaneacionPedagogicaService:

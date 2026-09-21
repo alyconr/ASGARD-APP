@@ -564,3 +564,16 @@ A partir de esta fase de micro-hardening:
 - **Cookies y CORS**: Cookie canónica `asgard_refresh_token` configurada con `HttpOnly=True`, `SameSite=Lax`, `Path=/api/v1/auth` y `Secure=True` obligatorio en producción/staging. Prohibido mezclar `allow_credentials=True` con wildcard `*` en CORS.
 - **Descargas Documentales Protegidas**: Descargas de PDF institucional, matriz Excel y formatos GPFI individuales/consolidados se realizan a través de endpoints dedicados protegidos por `AccessScopeService` (`require_process_access`, `can_access_project`, `can_access_planning`). Jamás se expone acceso directo por `storage_key` o UUID sin validar membresía del equipo ejecutor o rol institucional.
 - **Frontend Single-Flight**: `authFetch` agrupa llamadas concurrentes ante 401 en una única promesa compartida de refresh (`refreshTokenSingleFlight`), evitando condiciones de carrera contra la rotación de un solo uso.
+
+---
+
+# 19. Cierre Definitivo de Seguridad y Autenticación Obligatoria (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+A partir de esta corrección final de seguridad:
+- **Autenticación Obligatoria e Irrestricta**: Queda prohibido `get_optional_current_user` en cualquier ruta privada de la API. Todo endpoint privado exige `get_current_user` (o `require_roles`). Cualquier solicitud sin token Bearer válido retorna `401 Unauthorized`. Las validaciones de `AccessScopeService` se evalúan de forma incondicional sobre el usuario autenticado.
+- **Refresh Token Exclusivo en Cookie**: `TokenResponse` y los endpoints `/login` y `/refresh` jamás exponen el refresh token en el cuerpo JSON. El token vive estrictamente en la cookie HttpOnly `asgard_refresh_token`.
+- **Consumo Atómico en PostgreSQL**: La rotación de refresh token en `/api/v1/auth/refresh` ejecuta bloqueo de fila `with_for_update()` tanto en la búsqueda del `jti` como en la revocación de la familia `token_family`, evitando carreras y garantizando que solo una solicitud rote el token.
+- **Sanitización CORS en Errores 500**: El exception handler global no controlado para errores HTTP 500 valida `origin in settings.cors_allow_origin_list` antes de inyectar `Access-Control-Allow-Origin`. Orígenes no confiables jamás se reflejan.
+- **Fail-Fast en Producción y Staging**: El modelo `Settings` aborta el arranque (`ValidationError`) si `app_env` es `production` o `staging` y se usan claves JWT por defecto/débiles o credenciales MinIO por defecto (`admin`/`admin123`).
+- **TTL de Access Token**: Reducido por defecto a 30 minutos (`jwt_access_token_expire_minutes = 30`).
+

@@ -8,9 +8,13 @@ from fastapi.testclient import TestClient
 
 from src.application.dto.proyecto_gate import ProyectoDisponibilidadDTO
 from src.application.services.proyecto_gate import ProyectoBloqueadoError
+import pytest
+
 from src.domain.shared.enums import EstadoBloque
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.proyecto_gate import get_proyecto_gate_service
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProyectoGateService:

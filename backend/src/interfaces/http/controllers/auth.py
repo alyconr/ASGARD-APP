@@ -177,7 +177,6 @@ async def login(
 
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
         token_type="bearer",
         user=_map_user_response(user),
     )
@@ -200,11 +199,11 @@ async def refresh_token(
     asgard_refresh_token: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Exchange a valid refresh token for a new access token and rotated refresh token with replay protection."""
-    raw_token = asgard_refresh_token or (payload.refresh_token if payload else None)
+    raw_token = asgard_refresh_token
     if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de refresco no proporcionado",
+            detail="Token de refresco no proporcionado en cookie de sesión",
         )
 
     try:
@@ -258,9 +257,9 @@ async def refresh_token(
     audit_repo = AuditRepository(session)
 
     if jti:
-        sess_stmt = select(UserSession).where(UserSession.jti == jti)
+        sess_stmt = select(UserSession).where(UserSession.jti == jti).with_for_update()
     else:
-        sess_stmt = select(UserSession).where(UserSession.refresh_token_hash == token_hash)
+        sess_stmt = select(UserSession).where(UserSession.refresh_token_hash == token_hash).with_for_update()
 
     sess_res = await session.execute(sess_stmt)
     user_sess = sess_res.scalar_one_or_none()
@@ -276,6 +275,7 @@ async def refresh_token(
                 UserSession.token_family == user_sess.token_family,
                 UserSession.revoked_at.is_(None),
             )
+            .with_for_update()
         )
         family_res = await session.execute(revoke_stmt)
         for s in family_res.scalars().all():
@@ -343,10 +343,10 @@ async def refresh_token(
 
     return {
         "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
         "token_type": "bearer",
         "user": _map_user_response(user).model_dump(),
     }
+
 
 
 @router.post("/logout", dependencies=[Depends(verify_csrf_origin)])

@@ -986,3 +986,14 @@ Una tarea se considera terminada cuando:
 - [x] Implementar `refreshTokenSingleFlight` y reintentos 401 transparentes en cliente frontend.
 - [x] Pruebas unitarias/integración de micro-hardening en backend (8/8) y frontend (coalescencia de tokens y UI de login).
 
+## TASK-CIERRE-DEFINITIVO-SEGURIDAD. Cierre Definitivo RBAC/Auth/Scope en ASGARD
+- [x] Reemplazar `get_optional_current_user` por `get_current_user` en todos los controladores privados.
+- [x] Garantizar respuesta `401 Unauthorized` ante cualquier petición anónima a rutas privadas.
+- [x] Eliminar `refresh_token` de la respuesta JSON (`TokenResponse`, `/login`, `/refresh`), confinándolo a la cookie HttpOnly.
+- [x] Implementar consumo atómico de sesión con row-level locking (`with_for_update`) en PostgreSQL para `/refresh`.
+- [x] Sanitizar CORS en manejador global de excepciones HTTP 500 validando `origin in settings.cors_allow_origin_list`.
+- [x] Fail-fast en producción/staging ante secretos JWT o credenciales MinIO por defecto.
+- [x] Reducir TTL por defecto del Access Token a 30 minutos.
+- [x] Pruebas exhaustivas de cierre: matriz de rutas privadas 401, no exposición de refresh en JSON, rotación y concurrencia atómica, CORS 500 y validación de secrets.
+
+

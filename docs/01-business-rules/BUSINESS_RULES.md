@@ -794,4 +794,36 @@ A partir del refactor de seguridad y control de acceso multiusuario, el sistema 
 - El rate limiter actual opera en memoria por instancia (sliding window).
 - **Nota técnica de escalabilidad**: Si el despliegue escala a múltiples réplicas (`replicas > 1`), el estado del rate limiting debe migrarse a un backend compartido (Redis o tabla en base de datos). Para la arquitectura actual de instancia única, la implementación en memoria es suficiente y eficiente.
 
+---
+
+# 29. Cierre Definitivo de Seguridad y Autenticación Obligatoria (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+## 29.1 Autenticación Obligatoria en Endpoints Privados
+- Queda eliminada la dependencia `get_optional_current_user` en todas las rutas privadas de la API.
+- Todo endpoint privado requiere estrictamente `get_current_user` (o `require_roles(...)` que lo extiende).
+- Cualquier petición sin encabezado `Authorization: Bearer <token>` válido responde inmediatamente `HTTP 401 Unauthorized`.
+- Las verificaciones de `AccessScopeService` se aplican de forma obligatoria e incondicional sobre el usuario autenticado.
+
+## 29.2 Confinamiento del Refresh Token a Cookie HttpOnly
+- Los endpoints `/api/v1/auth/login` y `/api/v1/auth/refresh` NO devuelven el `refresh_token` en el payload JSON.
+- `TokenResponse` expone únicamente `access_token`, `token_type` y `user`.
+- El refresh token viaja exclusivamente a través de la cookie HttpOnly protegida `asgard_refresh_token`.
+
+## 29.3 Consumo Atómico del Refresh Token en PostgreSQL
+- Toda consulta de verificación y rotación de sesión en `/api/v1/auth/refresh` ejecuta bloqueo de fila `with_for_update()`.
+- Se serializa el acceso concurrente al mismo `jti`. Si dos solicitudes concurrentes intentan rotar el mismo refresh token, una adquiere el bloqueo y rota la sesión; la segunda detecta inmediatamente `revoked_at is not None` y desencadena la revocación de la familia y respuesta `HTTP 401 Unauthorized`.
+
+## 29.4 Sanitización CORS en Manejador Global de Excepciones 500
+- El exception handler no controlado para errores HTTP 500 valida si el encabezado `Origin` está explícitamente en `settings.cors_allow_origin_list`.
+- Si el origen no es de confianza o no está en la lista blanca, NO se inyecta `Access-Control-Allow-Origin`.
+
+## 29.5 Fail-Fast en Producción y Staging ante Secretos Inseguros
+- Validación en tiempo de inicialización de `Settings` (`validate_production_secrets`): si `app_env` es `production` o `staging`, el sistema falla de inmediato (`ValidationError`) si:
+  - `jwt_secret_key` utiliza valores por defecto conocidos (`asgard-super-secret-key-change-in-production-2026`, etc.) o tiene menos de 32 caracteres.
+  - Las credenciales de MinIO (`storage_access_key` o `storage_secret_key`) usan valores inseguros por defecto (`admin`, `admin123`, `minioadmin`).
+
+## 29.6 TTL Reducido del Access Token
+- El tiempo de expiración por defecto del Access Token se reduce a 30 minutos (`jwt_access_token_expire_minutes = 30`), limitando la ventana de exposición en caso de filtración de token de memoria.
+
+
 

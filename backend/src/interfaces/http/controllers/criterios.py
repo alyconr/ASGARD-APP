@@ -22,7 +22,7 @@ from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.criterios import CriterioRepository
 from src.infrastructure.repositories.drafts import DraftRepository
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.criterios import (
     CriterioDeleteResponse,
     CriterioListResponse,
@@ -52,11 +52,10 @@ async def list_criterios(
     referencia_id: uuid.UUID,
     competencia_id: uuid.UUID,
     service: ProgramaCriteriosService = Depends(get_programa_criterios_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CriterioListResponse:
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.list_criterios(referencia_id, competencia_id)
@@ -77,11 +76,10 @@ async def create_criterio(
     competencia_id: uuid.UUID,
     request: CriterioRequest,
     service: ProgramaCriteriosService = Depends(get_programa_criterios_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CriterioListResponse:
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.create_criterio(
@@ -112,11 +110,10 @@ async def update_criterio(
     criterio_id: uuid.UUID,
     request: CriterioRequest,
     service: ProgramaCriteriosService = Depends(get_programa_criterios_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CriterioListResponse:
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.update_criterio(
@@ -149,11 +146,10 @@ async def delete_criterio(
     competencia_id: uuid.UUID,
     criterio_id: uuid.UUID,
     service: ProgramaCriteriosService = Depends(get_programa_criterios_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> CriterioDeleteResponse:
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.delete_criterio(

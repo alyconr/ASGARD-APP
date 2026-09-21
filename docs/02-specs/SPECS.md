@@ -815,3 +815,46 @@ La Fase 1 se considera terminada cuando el sistema permite:
 - `authFetch` en frontend gestiona un singleton de refresco (`refreshTokenSingleFlight`).
 - Las peticiones concurrentes que fallen con 401 esperan la resolución de una única solicitud de rotación y reintentan secuencialmente con el nuevo bearer token en memoria.
 
+---
+
+# 22. Especificación de Cierre Definitivo de Seguridad (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+## 22.1 Autenticación Obligatoria en Rutas Privadas
+- Se erradica `get_optional_current_user` en todos los controladores privados (`dashboard`, `drafts`, `programa_documentos`, `programa_excel`, `programa_cierre`, `competencias`, `resultados_aprendizaje`, `conocimientos_saber`, `conocimientos_proceso`, `criterios`, `pendientes_curriculares`, `proyecto_gate`, `proyecto_cargue`, `proyecto_documentos`, `proyecto_excel`, `proyecto_cierre`, `planeacion`, `equipos`).
+- Todo endpoint privado declara `current_user: Annotated[Usuario, Depends(get_current_user)]`. Solicitudes sin token Bearer válido reciben `401 Unauthorized`.
+
+## 22.2 Refresh Token Exclusivo en Cookie
+- `/api/v1/auth/login` y `/api/v1/auth/refresh` emiten `TokenResponse` con:
+  ```json
+  {
+    "access_token": "<jwt>",
+    "token_type": "bearer",
+    "user": { ... }
+  }
+  ```
+- El `refresh_token` nunca se incluye en el cuerpo JSON; se transporta únicamente en la cookie `asgard_refresh_token` (`HttpOnly=True`).
+
+## 22.3 Consumo Atómico de Refresh Token con Bloqueo de Fila
+- En `/api/v1/auth/refresh`, la consulta de sesión ejecuta:
+  ```python
+  select(UserSession).where(UserSession.jti == jti).with_for_update()
+  ```
+  y ante detección de reuso de token revocado (`revoked_at is not None`), bloquea y revoca todas las sesiones de la familia:
+  ```python
+  select(UserSession).where(UserSession.token_family == user_sess.token_family, UserSession.revoked_at.is_(None)).with_for_update()
+  ```
+  garantizando atomicidad a nivel de PostgreSQL y evitando que múltiples peticiones concurrentes roten simultáneamente el mismo token.
+
+## 22.4 Manejador de Errores 500 y Sanitización CORS
+- El manejador global para `Exception` no controlada verifica `origin and origin in settings.cors_allow_origin_list` antes de incluir `Access-Control-Allow-Origin: <origin>`.
+- Si el origen no está en la lista blanca de CORS, no se inyecta la cabecera.
+
+## 22.5 Fail-Fast de Configuración en Producción y Staging
+- `Settings.validate_production_secrets` intercepta la inicialización de la aplicación y rechaza el arranque si `app_env in ('production', 'staging')` y se detectan:
+  - Claves JWT inseguras o por defecto (`asgard-super-secret-key-change-in-production-2026`, longitud < 32).
+  - Credenciales MinIO inseguras (`admin`, `admin123`, `minioadmin`).
+
+## 22.6 TTL de Access Token
+- Configuración por defecto: `jwt_access_token_expire_minutes = 30`.
+
+

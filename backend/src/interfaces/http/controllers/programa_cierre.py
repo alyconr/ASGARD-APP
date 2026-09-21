@@ -18,7 +18,7 @@ from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.programa_cierre import ProgramaCierreRepository
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.programa_cierre import (
     ProgramaCierreResponse,
     ProgramaCompletitudResponse,
@@ -47,12 +47,11 @@ def get_programa_cierre_service(
 async def validar_completitud_programa(
     referencia_id: uuid.UUID,
     service: ProgramaCierreService = Depends(get_programa_cierre_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaCompletitudResponse:
     """Return structured readiness details for closing a program."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.validar_completitud(referencia_id)
@@ -69,12 +68,12 @@ async def validar_completitud_programa(
 async def cerrar_programa(
     referencia_id: uuid.UUID,
     service: ProgramaCierreService = Depends(get_programa_cierre_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaCierreResponse:
     """Close a program after explicit UI confirmation."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
+
 
     try:
         result = await service.cerrar_programa(referencia_id)

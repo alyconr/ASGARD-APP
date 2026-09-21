@@ -17,10 +17,14 @@ from src.application.services.criterios import (
     CriterioNotFoundError,
 )
 from src.domain.shared.enums import EstadoCampo
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.criterios import (
     get_programa_criterios_service,
 )
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProgramaCriteriosService:

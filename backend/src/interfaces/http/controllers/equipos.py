@@ -41,6 +41,7 @@ router = APIRouter(prefix="/api/v1", tags=["organizacion"])
 @router.get("/coordinaciones", response_model=list[CoordinacionResponse])
 async def list_coordinaciones(
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> list[CoordinacionResponse]:
     """Return all active academic coordinations."""
     stmt = select(Coordinacion).where(Coordinacion.activo.is_(True)).order_by(Coordinacion.nombre)
@@ -52,6 +53,7 @@ async def list_coordinaciones(
 async def list_especialidades_by_coordinacion(
     coordinacion_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> list[EspecialidadResponse]:
     """Return all active specialties under a coordination."""
     stmt = (

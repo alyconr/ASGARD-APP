@@ -101,9 +101,10 @@ def create_application() -> FastAPI:
             content={"detail": str(exc) or "Internal server error"},
         )
         origin = request.headers.get("origin")
-        if origin:
+        if origin and origin in settings.cors_allow_origin_list:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
         return response
 
     application.include_router(health_router)

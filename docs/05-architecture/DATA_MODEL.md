@@ -873,5 +873,11 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
     - `ix_user_sessions_expires_at`
     - `ix_user_sessions_revoked_at`
 
+## 17.5 Integridad y Concurrencia en Rotación de Tokens (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+- Las operaciones de rotación en `user_sessions` aplican bloqueo a nivel de fila (`SELECT ... FOR UPDATE`) sobre el registro correspondiente al `jti`.
+- El consumo de tokens es estrictamente atómico: una sola transacción por `jti` puede completar la rotación. Intentos simultáneos con el mismo `jti` detectan `revoked_at IS NOT NULL`, revocan todas las sesiones asociadas a `token_family` y rechazan con HTTP 401.
+- El refresh token no se persiste en claro en ningún campo ni se transmite en el cuerpo de respuestas JSON.
+
+
 
 

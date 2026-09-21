@@ -31,7 +31,7 @@ from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 
 router = APIRouter(prefix="/api/v1/planeaciones", tags=["planeacion-pedagogica"])
 
@@ -58,16 +58,15 @@ def get_planeacion_service(
 async def obtener_contexto(
     referencia_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionContextoDTO:
     """Fetch active program and project tree structure for planning context."""
-    if current_user is not None:
-        if not await scope_service.can_access_process(current_user, referencia_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Acceso denegado al proceso curricular",
-            )
+    if not await scope_service.can_access_process(current_user, referencia_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado al proceso curricular",
+        )
     try:
         return await service.obtener_contexto(referencia_id)
     except PlaneacionAccessError as error:
@@ -90,18 +89,16 @@ async def obtener_contexto(
 async def listar_planeaciones(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> list[PlaneacionListDTO]:
     """List all created planning items for a specific project formativo."""
-    if current_user is not None:
-        if not await scope_service.can_access_project(current_user, proyecto_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Acceso denegado al proyecto formativo",
-            )
+    if not await scope_service.can_access_project(current_user, proyecto_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado al proyecto formativo",
+        )
     return await service.listar_planeaciones(proyecto_id)
-
 
 
 @router.get(
@@ -111,11 +108,11 @@ async def listar_planeaciones(
 async def obtener_configuracion_formato_oficial(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionDocumentoConfigDTO:
     """Return shared institutional workbook metadata."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, proyecto_id):
+    if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         return await service.obtener_configuracion_documento(proyecto_id)
@@ -132,11 +129,11 @@ async def guardar_configuracion_formato_oficial(
     dto: PlaneacionDocumentoConfigUpdateDTO,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionDocumentoConfigDTO:
     """Persist shared institutional workbook metadata."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, proyecto_id):
+    if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         result = await service.guardar_configuracion_documento(proyecto_id, dto)
@@ -154,11 +151,11 @@ async def guardar_configuracion_formato_oficial(
 async def obtener_estado_formato_consolidado(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialEstadoDTO:
     """Return consolidated generation readiness and counts."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, proyecto_id):
+    if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     return await service.obtener_estado_formato_consolidado(proyecto_id)
 
@@ -171,11 +168,11 @@ async def generar_formato_consolidado(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialGeneradoDTO:
     """Generate and store the consolidated official project workbook."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, proyecto_id):
+    if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         result = await service.generar_formato_consolidado(proyecto_id)
@@ -190,11 +187,11 @@ async def generar_formato_consolidado(
 async def descargar_formato_consolidado(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Stream the latest consolidated workbook stored in MinIO."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, proyecto_id):
+    if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         content, filename = await service.descargar_formato_consolidado(proyecto_id)
@@ -211,11 +208,11 @@ async def descargar_formato_consolidado(
 async def obtener_detalle(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionResponseDTO:
     """Retrieve detailed properties of a single pedagogical planning record."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     detail = await service.obtener_detalle(planeacion_id)
     if detail is None:
@@ -233,11 +230,11 @@ async def obtener_detalle(
 async def obtener_estado_formato_individual(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialEstadoDTO:
     """Return individual generation readiness from backend rules."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         return await service.obtener_estado_formato_individual(planeacion_id)
@@ -253,11 +250,11 @@ async def generar_formato_individual(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialGeneradoDTO:
     """Regenerate one completed planning workbook."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         result = await service.generar_formato_individual(planeacion_id)
@@ -272,11 +269,11 @@ async def generar_formato_individual(
 async def descargar_formato_individual(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Stream one official workbook stored in MinIO."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         content, filename = await service.descargar_formato_individual(planeacion_id)
@@ -294,11 +291,11 @@ async def guardar_borrador(
     dto: PlaneacionSaveDTO,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionResponseDTO:
     """Create or update a pedagogical planning draft."""
-    if current_user is not None and not await scope_service.can_access_project(current_user, dto.proyecto_id):
+    if not await scope_service.can_access_project(current_user, dto.proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         res = await service.guardar_borrador(dto)
@@ -333,11 +330,11 @@ async def confirmar_y_generar(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionResponseDTO:
     """Transition state to COMPLETE, build output and store it in MinIO."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         res = await service.confirmar_y_generar(planeacion_id)
@@ -371,11 +368,11 @@ async def eliminar_planeacion(
     planeacion_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
     session: AsyncSession = Depends(get_async_session),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> dict[str, str]:
     """Delete a pedagogical planning from database and cancel related artifacts."""
-    if current_user is not None and not await scope_service.can_access_planning(current_user, planeacion_id):
+    if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         await service.eliminar_planeacion(planeacion_id)

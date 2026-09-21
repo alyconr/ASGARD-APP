@@ -24,7 +24,7 @@ from src.infrastructure.repositories.conocimientos_saber import (
     ConocimientoSaberRepository,
 )
 from src.infrastructure.repositories.drafts import DraftRepository
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.conocimientos_saber import (
     ConocimientoSaberDeleteResponse,
     ConocimientoSaberListResponse,
@@ -57,12 +57,11 @@ async def list_conocimientos_saber(
     service: ProgramaConocimientoSaberService = Depends(
         get_programa_conocimiento_saber_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoSaberListResponse:
     """List SABER knowledge items for a competence in the current draft."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.list_conocimientos(referencia_id, competencia_id)
@@ -85,12 +84,11 @@ async def create_conocimiento_saber(
     service: ProgramaConocimientoSaberService = Depends(
         get_programa_conocimiento_saber_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoSaberListResponse:
     """Create a SABER knowledge item linked to the given competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.create_conocimiento(
@@ -126,12 +124,11 @@ async def update_conocimiento_saber(
     service: ProgramaConocimientoSaberService = Depends(
         get_programa_conocimiento_saber_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoSaberListResponse:
     """Update a SABER knowledge item without moving it to another competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.update_conocimiento(
@@ -169,12 +166,11 @@ async def delete_conocimiento_saber(
     service: ProgramaConocimientoSaberService = Depends(
         get_programa_conocimiento_saber_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoSaberDeleteResponse:
     """Delete a SABER knowledge item from a competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.delete_conocimiento(

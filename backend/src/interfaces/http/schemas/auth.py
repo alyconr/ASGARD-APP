@@ -43,13 +43,13 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str | None = None
+    model_config = ConfigDict(extra="ignore")
+
 
 
 class ChangePasswordRequest(BaseModel):

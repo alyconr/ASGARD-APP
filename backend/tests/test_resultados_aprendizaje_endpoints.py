@@ -19,10 +19,14 @@ from src.application.services.resultados_aprendizaje import (
     ResultadoAprendizajeNotFoundError,
 )
 from src.domain.shared.enums import EstadoCampo
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.resultados_aprendizaje import (
     get_programa_resultado_service,
 )
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProgramaResultadoService:

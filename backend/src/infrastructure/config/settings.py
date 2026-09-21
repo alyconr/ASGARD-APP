@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     storage_region: str | None = Field(default=None)
     jwt_secret_key: str = Field(default="asgard-super-secret-key-change-in-production-2026")
     jwt_algorithm: str = Field(default="HS256")
-    jwt_access_token_expire_minutes: int = Field(default=480)
+    jwt_access_token_expire_minutes: int = Field(default=30)
     jwt_refresh_token_expire_days: int = Field(default=7)
 
     auth_cookie_name: str = Field(default="asgard_refresh_token")
@@ -48,6 +48,35 @@ class Settings(BaseSettings):
     auth_cookie_samesite: str = Field(default="lax")
     auth_cookie_domain: str | None = Field(default=None)
     auth_cookie_path: str = Field(default="/api/v1/auth")
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Disallow default insecure dev secrets in production or staging environments."""
+        known_insecure_jwt = {
+            "asgard-super-secret-key-change-in-production-2026",
+            "change-me-in-production",
+            "secret",
+            "secret123",
+        }
+        known_insecure_storage = {"admin", "admin123", "minioadmin"}
+
+        if self.is_production:
+            if (
+                not self.jwt_secret_key
+                or self.jwt_secret_key.strip() in known_insecure_jwt
+                or len(self.jwt_secret_key.strip()) < 32
+            ):
+                raise ValueError(
+                    "JWT_SECRET_KEY must be an explicitly configured, secure secret of at least 32 characters in production/staging environments."
+                )
+            if (
+                self.storage_access_key in known_insecure_storage
+                or self.storage_secret_key in known_insecure_storage
+            ):
+                raise ValueError(
+                    "Insecure default storage credentials cannot be used in production/staging environments."
+                )
+        return self
 
     @property
     def is_production(self) -> bool:
