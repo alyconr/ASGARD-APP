@@ -35,13 +35,13 @@ def upgrade() -> None:
         sa.Column("ip_address", sa.String(length=45), nullable=True),
         sa.Column("user_agent", sa.String(length=255), nullable=True),
         sa.Column(
-            "created_at",
+            "fecha_creacion",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
         ),
         sa.Column(
-            "updated_at",
+            "fecha_actualizacion",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
