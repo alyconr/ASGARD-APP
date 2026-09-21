@@ -857,4 +857,40 @@ La Fase 1 se considera terminada cuando el sistema permite:
 ## 22.6 TTL de Access Token
 - Configuración por defecto: `jwt_access_token_expire_minutes = 30`.
 
+---
+
+# 23. Especificación de Administración Organizacional Multiusuario (SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD)
+
+## 23.1 Endpoints de Administración de Usuarios
+- `POST /api/v1/auth/users`: Registra usuario nuevo. Requiere rol `SUPERADMIN` o `ADMIN`. `ADMIN` no puede crear cuentas con rol `SUPERADMIN`. Valida confirmación de contraseña, unicidad de correo institucional, coordinación y especialidad activas obligatorias para `LIDER_EQUIPO_EJECUTOR` y `USUARIO_ADICIONAL`. Establece `debe_cambiar_password = true`.
+- `GET /api/v1/auth/users`: Listado paginado con filtros (`page`, `page_size`, `search`, `role`, `estado`, `coordinacion_id`, `especialidad_id`). `ADMIN` no recibe ni puede ver detalles de cuentas `SUPERADMIN`.
+- `GET /api/v1/auth/users/{id}`: Detalle completo de usuario. `ADMIN` bloqueado ante `SUPERADMIN`.
+- `PATCH /api/v1/auth/users/{id}`: Edición de nombre, apellido, roles, coordinación, especialidad y área.
+- `PATCH /api/v1/auth/users/{id}/estado`: Transición de estado (`ACTIVO`, `INACTIVO`, `BLOQUEADO`). Revoca atómicamente sesiones e incrementa `token_version`.
+- `POST /api/v1/auth/users/{id}/reset-password`: Reseteo administrativo de clave con contraseña temporal autogenerada o manual. Establece `debe_cambiar_password = true`, revoca sesiones previas e incrementa `token_version`.
+- `GET /api/v1/auth/me`: Retorna el perfil completo del usuario autenticado (incluido en whitelist de primer acceso).
+
+## 23.2 Endpoints de Coordinaciones y Especialidades
+- `GET /api/v1/coordinaciones`: Catálogo con contadores de especialidades y equipos.
+- `POST /api/v1/coordinaciones`: Creación con código alfanumérico en mayúsculas único.
+- `PATCH /api/v1/coordinaciones/{id}`: Actualización de datos o estado. Inactivación rechazada si existen especialidades activas vinculadas.
+- `GET /api/v1/coordinaciones/{id}/especialidades`: Listado de especialidades filtradas por coordinación (`solo_activas=true` opcional).
+- `POST /api/v1/coordinaciones/{id}/especialidades`: Creación de especialidad bajo coordinación activa.
+- `PATCH /api/v1/especialidades/{id}`: Actualización o cambio de estado. Inactivación rechazada si existen equipos ejecutores activos vinculados.
+
+## 23.3 Endpoints de Equipos Ejecutores y Procesos
+- `GET /api/v1/equipos`: Listado paginado de equipos ejecutores (`items`, `total`, `page`, `page_size`, `total_pages`).
+- `POST /api/v1/equipos`: Creación validando líder con rol `LIDER_EQUIPO_EJECUTOR`, activo y de la misma coordinación/especialidad.
+- `PATCH /api/v1/equipos/{id}`: Edición de equipo. Al cambiar `lider_id`, ejecuta una transacción que actualiza `usuario_lider_id` en todos los `procesos_curriculares` asignados a dicho equipo.
+- `POST /api/v1/equipos/{id}/miembros`: Vinculación de `USUARIO_ADICIONAL` activo de la misma coordinación/especialidad.
+- `PATCH /api/v1/equipos/{id}/miembros/{usuario_id}`: Activación/desactivación de membresía de apoyo.
+
+## 23.4 Interfaz de Usuario y Flujo de Primer Acceso
+- `AdminWorkspace`: Módulo unificado con pestañas institucionales:
+  1. **Usuarios y Credenciales**: Tabla paginada con búsqueda, filtros, insignias de estado, acciones rápidas de edición, cambio de estado y reseteo de clave.
+  2. **Coordinaciones & Especialidades**: Vista dividida (dual-pane) con creación, edición y activación/inactivación protegida.
+  3. **Equipos Ejecutores & Procesos**: Cuadrícula de equipos, asignación de líderes, gestión de miembros de apoyo y asignación de procesos curriculares huérfanos.
+- `ForceChangePasswordDialog`: Modal no cancelable montado globalmente en el dashboard maestro cuando `user.debe_cambiar_password == true`. Exige ingresar clave actual y nueva contraseña de al menos 8 caracteres con confirmación idéntica antes de desbloquear el acceso a la plataforma.
+
+
 

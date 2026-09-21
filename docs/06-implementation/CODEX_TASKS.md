@@ -1000,4 +1000,20 @@ Una tarea se considera terminada cuando:
 - [x] Reducir TTL por defecto del Access Token a 30 minutos.
 - [x] Pruebas exhaustivas de cierre: matriz de rutas privadas 401, no exposición de refresh en JSON, rotación y concurrencia atómica, CORS 500 y validación de secrets.
 
+## TASK-SPRINT-B-ADMINISTRACION-ORGANIZACIONAL. Administración Organizacional Multiusuario
+- [x] Extender modelo `Usuario` (`area`, `estado`, `debe_cambiar_password`, `ultimo_acceso`) e índice en `equipos_ejecutores`.
+- [x] Crear y verificar migración Alembic append-only `f4a5b6c7d8e9_sprint_b_organizational_admin.py` con single head.
+- [x] Crear script de sembrado idempotente de catálogo organizacional (`scripts/seed_organization_catalog.py`).
+- [x] Implementar servicio `UserAdminService` con verificación anti-escalación (`ADMIN` vs `SUPERADMIN`), invariantes y reseteo administrativo.
+- [x] Implementar servicio `OrganizationAdminService` con guardias activas contra desactivación de dependencias.
+- [x] Implementar servicio `TeamAdminService` con cambio de líder y sincronización transaccional sobre procesos curriculares.
+- [x] Endurecer middleware `deps.py` con rechazo de usuarios inactivos y whitelist obligatoria si `debe_cambiar_password == true`.
+- [x] Exponer endpoint `GET /api/v1/auth/me` para rehidratación de perfil autenticado.
+- [x] Construir frontend `ForceChangePasswordDialog` (modal no cancelable) para primer acceso con credenciales temporales.
+- [x] Construir frontend `UserFormDialog`, `UserStatusDialog`, `UserResetPasswordDialog`, `CoordinationFormDialog`, `SpecialtyFormDialog` y `TeamFormDialog`.
+- [x] Construir vistas `UsersAdmin`, `OrganizationAdmin` y `EquiposAdmin` integradas en el workspace `AdminWorkspace`.
+- [x] Conectar `AdminWorkspace` y `ForceChangePasswordDialog` en `MasterDashboard` para roles autorizados.
+- [x] Pruebas exhaustivas: 22 tests en backend (`test_sprint_b_admin.py`), tests unitarios en frontend (`admin-workspace.test.tsx`), typecheck y build de producción limpios.
+
+
 

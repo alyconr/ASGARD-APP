@@ -7,6 +7,7 @@ import { authFetch, getApiBaseUrl, setAuthToken } from "@/lib/api";
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   hasRole: (...roleNames: string[]) => boolean;
 }
 
@@ -94,6 +95,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     }
   };
 
+  const refreshUser = async (): Promise<void> => {
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/auth/me`);
+      if (res.ok) {
+        const userData = await res.json();
+        setState((prev) => ({
+          ...prev,
+          user: userData,
+        }));
+      }
+    } catch (err) {
+      console.error("Error refreshing user profile:", err);
+    }
+  };
+
   const hasRole = (...roleNames: string[]): boolean => {
     if (!state.user || !state.user.roles) return false;
     return roleNames.some((r) => state.user?.roles.includes(r));
@@ -105,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         ...state,
         login,
         logout,
+        refreshUser,
         hasRole,
       }}
     >

@@ -833,4 +833,44 @@ Antes de generar código, Codex debe:
 6. **Reducción de TTL de Access Token**:
    - Expiración de Access Token ajustada a 30 minutos por defecto.
 
+---
+
+# 19. Hito Sprint B — Administración Organizacional Multiusuario (SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD)
+
+## 19.1 Entregables Técnicos Backend
+1. **Persistencia y Modelo**:
+   - Campos `area`, `estado`, `debe_cambiar_password`, `ultimo_acceso` en `Usuario`, índices sobre `estado` y `area`, e índice `ix_equipos_ejecutores_estado`.
+   - Migración Alembic append-only `f4a5b6c7d8e9_sprint_b_organizational_admin.py` con single head validado.
+   - Script de sembrado idempotente `backend/scripts/seed_organization_catalog.py` para coordinaciones TEL, CRE, LOG, MER, TRA y especialidades REDES, ADSO.
+2. **Servicios de Aplicación**:
+   - `UserAdminService`: Creación con verificación anti-escalación (`ADMIN` no puede tocar `SUPERADMIN`), listado paginado con filtros, actualización, transición de estados con revocación de sesiones, reseteo administrativo con contraseña temporal.
+   - `OrganizationAdminService`: CRUD para coordinaciones y especialidades con guardias activas contra desactivación si existen dependencias vivas.
+   - `TeamAdminService`: Creación y actualización de equipos con validación de rol de líder y ámbito coordinacion/especialidad; actualización de líder con propagación transaccional inmediata sobre `procesos_curriculares.usuario_lider_id`; membresías de apoyo.
+3. **Controladores y Seguridad**:
+   - Controladores `auth.py` y `equipos.py` actualizados con DTOs de paginación y endpoints dedicados.
+   - Endpoint `GET /api/v1/auth/me` para consulta y rehidratación de perfil autenticado.
+   - Enforcement central en `deps.py`: rechazo de usuarios inactivos/bloqueados y bloqueo HTTP 403 con whitelist estricta (`/me`, `/change-password`, `/logout`, `/refresh`) si `debe_cambiar_password == true`.
+
+## 19.2 Entregables Técnicos Frontend
+1. **Componentes y Diálogos**:
+   - `ForceChangePasswordDialog`: Diálogo modal obligatorio, no cancelable y con confirmación para primer acceso con credenciales temporales.
+   - `UserFormDialog`: Creación y edición de usuarios con selects dependientes coordinación -> especialidad y confirmación de contraseña.
+   - `UserStatusDialog`: Modificación de estado con advertencias claras de revocación inmediata de sesiones activas.
+   - `UserResetPasswordDialog`: Reseteo administrativo de clave con copiado seguro al portapapeles.
+   - `CoordinationFormDialog` y `SpecialtyFormDialog`: Gestión de catálogo organizacional con códigos canónicos en mayúsculas.
+   - `TeamFormDialog`: Creación y edición de equipos ejecutores con selección de líder compatible.
+2. **Vistas Administrativas**:
+   - `UsersAdmin`: Tabla paginada en servidor con filtros de búsqueda, rol, estado y coordinación.
+   - `OrganizationAdmin`: Vista dual-pane de coordinaciones y especialidades con contadores y guardias de activación.
+   - `EquiposAdmin`: Cuadrícula paginada de equipos con membresías de apoyo y asignación de procesos sin asignar.
+   - `AdminWorkspace`: Centro unificado de administración organizacional con navegación por pestañas e indicadores de seguridad institucional.
+   - `MasterDashboard`: Integración de la pestaña administrativa para roles con privilegio y montaje global de `ForceChangePasswordDialog`.
+
+## 19.3 Calidad y Verificación
+- Suite backend: 339 tests pasando, 2 skipped (`pytest -q`).
+- Suite frontend: 23 archivos de prueba, 133 tests pasando (`vitest run`).
+- Verificación de tipos: `npm run typecheck` completado con 0 errores.
+- Build de producción: `npm run build` completado exitosamente con todas las rutas compiladas.
+
+
 

@@ -491,3 +491,15 @@ Esta matriz se usa para:
 | Exportación consolidada | generar/descargar por `proyecto_id` | Contadores y descarga consolidada | endpoints y wizard |
 | Validación de horas y brechas | estado de formato oficial | Vista previa y asistente | servicio y guide engine |
 | MinIO real | `save_excel` / `read_excel` | descarga Blob | pruebas HTTP y API |
+
+## Trazabilidad Sprint B — Administración Organizacional Multiusuario
+
+| Requisito / Historia | Backend | Frontend | Prueba |
+|---|---|---|---|
+| HU-25: Gestión de Usuarios y Roles | `UserAdminService`, `/api/v1/auth/users` | `UsersAdmin`, `UserFormDialog` | `test_sprint_b_admin.py` |
+| HU-26: Estado y Cambio Forzoso de Clave | `deps.py`, `UserAdminService`, `/api/v1/auth/change-password` | `UserStatusDialog`, `ForceChangePasswordDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| HU-27: Coordinaciones y Especialidades | `OrganizationAdminService`, `/api/v1/coordinaciones` | `OrganizationAdmin`, `CoordinationFormDialog`, `SpecialtyFormDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| HU-28: Equipos Ejecutores y Procesos | `TeamAdminService`, `/api/v1/equipos`, `/procesos/{ref}/asignar` | `EquiposAdmin`, `TeamFormDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| Jerarquía y Anti-Escalación | `UserAdminService` (invariantes ADMIN vs SUPERADMIN) | Condicionales de rol en UI | `test_sprint_b_admin.py` |
+| Revocación Atómica de Sesiones | `token_version` + `UserSession.revoked_at` | Redirección y bloqueo central | `test_sprint_b_admin.py` |
+

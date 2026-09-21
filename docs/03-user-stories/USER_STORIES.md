@@ -370,3 +370,53 @@ Nota vigente: los criterios aparecen primero en un selector eficiente y se rende
 - Debe recordar si el usuario colapso la ayuda.
 
 ---
+
+# 7. Épica: Administración Organizacional Multiusuario (SPRINT-B)
+
+## HU-25. Administración multiusuario y credenciales
+**Como** administrador o superadministrador de ASGARD  
+**Quiero** registrar y gestionar usuarios con roles canónicos y asignación curricular  
+**Para** gobernar el acceso de líderes y apoyos al sistema según su especialidad.
+
+### Criterios de aceptación
+- Solo `SUPERADMIN` y `ADMIN` pueden gestionar usuarios.
+- `ADMIN` no puede crear, editar, listar en detalle, bloquear ni resetear a un `SUPERADMIN`.
+- Roles `LIDER_EQUIPO_EJECUTOR` y `USUARIO_ADICIONAL` requieren coordinación y especialidad activas válidas.
+- Toda cuenta creada administrativamente recibe flag `debe_cambiar_password = true`.
+
+---
+
+## HU-26. Control de estado y cambio de contraseña forzoso
+**Como** usuario con credenciales temporales o administrador que bloquea acceso  
+**Quiero** que el sistema impida el acceso no autorizado y fuerce la personalización de credenciales  
+**Para** garantizar la seguridad institucional de la información curricular.
+
+### Criterios de aceptación
+- El estado puede ser `ACTIVO`, `INACTIVO` o `BLOQUEADO`.
+- Al cambiar estado o resetear clave, se revoca inmediatamente toda sesión activa (`token_version` + revocación DB).
+- Con `debe_cambiar_password = true`, se bloquea todo endpoint salvo la whitelist de autenticación y se despliega modal no cancelable.
+
+---
+
+## HU-27. Catálogo organizacional con guardias de integridad
+**Como** administrador de la entidad  
+**Quiero** gestionar el catálogo de coordinaciones y especialidades  
+**Para** estructurar los centros de formación y restringir equipos ejecutores.
+
+### Criterios de aceptación
+- Los códigos son alfanuméricos en mayúsculas y únicos.
+- No se permite inactivar una coordinación con especialidades activas.
+- No se permite inactivar una especialidad con equipos ejecutores activos.
+
+---
+
+## HU-28. Equipos ejecutores y sincronización transaccional de procesos
+**Como** administrador de formación  
+**Quiero** crear equipos ejecutores, asociar miembros y actualizar su líder  
+**Para** asegurar que los procesos curriculares queden bajo la responsabilidad del líder correcto de forma inmediata.
+
+### Criterios de aceptación
+- El líder debe tener rol `LIDER_EQUIPO_EJECUTOR` y coincidir en coordinación y especialidad.
+- Los miembros de apoyo deben tener rol `USUARIO_ADICIONAL` y pertenecer a la misma coordinación y especialidad.
+- Al cambiar el líder de un equipo, el sistema actualiza de forma transaccional `usuario_lider_id` en todos los procesos curriculares vinculados al equipo.
+

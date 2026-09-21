@@ -791,11 +791,16 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `nombre` (VARCHAR 100, NOT NULL)
   - `apellido` (VARCHAR 100, NOT NULL)
   - `telefono` (VARCHAR 20, NULL)
+  - `area` (VARCHAR 100, NULL)
   - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NULL para administradores globales)
   - `especialidad_id` (UUID, FK -> `especialidades.id`, NULL para administradores globales)
-  - `activo` (BOOLEAN, DEFAULT TRUE)
-  - `token_version` (INTEGER, NOT NULL, DEFAULT 1) — Versión de token para revocación instantánea en logout y cambio de clave
+  - `estado` (VARCHAR 20, NOT NULL, DEFAULT 'ACTIVO'): `ACTIVO`, `INACTIVO`, `BLOQUEADO` (índice `ix_usuarios_estado`)
+  - `debe_cambiar_password` (BOOLEAN, NOT NULL, DEFAULT FALSE) — Flag para obligatoriedad de primer acceso
+  - `ultimo_acceso` (TIMESTAMPTZ, NULL) — Marca temporal del último inicio de sesión
+  - `activo` (BOOLEAN property derivada: `estado == 'ACTIVO'`)
+  - `token_version` (INTEGER, NOT NULL, DEFAULT 1) — Versión de token para revocación instantánea en logout, cambio de estado y reseteo de clave
   - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
+  - Indexes: `ix_usuarios_estado`, `ix_usuarios_area`, `ix_usuarios_email`
 
 - **`roles`**:
   - `id` (UUID, PK)
@@ -830,6 +835,7 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `especialidad_id` (UUID, FK -> `especialidades.id`, NOT NULL)
   - `lider_id` (UUID, FK -> `usuarios.id`, NOT NULL)
   - `estado` (VARCHAR 20, NOT NULL, DEFAULT 'ACTIVO'): `ACTIVO`, `INACTIVO`
+  - Indexes: `ix_equipos_ejecutores_estado`, `ix_equipos_ejecutores_coordinacion_id`, `ix_equipos_ejecutores_especialidad_id`, `ix_equipos_ejecutores_lider_id`
 
 - **`equipos_ejecutores_miembros`**:
   - `id` (UUID, PK)

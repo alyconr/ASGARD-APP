@@ -115,3 +115,11 @@ class EstadoEquipo(str, Enum):
     INACTIVO = "INACTIVO"
 
 
+class EstadoUsuario(str, Enum):
+    """Account status for users."""
+
+    ACTIVO = "ACTIVO"
+    INACTIVO = "INACTIVO"
+    BLOQUEADO = "BLOQUEADO"
+
+

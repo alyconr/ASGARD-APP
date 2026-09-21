@@ -1,4 +1,4 @@
-﻿"""Pydantic schemas for organizations, executing teams, and process assignments."""
+"""Pydantic schemas for organizations, executing teams, and process assignments."""
 
 from __future__ import annotations
 
@@ -9,6 +9,18 @@ from pydantic import BaseModel, ConfigDict
 from src.interfaces.http.schemas.auth import UserResponse
 
 
+class CoordinacionCreate(BaseModel):
+    codigo: str
+    nombre: str
+    descripcion: str | None = None
+
+
+class CoordinacionUpdate(BaseModel):
+    nombre: str | None = None
+    descripcion: str | None = None
+    activo: bool | None = None
+
+
 class CoordinacionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -17,6 +29,16 @@ class CoordinacionResponse(BaseModel):
     nombre: str
     descripcion: str | None = None
     activo: bool
+
+
+class EspecialidadCreate(BaseModel):
+    codigo: str
+    nombre: str
+
+
+class EspecialidadUpdate(BaseModel):
+    nombre: str | None = None
+    activo: bool | None = None
 
 
 class EspecialidadResponse(BaseModel):
@@ -55,6 +77,14 @@ class EquipoEjecutorCreate(BaseModel):
     lider_id: uuid.UUID
 
 
+class EquipoEjecutorUpdate(BaseModel):
+    nombre: str | None = None
+    coordinacion_id: uuid.UUID | None = None
+    especialidad_id: uuid.UUID | None = None
+    lider_id: uuid.UUID | None = None
+    estado: str | None = None
+
+
 class EquipoEjecutorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,6 +96,16 @@ class EquipoEjecutorResponse(BaseModel):
     estado: str
     lider: UserResponse | None = None
     miembros: list[MiembroResponse] = []
+
+
+class PaginatedEquiposResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[EquipoEjecutorResponse]
+    page: int
+    page_size: int
+    total: int
+    pages: int
 
 
 class ProcesoAsignarRequest(BaseModel):

@@ -825,5 +825,47 @@ A partir del refactor de seguridad y control de acceso multiusuario, el sistema 
 ## 29.6 TTL Reducido del Access Token
 - El tiempo de expiración por defecto del Access Token se reduce a 30 minutos (`jwt_access_token_expire_minutes = 30`), limitando la ventana de exposición en caso de filtración de token de memoria.
 
+---
+
+# 30. Administración Organizacional Multiusuario (SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD)
+
+## 30.1 Roles Canónicos y Jerarquía Estricta
+- El sistema restringe las cuentas a los cuatro roles oficiales de dominio: `SUPERADMIN`, `ADMIN`, `LIDER_EQUIPO_EJECUTOR`, `USUARIO_ADICIONAL`.
+- No se permiten roles fuera del enum ni combinaciones arbitrarias.
+- Jerarquía de administración: Un usuario con rol `ADMIN` no puede crear, editar, listar en detalle, bloquear, desactivar ni resetear credenciales de un usuario con rol `SUPERADMIN` (responde HTTP 403 Forbidden).
+- Solo un `SUPERADMIN` puede administrar a otros usuarios con rol `SUPERADMIN`.
+
+## 30.2 Invariantes de Usuario y Asociación Curricular
+- Todo usuario con rol `LIDER_EQUIPO_EJECUTOR` o `USUARIO_ADICIONAL` requiere obligatoriamente una coordinación académica activa (`coordinacion_id`) y una especialidad activa (`especialidad_id`).
+- La especialidad seleccionada debe pertenecer estrictamente a la coordinación asignada.
+- Los usuarios de rol directivo (`SUPERADMIN`, `ADMIN`) pueden operar a nivel institucional global sin requerir coordinación ni especialidad fija.
+
+## 30.3 Ciclo de Vida del Usuario y Revocación Inmediata de Sesiones
+- El estado del usuario soporta los valores: `ACTIVO`, `INACTIVO`, `BLOQUEADO`.
+- Intentos de inicio de sesión de usuarios no activos son rechazados de inmediato (`HTTP 401 Unauthorized`).
+- Al inactivar o bloquear a un usuario, o al ejecutar un reseteo administrativo de contraseña, el sistema invalida atómicamente todas sus sesiones en base de datos (`revoked_at = now()`) e incrementa su `token_version` en PostgreSQL.
+- Los tokens JWT emitidos con versiones anteriores quedan revocados de forma inmediata en las verificaciones centrales.
+
+## 30.4 Política de Primer Acceso y Clave Temporal
+- Al crearse una cuenta de usuario o al resetear administrativamente su contraseña, el flag `debe_cambiar_password` se establece en `True`.
+- Un usuario con `debe_cambiar_password == True` tiene bloqueado el acceso a cualquier endpoint del sistema (responde HTTP 403 Forbidden), con excepción estricta de la lista blanca de autenticación (`/auth/me`, `/auth/change-password`, `/auth/refresh`, `/auth/logout`).
+- La pantalla muestra un modal obligatorio y no cerrable que fuerza a ingresar la clave actual y una nueva contraseña de al menos 8 caracteres con confirmación idéntica.
+- Tras completar el cambio de clave exitosamente, se borra el flag `debe_cambiar_password = False`, se incrementa `token_version` y se revocan sesiones previas.
+
+## 30.5 Integridad del Catálogo de Coordinaciones y Especialidades
+- Los códigos de coordinación y especialidad deben ser alfanuméricos en mayúsculas y únicos en el sistema.
+- Guardias de integridad referencial activa:
+  - Una coordinación no puede ser inactivada si cuenta con especialidades activas vinculadas.
+  - Una especialidad no puede ser inactivada si cuenta con equipos ejecutores activos vinculados.
+
+## 30.6 Equipos Ejecutores y Sincronización Transaccional de Procesos
+- Un equipo ejecutor requiere un líder activo con rol `LIDER_EQUIPO_EJECUTOR` cuya coordinación y especialidad coincidan con las del equipo.
+- Los miembros de apoyo deben tener rol `USUARIO_ADICIONAL` y pertenecer a la misma coordinación y especialidad.
+- Sincronización atómica de procesos: Cuando el administrador cambia el líder de un equipo ejecutor (`PATCH /api/v1/equipos/{equipo_id}` con nuevo `lider_id`), el backend actualiza de forma transaccional la columna `usuario_lider_id` en todos los registros de `procesos_curriculares` asignados a dicho equipo, garantizando coherencia inmediata en `AccessScopeService`.
+
+## 30.7 Intactibilidad del Dominio Curricular
+- La administración organizacional opera de manera desacoplada de la lógica pedagógica: no se mutan modelos ni estructuras de `Programa`, `Proyecto`, `PlaneacionPedagogica` ni la generación oficial del formato `GPFI-F-134 V05`.
+
+
 
 

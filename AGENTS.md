@@ -215,6 +215,18 @@ A partir de Sprint A:
 - El contrato de `/api/v1/auth/refresh` opera exclusivamente mediante cookie HttpOnly sin esquema ni payload `RefreshTokenRequest`.
 - La rotación de refresh tokens concurrente con la misma sesión está respaldada por `SELECT ... FOR UPDATE` en PostgreSQL para prevenir race conditions y reuso de tokens.
 
+## Decision funcional SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD
+A partir de Sprint B:
+- Se implementa el módulo completo de Administración Organizacional sobre RBAC y modelo de alcance (`AccessScopeService`).
+- Roles canónicos soportados estrictamente: `SUPERADMIN`, `ADMIN`, `LIDER_EQUIPO_EJECUTOR`, `USUARIO_ADICIONAL` (sin roles nuevos ni combinaciones arbitrarias).
+- Los administradores (`ADMIN`) no pueden crear, listar en detalle, editar, bloquear, desactivar ni resetear credenciales de un `SUPERADMIN` (jerarquía estricta).
+- El estado de usuario soporta `ACTIVO`, `INACTIVO` y `BLOQUEADO`; los usuarios inactivos o bloqueados son rechazados de inmediato en autenticación y validación de tokens.
+- Toda cuenta creada o reseteada administrativamente requiere forzosamente cambio de clave (`debe_cambiar_password = true`) en su primer acceso antes de operar en cualquier módulo.
+- El cambio o bloqueo de estado y reseteo de contraseña revoca de forma atómica todas las sesiones activas en base de datos (`revoked_at = now()`) e incrementa el `token_version` del usuario.
+- Catálogo de Coordinaciones y Especialidades gestionado con validaciones de unicidad de código mayúscula y restricciones de integridad: no se puede inactivar una coordinación con especialidades activas ni una especialidad con equipos ejecutores activos.
+- En Equipos Ejecutores, el cambio de líder actualiza atómicamente la columna `usuario_lider_id` en todos los procesos curriculares vinculados a dicho equipo.
+- No se alteran modelos ni lógica de negocio de los dominios curriculares (`Programa`, `Proyecto`, `Planeacion`, `GPFI-F-134 V05`).
+
 ---
 
 # 1. Prioridad de instrucciones
