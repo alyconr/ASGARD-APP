@@ -8,17 +8,17 @@ import {
 } from "@/features/guide/wizard-guide-engine";
 
 describe("wizard guide engine", () => {
-  it("warns program users when the Excel preview is valid but not imported", () => {
+  it("blocks program users when the Excel preview is valid but not imported", () => {
     const guide = buildProgramaWizardGuide({
       activeReferenceId: "11111111-1111-4111-9111-111111111111",
-      currentStepId: "origen-documental",
+      currentStepId: "revision-programa",
       draftStatus: "BORRADOR",
       isWizardActive: true,
       payload: {
         meta: {
           referenciaId: "11111111-1111-4111-9111-111111111111",
           entryMode: "EXCEL",
-          touchedSteps: ["origen-documental"],
+          touchedSteps: ["revision-programa"],
           startedAt: "2026-06-22T00:00:00.000Z",
           lastInteractionAt: "2026-06-22T00:00:00.000Z",
         },
@@ -64,8 +64,8 @@ describe("wizard guide engine", () => {
       },
     });
 
-    expect(guide.severity).toBe("warning");
-    expect(guide.title).toBe("Confirma la importacion");
+    expect(guide.severity).toBe("blocked");
+    expect(guide.title).toBe("Importacion pendiente");
   });
 
   it("blocks project guidance when the backend availability says the program is incomplete", () => {
@@ -83,7 +83,7 @@ describe("wizard guide engine", () => {
           "Debes cerrar el programa de formacion como COMPLETO antes de iniciar el proyecto formativo.",
         accion_sugerida: "completar_y_cerrar_programa",
       },
-      currentStepId: "fuente-proyecto",
+      currentStepId: "revision-proyecto",
       draftStatus: "BLOQUEADO",
       isWizardActive: false,
       payload: null,

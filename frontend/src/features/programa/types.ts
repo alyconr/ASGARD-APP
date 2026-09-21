@@ -2,9 +2,7 @@ import type { DraftStatus } from "@/features/drafts/types";
 
 export type ProgramaEntryMode = "EXCEL" | null;
 
-export type ProgramaWizardStepId =
-  | "origen-documental"
-  | "revision-programa";
+export type ProgramaWizardStepId = "revision-programa";
 
 export type AutosaveState = "idle" | "saving" | "saved" | "error";
 

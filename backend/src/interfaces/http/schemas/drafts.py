@@ -18,6 +18,7 @@ class DraftSaveRequest(BaseModel):
     paso_actual: str = Field(min_length=1, max_length=100)
     payload_json: dict[str, Any]
     estado_borrador: EstadoBloque
+    equipo_ejecutor_id: uuid.UUID | None = None
 
     @field_validator("paso_actual")
     @classmethod

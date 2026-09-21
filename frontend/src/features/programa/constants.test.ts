@@ -51,7 +51,7 @@ describe("programa constants", () => {
       const input = {
         meta: {
           entryMode: "EXCEL",
-          touchedSteps: ["removed-step", "origen-documental"],
+          touchedSteps: ["removed-step", "revision-programa"],
           startedAt: "2024-01-01T00:00:00Z",
           lastInteractionAt: "2024-01-01T01:00:00Z",
         },
@@ -62,7 +62,7 @@ describe("programa constants", () => {
         },
         wizard: {
           notesByStep: {
-            "origen-documental": "some note",
+            "revision-programa": "some note",
             "invalid-step": "should be ignored",
           },
         },
@@ -70,12 +70,12 @@ describe("programa constants", () => {
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
       expect(normalized.meta.entryMode).toBe("EXCEL");
-      expect(normalized.meta.touchedSteps).toEqual(["origen-documental"]);
+      expect(normalized.meta.touchedSteps).toEqual(["revision-programa"]);
       expect(normalized.programa.codigo_programa).toBe("123");
       expect(normalized.programa.nombre_programa).toBe("Test");
       expect(normalized.programa.version_programa).toBe("v1");
       expect(normalized.wizard.notesByStep).toEqual({
-        "origen-documental": "some note",
+        "revision-programa": "some note",
       });
     });
 
@@ -86,13 +86,13 @@ describe("programa constants", () => {
             "removed-step",
             "invalid-step",
             "removed-step",
-            "origen-documental",
+            "revision-programa",
           ],
         },
       };
 
       const normalized = normalizeProgramaPayload(input, "ref-123");
-      expect(normalized.meta.touchedSteps).toEqual(["origen-documental"]);
+      expect(normalized.meta.touchedSteps).toEqual(["revision-programa"]);
     });
 
     it("preserves a valid program PDF diagnosis in the draft payload", () => {

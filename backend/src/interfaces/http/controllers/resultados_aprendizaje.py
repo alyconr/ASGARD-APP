@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.resultados_aprendizaje import ResultadoAprendizajePayloadDTO
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.resultados_aprendizaje import (
     ProgramaResultadoAprendizajeService,
     ResultadoAprendizajeCompetenciaNotFoundError,
@@ -16,12 +17,14 @@ from src.application.services.resultados_aprendizaje import (
     ResultadoAprendizajeNotFoundError,
     ResultadoAprendizajeValidationError,
 )
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.resultados_aprendizaje import (
     ResultadoAprendizajeRepository,
 )
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.resultados_aprendizaje import (
     ResultadoAprendizajeDeleteResponse,
     ResultadoAprendizajeListResponse,
@@ -54,8 +57,13 @@ async def list_resultados(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """List learning outcomes for a competence in the current program draft."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.list_resultados(referencia_id, competencia_id)
     except ResultadoAprendizajeDraftNotFoundError as error:
@@ -77,8 +85,13 @@ async def create_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """Create a learning outcome linked to the given competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.create_resultado(
             referencia_id,
@@ -113,8 +126,13 @@ async def update_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """Update a learning outcome without moving it to another competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.update_resultado(
             referencia_id,
@@ -151,8 +169,13 @@ async def delete_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeDeleteResponse:
     """Delete a learning outcome from a competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.delete_resultado(
             referencia_id, competencia_id, resultado_id

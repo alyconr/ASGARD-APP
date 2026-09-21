@@ -38,14 +38,36 @@ class Settings(BaseSettings):
     storage_secret_key: str = Field(default="admin123")
     storage_secure: bool = Field(default=False)
     storage_region: str | None = Field(default=None)
+    jwt_secret_key: str = Field(default="asgard-super-secret-key-change-in-production-2026")
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_access_token_expire_minutes: int = Field(default=480)
+    jwt_refresh_token_expire_days: int = Field(default=7)
+
+    auth_cookie_name: str = Field(default="asgard_refresh_token")
+    auth_cookie_secure: bool | None = Field(default=None)
+    auth_cookie_samesite: str = Field(default="lax")
+    auth_cookie_domain: str | None = Field(default=None)
+    auth_cookie_path: str = Field(default="/api/v1/auth")
+
+    @property
+    def is_production(self) -> bool:
+        """Return whether application is running in production or staging environment."""
+        return self.app_env.lower() in ("production", "prod", "staging")
+
+    @property
+    def effective_cookie_secure(self) -> bool:
+        """Determine if refresh cookie must be marked Secure."""
+        if self.auth_cookie_secure is not None:
+            return self.auth_cookie_secure
+        return self.is_production
 
     @property
     def cors_allow_origin_list(self) -> list[str]:
-        """Return CORS origins from a comma-separated environment value."""
+        """Return CORS origins excluding dangerous wildcard '*' with credentials."""
         return [
             origin.strip()
             for origin in self.cors_allow_origins.split(",")
-            if origin.strip()
+            if origin.strip() and origin.strip() != "*"
         ]
 
 

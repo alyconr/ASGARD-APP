@@ -13,6 +13,7 @@ from src.application.dto.planeacion import PlaneacionSaveDTO
 from src.application.services.planeacion_formato_excel import (
     FormatoExcelResultado,
     PlaneacionFormatoExcelService,
+    PlaneacionFormatoValidationError,
 )
 from src.application.services.planeacion_service import (
     PlaneacionAccessError,
@@ -642,6 +643,119 @@ class TestConfirmarYBrechas:
         assert sum(v for v in horas_directo if v is not None) == 12
         assert sum(v for v in horas_independiente if v is not None) == 8
         assert [v is not None for v in horas_directo] == [True, False, False]
+
+    async def test_confirmar_rechaza_cuando_falta_diligenciar_un_rap(self):
+        """A multi-RAP planning must not be confirmable if some RAPs were
+        never individually planned, even though the top-level mirror
+        (usually the first RAP worked on) looks complete."""
+        fx = _build_base_context()
+        session = _build_context_session(fx)
+
+        rap_t1_data = {
+            "actividades_aprendizaje": "Actividad integrada",
+            "duracion_actividad_horas": 20,
+            "horas_trabajo_directo": 12,
+            "horas_trabajo_independiente": 8,
+            "descripcion_evidencia_aprendizaje": "Evidencia",
+            "estrategias_didacticas": "ABP",
+            "ambiente": "Aula",
+            "materiales_formacion": "Computador",
+            "instructores": "Ana",
+        }
+        planning = PlaneacionPedagogica(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            datos_complementarios={
+                **rap_t1_data,
+                # Per-RAP breakdown: only rap_t1 was actually planned.
+                "raps": {str(fx["rap_t1"].id): rap_t1_data},
+            },
+        )
+        planning.id = uuid.uuid4()
+        planning.estado = EstadoBloque.BORRADOR
+        planning.proyecto = fx["proyecto"]
+        planning.fase = fx["fase"]
+        planning.actividad = fx["actividad"]
+        planning.resultados = [fx["rap_t1"], fx["rap_t2"], fx["rap_x1"]]
+        planning.conocimientos = [fx["saber_t"], fx["proceso_t"], fx["saber_x"]]
+        planning.criterios = [fx["criterio_t"], fx["criterio_x"]]
+        planning.version = 1
+
+        repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+        repository.get_by_id.return_value = planning
+        repository.get_document_config.return_value = PlaneacionDocumentoConfig(
+            proyecto_id=fx["proyecto"].id,
+            fecha_elaboracion=date(2026, 8, 1),
+            clasificacion_informacion="PUBLICA",
+            equipo_gestion_curricular=["Ana"],
+            regional="Distrito Capital",
+            centro_formacion="Centro",
+        )
+
+        service = _build_service(session, repository)
+
+        with pytest.raises(PlaneacionFormatoValidationError) as excinfo:
+            await service.confirmar_y_generar(planning.id)
+
+        mensajes = " ".join(excinfo.value.messages)
+        assert fx["rap_t2"].codigo_resultado in mensajes
+        assert fx["rap_x1"].codigo_resultado in mensajes
+        assert fx["rap_t1"].codigo_resultado not in mensajes
+
+    async def test_estado_formato_no_listo_si_falta_un_rap(self):
+        fx = _build_base_context()
+        session = _build_context_session(fx)
+
+        rap_t1_data = {
+            "actividades_aprendizaje": "Actividad integrada",
+            "duracion_actividad_horas": 20,
+            "horas_trabajo_directo": 12,
+            "horas_trabajo_independiente": 8,
+            "descripcion_evidencia_aprendizaje": "Evidencia",
+            "estrategias_didacticas": "ABP",
+            "ambiente": "Aula",
+            "materiales_formacion": "Computador",
+            "instructores": "Ana",
+        }
+        planning = PlaneacionPedagogica(
+            proyecto_id=fx["proyecto"].id,
+            fase_id=fx["fase"].id,
+            actividad_id=fx["actividad"].id,
+            datos_complementarios={
+                **rap_t1_data,
+                "raps": {str(fx["rap_t1"].id): rap_t1_data},
+            },
+        )
+        planning.id = uuid.uuid4()
+        planning.estado = EstadoBloque.BORRADOR
+        planning.proyecto = fx["proyecto"]
+        planning.fase = fx["fase"]
+        planning.actividad = fx["actividad"]
+        planning.resultados = [fx["rap_t1"], fx["rap_t2"], fx["rap_x1"]]
+        planning.conocimientos = [fx["saber_t"], fx["proceso_t"], fx["saber_x"]]
+        planning.criterios = [fx["criterio_t"], fx["criterio_x"]]
+        planning.version = 1
+
+        repository = AsyncMock(spec=PlaneacionPedagogicaRepository)
+        repository.get_by_id.return_value = planning
+        repository.get_document_config.return_value = PlaneacionDocumentoConfig(
+            proyecto_id=fx["proyecto"].id,
+            fecha_elaboracion=date(2026, 8, 1),
+            clasificacion_informacion="PUBLICA",
+            equipo_gestion_curricular=["Ana"],
+            regional="Distrito Capital",
+            centro_formacion="Centro",
+        )
+
+        service = _build_service(session, repository)
+        estado = await service.obtener_estado_formato_individual(planning.id)
+
+        assert estado.listo is False
+        codigos_faltantes = {gap.codigo for gap in estado.faltantes}
+        assert f"RAP_PENDIENTE_{fx['rap_t2'].id}" in codigos_faltantes
+        assert f"RAP_PENDIENTE_{fx['rap_x1'].id}" in codigos_faltantes
+        assert f"RAP_PENDIENTE_{fx['rap_t1'].id}" not in codigos_faltantes
 
 
 class TestLegacyCompatibility:

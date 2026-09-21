@@ -17,7 +17,14 @@ import {
   Route,
   Sparkles,
   Trash2,
+  LogIn,
+  LogOut,
+  Users,
 } from "lucide-react";
+
+import { useAuth } from "@/features/auth/auth-context";
+import { LoginDialog } from "@/features/auth/login-dialog";
+import { EquiposAdmin } from "@/features/admin/equipos-admin";
 
 import {
   deleteProgramFlow,
@@ -397,6 +404,9 @@ function ProgramFlowsPanel({
 
 export function MasterDashboard(): React.JSX.Element {
   const confirm = useConfirm();
+  const { user, isAuthenticated, logout, hasRole } = useAuth();
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"dashboard" | "equipos">("dashboard");
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [programFlows, setProgramFlows] = useState<DashboardProgramFlow[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
@@ -444,7 +454,7 @@ export function MasterDashboard(): React.JSX.Element {
 
   useEffect(() => {
     void loadProgramFlows();
-  }, [loadProgramFlows]);
+  }, [loadProgramFlows, user]);
 
   useEffect(() => {
     if (!activeReference) {
@@ -580,37 +590,111 @@ export function MasterDashboard(): React.JSX.Element {
                 y navegar la estructura construida por el usuario.
               </p>
             </div>
-            <div className="rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                Referencia activa
-              </p>
-              <p className="mt-2 font-semibold text-[var(--foreground)]">
-                {activeReference ? formatReferenceId(activeReference) : "Sin referencia"}
-              </p>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {selectedDraft?.label ?? dashboard?.estado_global ?? "Inicia o selecciona un borrador"}
-              </p>
-              <Link
-                href="/programa?nuevo=programa"
-                onClick={prepareNewProgramFlow}
-                className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)]"
-              >
-                <Plus className="h-4 w-4" />
-                Nuevo programa
-              </Link>
+            <div className="flex flex-col items-end gap-3">
+              {/* Widget de Usuario / Autenticación */}
+              {isAuthenticated && user ? (
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-right">
+                  <div>
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        {user.nombre} {user.apellido}
+                      </span>
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                        {user.roles.join(", ")}
+                      </span>
+                    </div>
+                    {(user.coordinacion || user.especialidad) && (
+                      <p className="text-[10px] text-slate-500">
+                        {[user.coordinacion?.nombre, user.especialidad?.nombre].filter(Boolean).join(" • ")}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    title="Cerrar sesión"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsLoginOpen(true)}
+                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3.5 py-1.5 text-xs font-semibold !text-white transition hover:bg-[var(--accent-strong)] shadow-sm"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Iniciar sesión
+                </button>
+              )}
+
+              <div className="w-full rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Referencia activa
+                </p>
+                <p className="mt-2 font-semibold text-[var(--foreground)]">
+                  {activeReference ? formatReferenceId(activeReference) : "Sin referencia"}
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {selectedDraft?.label ?? dashboard?.estado_global ?? "Inicia o selecciona un borrador"}
+                </p>
+                <Link
+                  href="/programa?nuevo=programa"
+                  onClick={prepareNewProgramFlow}
+                  className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)]"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nuevo programa
+                </Link>
+              </div>
             </div>
           </div>
+
+          {hasRole("SUPERADMIN", "ADMIN") && (
+            <div className="mt-6 flex border-b border-slate-200 gap-6">
+              <button
+                type="button"
+                onClick={() => setActiveTab("dashboard")}
+                className={cn(
+                  "pb-2.5 text-sm font-semibold border-b-2 -mb-px transition",
+                  activeTab === "dashboard"
+                    ? "border-[var(--accent)] text-[var(--accent-strong)]"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                )}
+              >
+                Procesos y Planeaciones
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("equipos")}
+                className={cn(
+                  "pb-2.5 text-sm font-semibold border-b-2 -mb-px transition flex items-center gap-2",
+                  activeTab === "equipos"
+                    ? "border-[var(--accent)] text-[var(--accent-strong)]"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                )}
+              >
+                <Users className="h-4 w-4" />
+                Equipos Ejecutores & Scope
+              </button>
+            </div>
+          )}
         </header>
 
-        <ProgramFlowsPanel
-          flows={programFlows}
-          activeReference={activeReference}
-          isLoading={isLoadingFlows}
-          isDeleting={isDeletingFlow}
-          errorMessage={flowsErrorMessage}
-          onSelect={activateReference}
-          onDelete={deleteSelectedProgramFlow}
-        />
+        {activeTab === "equipos" ? (
+          <EquiposAdmin />
+        ) : (
+          <>
+            <ProgramFlowsPanel
+              flows={programFlows}
+              activeReference={activeReference}
+              isLoading={isLoadingFlows}
+              isDeleting={isDeletingFlow}
+              errorMessage={flowsErrorMessage}
+              onSelect={activateReference}
+              onDelete={deleteSelectedProgramFlow}
+            />
 
         <section className="grid gap-4 rounded-lg border border-[color:var(--card-border)] bg-white p-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <label className="block">
@@ -718,7 +802,10 @@ export function MasterDashboard(): React.JSX.Element {
             <NavigationMap dashboard={dashboard} referenceId={activeReference ?? ""} />
           </>
         )}
-      </div>
-    </main>
-  );
+        </>
+      )}
+      <LoginDialog isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+    </div>
+  </main>
+);
 }

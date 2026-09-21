@@ -146,8 +146,6 @@ function getDraftErrorMessage(error: unknown): string {
 export interface ProgramaWizardController {
   activeReferenceId: string | null;
   autosave: ProgramaWizardAutosave;
-  canMoveNext: boolean;
-  canMovePrevious: boolean;
   continueReferenceInput: string;
   currentStepId: ProgramaWizardStepId;
   currentStepIndex: number;
@@ -164,9 +162,6 @@ export interface ProgramaWizardController {
     referenceId: string,
     silent?: boolean,
   ) => Promise<void>;
-  goToNextStep: () => void;
-  goToPreviousStep: () => void;
-  goToStep: (stepId: ProgramaWizardStepId) => void;
   updateStepNote: (stepId: ProgramaWizardStepId, note: string) => void;
   updateProgramaPdfResult: (result: ProgramaPdfUploadResponse) => void;
   persistActiveDraftNow: () => Promise<boolean>;
@@ -179,7 +174,6 @@ export interface ProgramaWizardController {
   clearKnownDrafts: () => void;
   resetFlow: () => void;
   refreshCurriculum: () => Promise<void>;
-  disabledSteps: ProgramaWizardStepId[];
   docState: EstadoDocumentalResponse | null;
   fetchDocState: () => Promise<void>;
 }
@@ -485,71 +479,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     setContinueReferenceInput(value.trim());
   }, []);
 
-  const isRevisionStepEnabled = useMemo(() => {
-    if (payload === null) {
-      return false;
-    }
-    const hasExcelValid =
-      payload.documental.programa_excel?.preview?.valid === true;
-    const hasExcelImported =
-      payload.documental.programa_excel?.confirmacion.estado === "IMPORTADO" ||
-      docState?.programa_importado === true;
-    const hasPdfLoaded =
-      (payload.documental.programa_pdf !== null &&
-       payload.documental.programa_pdf !== undefined &&
-       payload.documental.programa_pdf.documento !== null &&
-       payload.documental.programa_pdf.documento !== undefined) ||
-      (docState?.programa_pdf !== null && docState?.programa_pdf !== undefined);
-    return hasExcelValid && hasExcelImported && hasPdfLoaded;
-  }, [payload, docState]);
-
-  const disabledSteps = useMemo<ProgramaWizardStepId[]>(() => {
-    return isRevisionStepEnabled ? [] : ["revision-programa"];
-  }, [isRevisionStepEnabled]);
-
-  const goToStep = useCallback(
-    (stepId: ProgramaWizardStepId): void => {
-      if (stepId === "revision-programa" && !isRevisionStepEnabled) {
-        return;
-      }
-      setCurrentStepId(stepId);
-      setPayload((currentPayload) => {
-        if (currentPayload === null) {
-          return currentPayload;
-        }
-
-        return {
-          ...currentPayload,
-          meta: {
-            ...currentPayload.meta,
-            touchedSteps: addTouchedStep(
-              currentPayload.meta.touchedSteps,
-              stepId,
-            ),
-            lastInteractionAt: new Date().toISOString(),
-          },
-        };
-      });
-    },
-    [isRevisionStepEnabled],
-  );
-
-  const goToNextStep = useCallback((): void => {
-    const currentIndex = getStepIndex(currentStepId);
-    const nextStep = PROGRAMA_WIZARD_STEPS[currentIndex + 1];
-    if (nextStep !== undefined) {
-      goToStep(nextStep.id);
-    }
-  }, [currentStepId, goToStep]);
-
-  const goToPreviousStep = useCallback((): void => {
-    const currentIndex = getStepIndex(currentStepId);
-    const previousStep = PROGRAMA_WIZARD_STEPS[currentIndex - 1];
-    if (previousStep !== undefined) {
-      goToStep(previousStep.id);
-    }
-  }, [currentStepId, goToStep]);
-
   const updateStepNote = useCallback(
     (stepId: ProgramaWizardStepId, note: string): void => {
       setPayload((currentPayload) => {
@@ -601,7 +530,7 @@ export function useProgramaWizard(): ProgramaWizardController {
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "origen-documental",
+              "revision-programa",
             ),
             lastInteractionAt: new Date().toISOString(),
           },
@@ -636,7 +565,7 @@ export function useProgramaWizard(): ProgramaWizardController {
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "origen-documental",
+              "revision-programa",
             ),
             lastInteractionAt: now,
           },
@@ -922,10 +851,6 @@ export function useProgramaWizard(): ProgramaWizardController {
   return {
     activeReferenceId,
     autosave,
-    canMoveNext:
-      currentStepIndex < PROGRAMA_WIZARD_STEPS.length - 1 &&
-      (currentStepId !== "origen-documental" || isRevisionStepEnabled),
-    canMovePrevious: currentStepIndex > 0,
     continueReferenceInput,
     currentStepId,
     currentStepIndex,
@@ -939,9 +864,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     draftStatus,
     startNewFlow,
     recoverDraftByReference,
-    goToNextStep,
-    goToPreviousStep,
-    goToStep,
     updateStepNote,
     persistActiveDraftNow,
     updateProgramaPdfResult,
@@ -954,7 +876,6 @@ export function useProgramaWizard(): ProgramaWizardController {
     clearKnownDrafts,
     resetFlow,
     refreshCurriculum,
-    disabledSteps,
     docState,
     fetchDocState,
   };

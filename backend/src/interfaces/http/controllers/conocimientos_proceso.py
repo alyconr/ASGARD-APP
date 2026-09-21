@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.conocimientos_proceso import ConocimientoProcesoPayloadDTO
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.conocimientos_proceso import (
     ConocimientoProcesoCompetenciaNotFoundError,
     ConocimientoProcesoDraftNotFoundError,
@@ -16,12 +17,14 @@ from src.application.services.conocimientos_proceso import (
     ConocimientoProcesoValidationError,
     ProgramaConocimientoProcesoService,
 )
+from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.conocimientos_proceso import (
     ConocimientoProcesoRepository,
 )
 from src.infrastructure.repositories.drafts import DraftRepository
+from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
 from src.interfaces.http.schemas.conocimientos_proceso import (
     ConocimientoProcesoDeleteResponse,
     ConocimientoProcesoListResponse,
@@ -54,8 +57,13 @@ async def list_conocimientos_proceso(
     service: ProgramaConocimientoProcesoService = Depends(
         get_programa_conocimiento_proceso_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoProcesoListResponse:
     """List PROCESO knowledge items for a competence in the current draft."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.list_conocimientos(referencia_id, competencia_id)
     except ConocimientoProcesoDraftNotFoundError as error:
@@ -77,8 +85,13 @@ async def create_conocimiento_proceso(
     service: ProgramaConocimientoProcesoService = Depends(
         get_programa_conocimiento_proceso_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoProcesoListResponse:
     """Create a PROCESO knowledge item linked to the given competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.create_conocimiento(
             referencia_id,
@@ -113,8 +126,13 @@ async def update_conocimiento_proceso(
     service: ProgramaConocimientoProcesoService = Depends(
         get_programa_conocimiento_proceso_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoProcesoListResponse:
     """Update a PROCESO knowledge item without moving it to another competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.update_conocimiento(
             referencia_id,
@@ -151,8 +169,13 @@ async def delete_conocimiento_proceso(
     service: ProgramaConocimientoProcesoService = Depends(
         get_programa_conocimiento_proceso_service
     ),
+    current_user: Usuario | None = Depends(get_optional_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ConocimientoProcesoDeleteResponse:
     """Delete a PROCESO knowledge item from a competence."""
+    if current_user is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         result = await service.delete_conocimiento(
             referencia_id, competencia_id, conocimiento_id

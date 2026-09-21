@@ -12,20 +12,12 @@ import type {
 
 export const PROGRAMA_WIZARD_STEPS: ProgramaWizardStepDefinition[] = [
   {
-    id: "origen-documental",
+    id: "revision-programa",
     index: 0,
-    label: "Origen documental",
+    label: "Revision del programa de formación",
     shortLabel: "01",
     description:
-      "PDF como evidencia y Excel canonico como fuente estructurada.",
-  },
-  {
-    id: "revision-programa",
-    index: 1,
-    label: "Revision del programa de formación",
-    shortLabel: "02",
-    description:
-      "Revision consolidada del programa de formación antes de cualquier cierre funcional.",
+      "Carga el PDF de evidencia y el Excel canonico, y revisa el consolidado antes de cerrar el programa de formación.",
   },
 ];
 

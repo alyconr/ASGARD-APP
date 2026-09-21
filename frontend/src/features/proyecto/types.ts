@@ -1,8 +1,6 @@
 import type { DraftStatus } from "@/features/drafts/types";
 
-export type ProyectoWizardStepId =
-  | "fuente-proyecto"
-  | "revision-proyecto";
+export type ProyectoWizardStepId = "revision-proyecto";
 
 export interface ProyectoWizardStepDefinition {
   id: ProyectoWizardStepId;
@@ -10,7 +8,6 @@ export interface ProyectoWizardStepDefinition {
   label: string;
   shortLabel: string;
   description: string;
-  taskRef: string;
 }
 
 export interface ProyectoStoredDocument {
@@ -54,9 +51,9 @@ export interface ExcelProjectPreview {
 
 export interface ExcelResultPreview {
   rap_id: string;
-  rap_numero: string;
+  rap_numero: string | null;
   resultado_aprendizaje: string;
-  tipo_resultado: string;
+  tipo_resultado: string | null;
   orden_resultado: number | null;
   pagina_origen: string | null;
   observaciones: string | null;

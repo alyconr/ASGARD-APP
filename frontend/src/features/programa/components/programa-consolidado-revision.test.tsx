@@ -192,7 +192,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -213,7 +212,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -235,7 +233,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[competencia]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -266,7 +263,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[competencia]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -287,31 +283,11 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
     expect(screen.getByText("Sin PDF cargado como evidencia.")).toBeInTheDocument();
     expect(screen.getByText("Sin Excel canonico cargado.")).toBeInTheDocument();
-  });
-
-  it("calls onNavigateToStep when edit buttons are clicked", () => {
-    const onNavigate = vi.fn();
-
-    render(
-      <ProgramaConsolidadoRevision
-        codigoPrograma="228106"
-        nombrePrograma="Test"
-        versionPrograma="v1"
-        competencias={[]}
-        pdfResult={null}
-        excelResult={null}
-        onNavigateToStep={onNavigate}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /revisar origen/i }));
-    expect(onNavigate).toHaveBeenCalledWith("origen-documental");
   });
 
   it("renders practical stage competencia without children", () => {
@@ -331,7 +307,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[competencia]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -366,7 +341,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[competencia1, competencia2]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -403,7 +377,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[competencia]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -423,7 +396,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -460,7 +432,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -470,29 +441,6 @@ describe("ProgramaConsolidadoRevision", () => {
       await screen.findByText(/Agrega al menos un resultado de aprendizaje/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/220501046/i)).toBeInTheDocument();
-  });
-
-  it("navigates to corrections from missing items", async () => {
-    mockFetchJson(buildCompletitudResponse());
-    const onNavigate = vi.fn();
-
-    render(
-      <ProgramaConsolidadoRevision
-        codigoPrograma=""
-        nombrePrograma="Test"
-        versionPrograma="v1"
-        referenciaId="11111111-1111-4111-9111-111111111111"
-        competencias={[]}
-        pdfResult={null}
-        excelResult={null}
-        onNavigateToStep={onNavigate}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /validar completitud/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /revisar origen/i }));
-
-    expect(onNavigate).toHaveBeenCalledWith("origen-documental");
   });
 
   it("requires explicit confirmation before closing", async () => {
@@ -550,7 +498,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[buildCompetencia()]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
         onProgramaCerrado={vi.fn()}
       />,
     );
@@ -613,7 +560,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[buildCompetencia()]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 
@@ -681,7 +627,6 @@ describe("ProgramaConsolidadoRevision", () => {
         competencias={[buildCompetencia()]}
         pdfResult={null}
         excelResult={null}
-        onNavigateToStep={vi.fn()}
       />,
     );
 

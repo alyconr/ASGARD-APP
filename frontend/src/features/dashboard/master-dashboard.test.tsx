@@ -19,6 +19,24 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/features/auth/auth-context", () => ({
+  useAuth: () => ({
+    user: {
+      id: "admin-1",
+      email: "admin@sena.edu.co",
+      nombre: "Admin",
+      apellido: "SENA",
+      roles: ["SUPERADMIN"],
+      activo: true,
+    },
+    hasRole: () => true,
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 const referenciaId = "11111111-1111-4111-9111-111111111111";
 
 afterEach(() => {

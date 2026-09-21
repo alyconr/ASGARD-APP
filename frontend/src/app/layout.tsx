@@ -3,6 +3,7 @@ import { Fraunces, Source_Sans_3 } from "next/font/google";
 
 import { AppToaster } from "@/components/feedback/app-toaster";
 import { ConfirmProvider } from "@/components/feedback/confirm-context";
+import { AuthProvider } from "@/features/auth/auth-context";
 
 import "./globals.css";
 
@@ -34,11 +35,14 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        <ConfirmProvider>
-          {children}
-          <AppToaster />
-        </ConfirmProvider>
+        <AuthProvider>
+          <ConfirmProvider>
+            {children}
+            <AppToaster />
+          </ConfirmProvider>
+        </AuthProvider>
       </body>
     </html>
   );
 }
+

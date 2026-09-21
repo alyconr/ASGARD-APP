@@ -127,8 +127,6 @@ function getDraftErrorMessage(error: unknown): string {
 export interface ProyectoWizardController {
   activeReferenceId: string | null;
   autosave: ProyectoWizardAutosave;
-  canMoveNext: boolean;
-  canMovePrevious: boolean;
   continueReferenceInput: string;
   currentStepId: ProyectoWizardStepId;
   currentStepIndex: number;
@@ -143,9 +141,6 @@ export interface ProyectoWizardController {
   payload: ProyectoWizardPayload | null;
   clearKnownDrafts: () => void;
   forgetKnownDraft: (referenceId: string) => Promise<void>;
-  goToNextStep: () => void;
-  goToPreviousStep: () => void;
-  goToStep: (stepId: ProyectoWizardStepId) => void;
   recoverDraftByReference: (referenceId: string, silent?: boolean) => Promise<void>;
   resetFlow: () => void;
   startNewFlow: () => Promise<void>;
@@ -158,8 +153,6 @@ export interface ProyectoWizardController {
   fetchDocState: () => Promise<void>;
   habilitarCarguePdf: () => Promise<void>;
   closeProject: () => Promise<void>;
-  isRevisionStepEnabled: boolean;
-  disabledSteps: ProyectoWizardStepId[];
 }
 
 export function useProyectoWizard({
@@ -469,65 +462,6 @@ export function useProyectoWizard({
     setContinueReferenceInput(value.trim());
   }, []);
 
-  const isRevisionStepEnabled = useMemo(() => {
-    if (payload === null) {
-      return false;
-    }
-    const hasExcelValid =
-      payload.documental.fuente_estructurada?.preview?.valid === true;
-    const hasExcelImported =
-      payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ||
-      docState?.proyecto_importado === true;
-    const hasPdfLoaded =
-      (payload.documental.proyecto_pdf !== null &&
-       payload.documental.proyecto_pdf !== undefined &&
-       payload.documental.proyecto_pdf.documento !== null &&
-       payload.documental.proyecto_pdf.documento !== undefined) ||
-      (docState?.proyecto_pdf !== null && docState?.proyecto_pdf !== undefined);
-    return hasExcelValid && hasExcelImported && hasPdfLoaded;
-  }, [payload, docState]);
-
-  const disabledSteps = useMemo<ProyectoWizardStepId[]>(() => {
-    return isRevisionStepEnabled ? [] : ["revision-proyecto"];
-  }, [isRevisionStepEnabled]);
-
-  const goToStep = useCallback((stepId: ProyectoWizardStepId): void => {
-    if (stepId === "revision-proyecto" && !isRevisionStepEnabled) {
-      return;
-    }
-    setCurrentStepId(stepId);
-    setPayload((currentPayload) => {
-      if (currentPayload === null) {
-        return currentPayload;
-      }
-
-      return {
-        ...currentPayload,
-        meta: {
-          ...currentPayload.meta,
-          touchedSteps: addTouchedStep(currentPayload.meta.touchedSteps, stepId),
-          lastInteractionAt: new Date().toISOString(),
-        },
-      };
-    });
-  }, [isRevisionStepEnabled]);
-
-  const goToNextStep = useCallback((): void => {
-    const currentIndex = getStepIndex(currentStepId);
-    const nextStep = PROYECTO_WIZARD_STEPS[currentIndex + 1];
-    if (nextStep !== undefined) {
-      goToStep(nextStep.id);
-    }
-  }, [currentStepId, goToStep]);
-
-  const goToPreviousStep = useCallback((): void => {
-    const currentIndex = getStepIndex(currentStepId);
-    const previousStep = PROYECTO_WIZARD_STEPS[currentIndex - 1];
-    if (previousStep !== undefined) {
-      goToStep(previousStep.id);
-    }
-  }, [currentStepId, goToStep]);
-
   const updateStepNote = useCallback(
     (stepId: ProyectoWizardStepId, note: string): void => {
       setPayload((currentPayload) => {
@@ -571,7 +505,7 @@ export function useProyectoWizard({
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "fuente-proyecto",
+              "revision-proyecto",
             ),
             lastInteractionAt: new Date().toISOString(),
           },
@@ -599,7 +533,7 @@ export function useProyectoWizard({
             ...currentPayload.meta,
             touchedSteps: addTouchedStep(
               currentPayload.meta.touchedSteps,
-              "fuente-proyecto",
+              "revision-proyecto",
             ),
             lastInteractionAt: new Date().toISOString(),
           },
@@ -783,10 +717,6 @@ export function useProyectoWizard({
   return {
     activeReferenceId,
     autosave,
-    canMoveNext:
-      currentStepIndex < PROYECTO_WIZARD_STEPS.length - 1 &&
-      (currentStepId !== "fuente-proyecto" || isRevisionStepEnabled),
-    canMovePrevious: currentStepIndex > 0,
     clearKnownDrafts,
     continueReferenceInput,
     currentStepId,
@@ -794,9 +724,6 @@ export function useProyectoWizard({
     draftStatus,
     errorMessage,
     forgetKnownDraft,
-    goToNextStep,
-    goToPreviousStep,
-    goToStep,
     isBootstrapping,
     isClosing,
     isRecovering,
@@ -816,7 +743,5 @@ export function useProyectoWizard({
     fetchDocState,
     habilitarCarguePdf,
     closeProject,
-    isRevisionStepEnabled,
-    disabledSteps,
   };
 }

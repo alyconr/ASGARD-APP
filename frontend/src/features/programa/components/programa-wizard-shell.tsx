@@ -3,8 +3,6 @@
 import Image from "next/image";
 import {
   AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   BookOpenCheck,
   FileSpreadsheet,
   ListX,
@@ -16,7 +14,6 @@ import {
 
 import { AutosaveIndicator } from "@/components/status/autosave-indicator";
 import { ExtractorSenaInstructions } from "@/components/wizard/extractor-sena-instructions";
-import { WizardProgress } from "@/components/wizard/wizard-progress";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildProgramaWizardGuide } from "@/features/guide/wizard-guide-engine";
 import { ProgramaConsolidadoRevision } from "@/features/programa/components/programa-consolidado-revision";
@@ -37,31 +34,7 @@ import type {
   ProgramaPdfUploadResponse,
   ProgramaPdfUploadResult,
   ProgramaWizardStepDefinition,
-  ProgramaWizardStepId,
 } from "@/features/programa/types";
-
-const STEP_CONTENT: Record<
-  ProgramaWizardStepId,
-  {
-    label: string;
-    description: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }
-> = {
-  "origen-documental": {
-    label: "Origen de informacion",
-    description:
-      "PDF como evidencia documental y Matriz de Programa de formacion " +
-      "como fuente curricular.",
-    icon: FileSpreadsheet,
-  },
-  "revision-programa": {
-    label: "Revision del programa de formación",
-    description:
-      "La revision se mantiene como paso independiente antes de cualquier cierre.",
-    icon: BookOpenCheck,
-  },
-};
 
 function formatReferenceId(referenceId: string): string {
   if (referenceId.length < 18) {
@@ -136,7 +109,6 @@ type StepWorkspaceProps = {
   onProgramaExcelImported: (result: ProgramaExcelImportResponse) => void;
   onProgramaPdfUploaded: (result: ProgramaPdfUploadResponse) => void;
   onPersistDraftBeforeExcelPreview: () => Promise<boolean>;
-  onNavigateToStep: (stepId: ProgramaWizardStepId) => void;
   onProgramaCerrado: (result: ProgramaCierreResponse) => void;
   competencias: ProgramaCompetencia[];
   onSyncNeeded?: () => void;
@@ -154,14 +126,12 @@ function StepWorkspace({
   onProgramaExcelImported,
   onProgramaPdfUploaded,
   onPersistDraftBeforeExcelPreview,
-  onNavigateToStep,
   onProgramaCerrado,
   competencias,
   onSyncNeeded,
   docState,
 }: StepWorkspaceProps): React.JSX.Element {
-  const content = STEP_CONTENT[currentStep.id];
-  const Icon = content.icon;
+  const Icon = BookOpenCheck;
   const programaExcelImportado =
     programaExcelResult?.confirmacion?.estado === "IMPORTADO" ||
     docState?.programa_importado === true ||
@@ -175,10 +145,10 @@ function StepWorkspace({
             {currentStep.shortLabel} / {currentStep.label}
           </p>
           <h2 className="mt-2 text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
-            {content.label}
+            {currentStep.label}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            {content.description}
+            {currentStep.description}
           </p>
         </div>
 
@@ -189,31 +159,31 @@ function StepWorkspace({
 
       <div className="mt-5 min-w-0">
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
-          {currentStep.id === "origen-documental" ? (
-            <div className="grid gap-4">
-              <ExtractorSenaInstructions
-                referenceId={referenceId}
-                scope="programa"
-              />
-              <ProgramaExcelImport
-                currentResult={programaExcelResult}
+          <div className="grid gap-4">
+            <ExtractorSenaInstructions
+              referenceId={referenceId}
+              scope="programa"
+            />
+            <ProgramaExcelImport
+              currentResult={programaExcelResult}
+              referenciaId={referenceId}
+              onBeforePreview={onPersistDraftBeforeExcelPreview}
+              onImported={onProgramaExcelImported}
+              onPreviewed={onProgramaExcelPreviewed}
+            />
+            {programaExcelImportado ? (
+              <ProgramaDocumentUpload
+                currentResult={programaPdfResult}
                 referenciaId={referenceId}
-                onBeforePreview={onPersistDraftBeforeExcelPreview}
-                onImported={onProgramaExcelImported}
-                onPreviewed={onProgramaExcelPreviewed}
+                onUploaded={onProgramaPdfUploaded}
+                habilitado={programaExcelImportado}
+                carguePdfHabilitado
+                documentoExistente={docState?.programa_pdf}
               />
-              {programaExcelImportado ? (
-                <ProgramaDocumentUpload
-                  currentResult={programaPdfResult}
-                  referenciaId={referenceId}
-                  onUploaded={onProgramaPdfUploaded}
-                  habilitado={programaExcelImportado}
-                  carguePdfHabilitado
-                  documentoExistente={docState?.programa_pdf}
-                />
-              ) : null}
-            </div>
-          ) : (
+            ) : null}
+          </div>
+
+          <div className="mt-6">
             <ProgramaConsolidadoRevision
               codigoPrograma={programaValue.codigo_programa}
               nombrePrograma={programaValue.nombre_programa}
@@ -221,13 +191,12 @@ function StepWorkspace({
               competencias={competencias}
               pdfResult={programaPdfResult}
               excelResult={programaExcelResult}
-              onNavigateToStep={onNavigateToStep}
               referenciaId={referenceId}
               estadoBorrador={estadoBorrador}
               onProgramaCerrado={onProgramaCerrado}
               onSyncNeeded={onSyncNeeded}
             />
-          )}
+          </div>
         </div>
       </div>
     </section>
@@ -500,16 +469,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
       {controller.isWizardActive && controller.payload !== null ? (
         <section className="grid min-h-[calc(100vh-12rem)] gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <aside className="flex h-fit w-full flex-col gap-4 self-start lg:sticky lg:top-6">
-            <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-4 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
-              <WizardProgress
-                currentStepId={controller.currentStepId}
-                steps={PROGRAMA_WIZARD_STEPS}
-                touchedSteps={controller.payload.meta.touchedSteps}
-                onSelectStep={controller.goToStep}
-                disabledSteps={controller.disabledSteps}
-              />
-            </section>
-
             <DraftSummary
               referenceId={
                 controller.activeReferenceId ??
@@ -544,7 +503,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
                 onPersistDraftBeforeExcelPreview={
                   controller.persistActiveDraftNow
                 }
-                onNavigateToStep={controller.goToStep}
                 onProgramaCerrado={controller.markProgramaClosed}
                 onSyncNeeded={controller.refreshCurriculum}
                 docState={controller.docState}
@@ -560,33 +518,6 @@ export function ProgramaWizardShell(): React.JSX.Element {
               programaEstado={controller.draftStatus}
               docState={controller.docState}
             />
-
-            <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm leading-6 text-[var(--muted)]">
-                  Paso {controller.currentStepIndex + 1} de{" "}
-                  {PROGRAMA_WIZARD_STEPS.length}
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                  <ActionButton
-                    disabled={!controller.canMovePrevious}
-                    tone="quiet"
-                    onClick={controller.goToPreviousStep}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Anterior
-                  </ActionButton>
-                  <ActionButton
-                    disabled={!controller.canMoveNext}
-                    onClick={controller.goToNextStep}
-                  >
-                    Siguiente
-                    <ArrowRight className="h-4 w-4" />
-                  </ActionButton>
-                </div>
-              </div>
-            </section>
           </div>
         </section>
       ) : null}

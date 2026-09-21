@@ -975,3 +975,14 @@ Una tarea se considera terminada cuando:
 - [x] Guardar con `save_excel` y descargar con `read_excel`.
 - [x] Integrar vista previa, dashboard y asistente guiado.
 - [x] Cubrir generador, HTTP, API Blob y UI con pruebas focalizadas.
+
+## TASK-MICRO-HARDENING-FINAL. Autenticación, CSRF, Refresh Replay, CORS y Descargas Protegidas
+- [x] Implementar verificación de origen CSRF (`verify_csrf_origin`) para mutaciones con cookies.
+- [x] Persistir modelo `UserSession` con hash SHA-256 de refresh token, `token_family` y `jti`.
+- [x] Crear y ejecutar migración Alembic `e3f4a5b6c7d8_add_user_sessions.py`.
+- [x] Rotación single-use en `/api/v1/auth/refresh` con revocación en cascada ante replay y salto de `token_version`.
+- [x] Endurecimiento de cookies (`HttpOnly`, `SameSite=Lax`, `Secure` en producción) y CORS sin comodín con credenciales.
+- [x] Proteger descargas documentales (PDF, Excel, GPFI) mediante `AccessScopeService` (`require_process_access`).
+- [x] Implementar `refreshTokenSingleFlight` y reintentos 401 transparentes en cliente frontend.
+- [x] Pruebas unitarias/integración de micro-hardening en backend (8/8) y frontend (coalescencia de tokens y UI de login).
+

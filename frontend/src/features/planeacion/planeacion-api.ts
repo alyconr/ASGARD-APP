@@ -1,10 +1,10 @@
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export interface ContextoResultado {
   id: string;
   codigo_resultado?: string | null;
   descripcion: string;
-  tipo_resultado: string;
+  tipo_resultado: string | null;
   orden_resultado?: number | null;
 }
 
@@ -69,14 +69,14 @@ export interface PlaneacionResultadoResumen {
   id: string;
   codigo_resultado?: string | null;
   descripcion: string;
-  tipo_resultado: string;
+  tipo_resultado: string | null;
 }
 
 export interface PlaneacionCompetenciaResumen {
   competencia_id: string;
   codigo_competencia: string;
   nombre_competencia: string;
-  tipo_resultado: string;
+  tipo_resultado: string | null;
   resultados: PlaneacionResultadoResumen[];
 }
 
@@ -380,7 +380,7 @@ async function requestJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await authFetch(`${getApiBaseUrl()}${path}`, {
     cache: "no-store",
     ...init,
   });
@@ -394,7 +394,7 @@ async function downloadWorkbook(
   path: string,
   fallbackName: string,
 ): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await authFetch(`${getApiBaseUrl()}${path}`, {
     method: "GET",
     cache: "no-store",
   });

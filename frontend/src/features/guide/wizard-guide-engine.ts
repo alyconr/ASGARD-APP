@@ -100,7 +100,6 @@ function hasText(value: string): boolean {
 
 export function buildProgramaWizardGuide({
   activeReferenceId,
-  currentStepId,
   draftStatus,
   isWizardActive,
   payload,
@@ -150,56 +149,29 @@ export function buildProgramaWizardGuide({
     };
   }
 
-  if (currentStepId === "revision-programa") {
-    return {
-      wizard: "programa",
-      severity: imported ? "warning" : "blocked",
-      eyebrow: "Revision del programa",
-      title: imported ? "Falta cerrar el programa" : "Importacion pendiente",
-      message: imported
-        ? "Revisa el consolidado y confirma el cierre para marcar el programa como COMPLETO."
-        : "La revision solo debe cerrarse despues de validar e importar la matriz Excel canonica.",
-      checklist: [
-        item("preview", "Preview valido de matriz", previewValid),
-        item("import", "Importacion confirmada", imported),
-        item("close", "Programa en estado COMPLETO", complete, imported),
-      ],
-      primaryAction: {
-        label: imported ? "Cerrar programa" : "Volver al origen",
-        targetId: "programa-step-workspace",
-      },
-    };
-  }
-
   return {
     wizard: "programa",
-    severity: imported ? "success" : previewValid ? "warning" : "info",
-    eyebrow: "Origen documental",
-    title: imported
-      ? "Matriz importada"
-      : previewValid
-        ? "Confirma la importacion"
-        : "Valida la matriz canonica",
+    severity: imported ? "warning" : "blocked",
+    eyebrow: "Revision del programa",
+    title: imported ? "Falta cerrar el programa" : "Importacion pendiente",
     message: imported
-      ? "La estructura del programa ya fue materializada. Avanza a la revision y cierre."
-      : previewValid
-        ? "El preview es valido; confirma la importacion para crear la estructura curricular."
-        : "Carga la matriz de programa y revisa que el preview quede valido antes de avanzar.",
+      ? "Revisa el consolidado y confirma el cierre para marcar el programa como COMPLETO."
+      : "Carga y confirma la matriz Excel canonica del programa antes de poder cerrarlo.",
     checklist: [
-      item("preview", "Preview valido", previewValid, !previewValid),
-      item("import", "Importacion confirmada", imported, previewValid && !imported),
-      item("review", "Revision y cierre pendientes", complete),
+      item("preview", "Preview valido de matriz", previewValid),
+      item("import", "Importacion confirmada", imported),
+      item("close", "Programa en estado COMPLETO", complete, imported),
     ],
-    primaryAction: imported
-      ? { label: "Ir a revision", targetId: "programa-step-workspace" }
-      : undefined,
+    primaryAction: {
+      label: imported ? "Cerrar programa" : "Cargar matriz",
+      targetId: "programa-step-workspace",
+    },
   };
 }
 
 export function buildProyectoWizardGuide({
   activeReferenceId,
   availability,
-  currentStepId,
   draftStatus,
   isWizardActive,
   payload,
@@ -257,49 +229,23 @@ export function buildProyectoWizardGuide({
     };
   }
 
-  if (currentStepId === "revision-proyecto") {
-    return {
-      wizard: "proyecto",
-      severity: imported ? "warning" : "blocked",
-      eyebrow: "Revision del proyecto",
-      title: imported ? "Falta cerrar el proyecto" : "Matriz pendiente",
-      message: imported
-        ? "Revisa fases y actividades, luego confirma el cierre para habilitar planeacion."
-        : "La planeacion seguira bloqueada hasta importar y cerrar el proyecto formativo.",
-      checklist: [
-        item("preview", "Preview valido de matriz", previewValid),
-        item("import", "Importacion confirmada", imported),
-        item("close", "Proyecto en estado COMPLETO", complete, imported),
-      ],
-      primaryAction: {
-        label: imported ? "Cerrar proyecto" : "Volver al origen",
-        targetId: "proyecto-step-workspace",
-      },
-    };
-  }
-
   return {
     wizard: "proyecto",
-    severity: imported ? "success" : previewValid ? "warning" : "info",
-    eyebrow: "Fuente del proyecto",
-    title: imported
-      ? "Proyecto materializado"
-      : previewValid
-        ? "Confirma la matriz del proyecto"
-        : "Carga la matriz del proyecto",
+    severity: imported ? "warning" : "blocked",
+    eyebrow: "Revision del proyecto",
+    title: imported ? "Falta cerrar el proyecto" : "Matriz pendiente",
     message: imported
-      ? "La matriz ya creo el proyecto, fases y actividades. Avanza a revision."
-      : previewValid
-        ? "El preview esta valido; confirma la importacion antes de cerrar."
-        : "Valida el Excel/matriz del proyecto para construir fases y actividades.",
+      ? "Revisa fases y actividades, luego confirma el cierre para habilitar planeacion."
+      : "La planeacion seguira bloqueada hasta importar y cerrar el proyecto formativo.",
     checklist: [
-      item("programa", "Programa COMPLETO", availability.programa_completo),
-      item("preview", "Preview del proyecto valido", previewValid, !previewValid),
-      item("import", "Importacion confirmada", imported, previewValid && !imported),
+      item("preview", "Preview valido de matriz", previewValid),
+      item("import", "Importacion confirmada", imported),
+      item("close", "Proyecto en estado COMPLETO", complete, imported),
     ],
-    primaryAction: imported
-      ? { label: "Ir a revision", targetId: "proyecto-step-workspace" }
-      : undefined,
+    primaryAction: {
+      label: imported ? "Cerrar proyecto" : "Cargar matriz",
+      targetId: "proyecto-step-workspace",
+    },
   };
 }
 

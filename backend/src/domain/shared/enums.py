@@ -82,3 +82,36 @@ class TipoResultadoProyecto(str, Enum):
     TRANSVERSAL = "TRANSVERSAL"
     BASICO = "BASICO"
 
+
+class RolUsuario(str, Enum):
+    """System roles for ASGARD RBAC."""
+
+    SUPERADMIN = "SUPERADMIN"
+    ADMIN = "ADMIN"
+    LIDER_EQUIPO_EJECUTOR = "LIDER_EQUIPO_EJECUTOR"
+    USUARIO_ADICIONAL = "USUARIO_ADICIONAL"
+
+
+class TipoNecesidadProceso(str, Enum):
+    """Operational curricular requirement category."""
+
+    CREAR_PLANEACION = "CREAR_PLANEACION"
+    ACTUALIZAR_PLANEACION = "ACTUALIZAR_PLANEACION"
+    CREAR_GUIA = "CREAR_GUIA"
+    AJUSTAR_GUIA = "AJUSTAR_GUIA"
+
+
+class EstadoScopeProceso(str, Enum):
+    """Assignment lifecycle for curricular processes."""
+
+    ASIGNADO = "ASIGNADO"
+    SIN_ASIGNAR = "SIN_ASIGNAR"
+
+
+class EstadoEquipo(str, Enum):
+    """Operating status of an executing team."""
+
+    ACTIVO = "ACTIVO"
+    INACTIVO = "INACTIVO"
+
+

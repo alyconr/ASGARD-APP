@@ -1,10 +1,7 @@
 "use client";
 
 import {
-  ArrowLeft,
-  ArrowRight,
   CheckCircle2,
-  FileSpreadsheet,
   ListChecks,
   RefreshCcw,
   Route,
@@ -23,21 +20,12 @@ import type {
   ProyectoPdfUploadResult,
   ProyectoWizardPayload,
   ProyectoWizardStepDefinition,
-  ProyectoWizardStepId,
 } from "@/features/proyecto/types";
 import Link from "next/link";
 import { useProyectoWizard } from "@/features/proyecto/use-proyecto-wizard";
 import { cn } from "@/lib/utils";
 import { EstadoDocumentalResponse } from "@/features/drafts/types";
 import { useConfirm } from "@/components/feedback/confirm-context";
-
-const STEP_ICONS: Record<
-  ProyectoWizardStepId,
-  React.ComponentType<{ className?: string }>
-> = {
-  "fuente-proyecto": FileSpreadsheet,
-  "revision-proyecto": ListChecks,
-};
 
 function formatReferenceId(referenceId: string): string {
   if (referenceId.length < 18) {
@@ -81,65 +69,6 @@ function ActionButton({
   );
 }
 
-function WizardProgress({
-  currentStepId,
-  onSelectStep,
-  steps,
-  touchedSteps,
-  disabledSteps = [],
-}: Readonly<{
-  currentStepId: ProyectoWizardStepId;
-  onSelectStep: (stepId: ProyectoWizardStepId) => void;
-  steps: ProyectoWizardStepDefinition[];
-  touchedSteps: ProyectoWizardStepId[];
-  disabledSteps?: ProyectoWizardStepId[];
-}>): React.JSX.Element {
-  return (
-    <nav aria-label="Progreso del wizard del proyecto" className="grid gap-2">
-      {steps.map((step) => {
-        const isCurrent = step.id === currentStepId;
-        const isTouched = touchedSteps.includes(step.id);
-        const isDisabled = disabledSteps.includes(step.id);
-
-        return (
-          <button
-            key={step.id}
-            type="button"
-            disabled={isDisabled}
-            onClick={() => onSelectStep(step.id)}
-            className={cn(
-              "grid grid-cols-[2.25rem_1fr] gap-3 rounded-lg border px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
-              isCurrent
-                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                : "border-[color:var(--card-border)] bg-white hover:border-[var(--accent)]/50",
-              isDisabled && "bg-slate-50/50 opacity-50",
-            )}
-          >
-            <span
-              className={cn(
-                "inline-flex h-9 w-9 items-center justify-center rounded-lg text-xs font-semibold",
-                isCurrent
-                  ? "bg-[var(--accent)] text-white"
-                  : "bg-[var(--paper-strong)] text-[var(--muted)]",
-              )}
-            >
-              {isTouched ? <CheckCircle2 className="h-4 w-4" /> : step.shortLabel}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-[var(--foreground)]">
-                {step.label}
-              </span>
-              <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
-                {step.taskRef}
-              </span>
-            </span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
-
 function StepWorkspace({
   currentStep,
   payload,
@@ -148,6 +77,9 @@ function StepWorkspace({
   onExcelImported,
   docState,
   onHabilitarCarguePdf,
+  draftStatus,
+  isClosing,
+  onCloseProject,
 }: Readonly<{
   currentStep: ProyectoWizardStepDefinition;
   payload: ProyectoWizardPayload | null;
@@ -156,8 +88,19 @@ function StepWorkspace({
   onExcelImported: (result: ProyectoExcelPreviewState) => void;
   docState: EstadoDocumentalResponse | null;
   onHabilitarCarguePdf: () => void;
+  draftStatus: string;
+  isClosing: boolean;
+  onCloseProject: () => void;
 }>): React.JSX.Element {
-  const Icon = STEP_ICONS[currentStep.id];
+  if (payload === null) {
+    return (
+      <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]" />
+    );
+  }
+
+  const importado =
+    payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" ||
+    docState?.proyecto_importado === true;
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-[var(--card)] p-5 shadow-[0_18px_42px_rgba(23,53,47,0.08)]">
@@ -167,131 +110,146 @@ function StepWorkspace({
             {currentStep.shortLabel} / {currentStep.label}
           </p>
           <h3 className="mt-2 text-2xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
-            {currentStep.description}
+            {currentStep.label}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            El proyecto formativo usa PDF como evidencia documental y Excel como fuente
-            estructurada activa.
+            {currentStep.description}
           </p>
         </div>
 
         <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--foreground)] text-white">
-          <Icon className="h-5 w-5" />
+          <ListChecks className="h-5 w-5" />
         </span>
       </header>
 
       <div className="mt-5 min-w-0">
         <div className="min-w-0 rounded-lg border border-dashed border-[color:var(--card-border)] bg-white p-5">
-          {currentStep.id === "fuente-proyecto" && payload !== null ? (
-            <div className="grid gap-4">
-              <ExtractorSenaInstructions
-                referenceId={payload.meta.referenciaId}
-                scope="proyecto"
-              />
-              <ProyectoExcelImport
-                currentResult={payload.documental.fuente_estructurada}
-                onPreview={onExcelPreview}
-                onImported={onExcelImported}
-                planeacionHref={`/planeacion/${payload.meta.programaReferenciaId}`}
+          <div className="grid gap-4">
+            <ExtractorSenaInstructions
+              referenceId={payload.meta.referenciaId}
+              scope="proyecto"
+            />
+            <ProyectoExcelImport
+              currentResult={payload.documental.fuente_estructurada}
+              onPreview={onExcelPreview}
+              onImported={onExcelImported}
+              planeacionHref={`/planeacion/${payload.meta.programaReferenciaId}`}
+              referenciaId={payload.meta.referenciaId}
+            />
+            {importado ? (
+              <ProyectoDocumentUpload
+                currentResult={payload.documental.proyecto_pdf}
+                onUploaded={onPdfUploaded}
                 referenciaId={payload.meta.referenciaId}
+                habilitado={true}
+                carguePdfHabilitado={true}
+                onHabilitarCarguePdf={onHabilitarCarguePdf}
+                documentoExistente={docState?.proyecto_pdf}
               />
-              {payload.documental.fuente_estructurada?.confirmacion?.estado === "IMPORTADO" ||
-              docState?.proyecto_importado === true ? (
-                <ProyectoDocumentUpload
-                  currentResult={payload.documental.proyecto_pdf}
-                  onUploaded={onPdfUploaded}
-                  referenciaId={payload.meta.referenciaId}
-                  habilitado={true}
-                  carguePdfHabilitado={true}
-                  onHabilitarCarguePdf={onHabilitarCarguePdf}
-                  documentoExistente={docState?.proyecto_pdf}
-                />
-              ) : null}
+            ) : null}
+          </div>
+
+          <div className="mt-6 grid gap-6">
+            <div className="rounded-lg bg-[var(--paper-strong)] p-4 border border-[color:var(--card-border)]">
+              <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3 uppercase tracking-wider">
+                Resumen General del Proyecto
+              </h4>
+              <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs font-medium text-[var(--muted)]">Nombre del Proyecto</dt>
+                  <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.nombre_proyecto || "No asignado (Cargar Excel)"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-[var(--muted)]">Código del Proyecto (SOFIA)</dt>
+                  <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.codigo_proyecto || "No asignado (Cargar Excel)"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-[var(--muted)]">Referencia de Sesión</dt>
+                  <dd className="mt-1 text-xs break-all text-[var(--foreground)]">{payload.meta.referenciaId}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-[var(--muted)]">Programa Asociado</dt>
+                  <dd className="mt-1 text-[var(--foreground)]">{payload.meta.programaId || "Desconocido"}</dd>
+                </div>
+              </dl>
             </div>
 
-          ) : payload !== null ? (
-            <div className="grid gap-6">
-              <div className="rounded-lg bg-[var(--paper-strong)] p-4 border border-[color:var(--card-border)]">
-                <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3 uppercase tracking-wider">
-                  Resumen General del Proyecto
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                  Evidencia Documental (PDF)
                 </h4>
-                <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-xs font-medium text-[var(--muted)]">Nombre del Proyecto</dt>
-                    <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.nombre_proyecto || "No asignado (Cargar Excel)"}</dd>
+                {payload.documental.proyecto_pdf ? (
+                  <div className="text-sm">
+                    <p className="font-semibold text-emerald-700 font-medium">✓ Cargado</p>
+                    <p className="mt-1 text-[var(--muted)] truncate">Archivo: {payload.documental.proyecto_pdf.documento.original_filename}</p>
                   </div>
-                  <div>
-                    <dt className="text-xs font-medium text-[var(--muted)]">Código del Proyecto (SOFIA)</dt>
-                    <dd className="mt-1 font-semibold text-[var(--foreground)]">{payload.proyecto.codigo_proyecto || "No asignado (Cargar Excel)"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-[var(--muted)]">Referencia de Sesión</dt>
-                    <dd className="mt-1 text-xs break-all text-[var(--foreground)]">{payload.meta.referenciaId}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-medium text-[var(--muted)]">Programa Asociado</dt>
-                    <dd className="mt-1 text-[var(--foreground)]">{payload.meta.programaId || "Desconocido"}</dd>
-                  </div>
-                </dl>
+                ) : (
+                  <p className="text-sm text-amber-700 font-medium">⚠️ No se ha cargado el PDF del proyecto formativo</p>
+                )}
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                    Evidencia Documental (PDF)
-                  </h4>
-                  {payload.documental.proyecto_pdf ? (
-                    <div className="text-sm">
-                      <p className="font-semibold text-emerald-700 font-medium">✓ Cargado</p>
-                      <p className="mt-1 text-[var(--muted)] truncate">Archivo: {payload.documental.proyecto_pdf.documento.original_filename}</p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-amber-700 font-medium">⚠️ No se ha cargado el PDF del proyecto formativo</p>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-                  <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
-                    Estructura Curricular (Excel)
-                  </h4>
-                  {payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
-                    <div className="text-sm">
-                      <p className="font-semibold text-emerald-700 font-medium">✓ Importado y Confirmado</p>
-                      <p className="mt-1 text-[var(--muted)]">Fases: {payload.documental.fuente_estructurada.preview?.resumen.fases ?? 0}</p>
-                      <p className="text-[var(--muted)]">Actividades: {payload.documental.fuente_estructurada.preview?.resumen.actividades ?? 0}</p>
-                      <p className="text-[var(--muted)]">Resultados específicos: {payload.documental.fuente_estructurada.preview?.resumen.resultados_especificos ?? 0}</p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-amber-700 font-medium">⚠️ Estructura pendiente de importación / confirmación</p>
-                  )}
-                </div>
-              </div>
-
-              {payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
-                <div className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="max-w-xl">
-                      <h4 className="text-base font-semibold text-[var(--accent-strong)]">
-                        Proyecto listo para cierre
-                      </h4>
-                      <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
-                        La matriz del proyecto formativo fue cargada y validada. Revisa el consolidado y cierra el proyecto como COMPLETO para habilitar la planeacion pedagogica.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
-                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-2">
-                  Trazabilidad de la Información
+              <div className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
+                <h4 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider mb-2">
+                  Estructura Curricular (Excel)
                 </h4>
-                <p className="text-xs leading-5 text-[var(--muted)]">
-                  La estructura de planeación, fases, actividades y resultados de aprendizaje (RAP) específicos ha sido importada de manera exclusiva a partir de la matriz de Excel canónico suministrada por el usuario, sirviendo el archivo PDF cargado como sustento y evidencia documental del cargue en la plataforma MinIO.
-                </p>
+                {payload.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
+                  <div className="text-sm">
+                    <p className="font-semibold text-emerald-700 font-medium">✓ Importado y Confirmado</p>
+                    <p className="mt-1 text-[var(--muted)]">Fases: {payload.documental.fuente_estructurada.preview?.resumen.fases ?? 0}</p>
+                    <p className="text-[var(--muted)]">Actividades: {payload.documental.fuente_estructurada.preview?.resumen.actividades ?? 0}</p>
+                    <p className="text-[var(--muted)]">Resultados específicos: {payload.documental.fuente_estructurada.preview?.resumen.resultados_especificos ?? 0}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-700 font-medium">⚠️ Estructura pendiente de importación / confirmación</p>
+                )}
               </div>
             </div>
-          ) : null}
+
+            {importado ? (
+              <div className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] p-5 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="max-w-xl">
+                    <h4 className="text-base font-semibold text-[var(--accent-strong)]">
+                      Proyecto listo para cierre
+                    </h4>
+                    <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
+                      La matriz del proyecto formativo fue cargada y validada. Revisa el consolidado y cierra el proyecto como COMPLETO para habilitar la planeacion pedagogica.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-lg bg-slate-50 p-4 border border-slate-200">
+              <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-2">
+                Trazabilidad de la Información
+              </h4>
+              <p className="text-xs leading-5 text-[var(--muted)]">
+                La estructura de planeación, fases, actividades y resultados de aprendizaje (RAP) específicos ha sido importada de manera exclusiva a partir de la matriz de Excel canónico suministrada por el usuario, sirviendo el archivo PDF cargado como sustento y evidencia documental del cargue en la plataforma MinIO.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--line)] pt-5">
+              {draftStatus === "COMPLETO" ? (
+                <Link
+                  href={`/planeacion/${payload.meta.programaReferenciaId}`}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                >
+                  Configurar Planeación
+                </Link>
+              ) : (
+                <ActionButton disabled={!importado || isClosing} onClick={onCloseProject}>
+                  {isClosing ? (
+                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  Confirmar y cerrar proyecto
+                </ActionButton>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -482,15 +440,6 @@ export function ProyectoWizardShell({
       {controller.isWizardActive && controller.payload !== null ? (
         <section className="grid gap-5 lg:grid-cols-[21rem_minmax(0,1fr)]">
           <aside className="flex flex-col gap-4 self-start lg:sticky lg:top-6 w-full h-fit">
-            <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-              <WizardProgress
-                currentStepId={controller.currentStepId}
-                onSelectStep={controller.goToStep}
-                steps={PROYECTO_WIZARD_STEPS}
-                touchedSteps={controller.payload.meta.touchedSteps}
-                disabledSteps={controller.disabledSteps}
-              />
-            </section>
             <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4 text-sm leading-6">
               <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)] uppercase">
                 Borrador proyecto
@@ -522,57 +471,10 @@ export function ProyectoWizardShell({
               }
               docState={controller.docState}
               onHabilitarCarguePdf={controller.habilitarCarguePdf}
+              draftStatus={controller.draftStatus}
+              isClosing={controller.isClosing}
+              onCloseProject={() => void controller.closeProject()}
             />
-
-            <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm leading-6 text-[var(--muted)]">
-                  Paso {controller.currentStepIndex + 1} de{" "}
-                  {PROYECTO_WIZARD_STEPS.length}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <ActionButton
-                    disabled={!controller.canMovePrevious}
-                    tone="quiet"
-                    onClick={controller.goToPreviousStep}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Anterior
-                  </ActionButton>
-                  {controller.currentStepId === "revision-proyecto" &&
-                  controller.draftStatus === "COMPLETO" ? (
-                    <Link
-                      href={`/planeacion/${controller.payload.meta.programaReferenciaId}`}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                    >
-                      Configurar Planeación
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  ) : controller.currentStepId === "revision-proyecto" &&
-                    controller.payload?.documental.fuente_estructurada?.confirmacion.estado === "IMPORTADO" ? (
-                    <ActionButton
-                      disabled={controller.isClosing}
-                      onClick={() => void controller.closeProject()}
-                    >
-                      {controller.isClosing ? (
-                        <RefreshCcw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4" />
-                      )}
-                      Confirmar y cerrar proyecto
-                    </ActionButton>
-                  ) : (
-                    <ActionButton
-                      disabled={!controller.canMoveNext}
-                      onClick={controller.goToNextStep}
-                    >
-                      Siguiente
-                      <ArrowRight className="h-4 w-4" />
-                    </ActionButton>
-                  )}
-                </div>
-              </div>
-            </section>
           </div>
         </section>
       ) : null}
