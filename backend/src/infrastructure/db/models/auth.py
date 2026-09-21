@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -134,3 +135,33 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     def has_role(self, *role_names: str) -> bool:
         """Check if user holds any of the specified roles."""
         return bool(self.role_names.intersection(role_names))
+
+
+class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Active user session tracking for single-use refresh token rotation and replay prevention."""
+
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_sessions_usuario_id", "usuario_id"),
+        Index("ix_user_sessions_refresh_token_hash", "refresh_token_hash"),
+        Index("ix_user_sessions_token_family", "token_family"),
+        Index("ix_user_sessions_jti", "jti", unique=True),
+        Index("ix_user_sessions_expires_at", "expires_at"),
+        Index("ix_user_sessions_revoked_at", "revoked_at"),
+    )
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_family: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    jti: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    usuario: Mapped[Usuario] = relationship("Usuario", foreign_keys=[usuario_id])
+

@@ -738,3 +738,60 @@ A partir del refactor de seguridad y control de acceso multiusuario, el sistema 
 ## 27.4 Rate Limiting en Autenticación
 - El endpoint de inicio de sesión (`POST /api/v1/auth/login`) implementa una ventana deslizante de rate limiting por dirección IP / correo institucional: un máximo de 5 intentos fallidos por minuto. Al superar el límite, se bloquean intentos adicionales con HTTP 429 Too Many Requests.
 
+---
+
+# 28. Micro-Hardening Final de Seguridad (RBAC-AUTH-FINAL-HARDENING-ASGARD)
+
+## 28.1 Política CSRF y Validación de Origen
+- Toda operación mutable basada en cookies (`/api/v1/auth/refresh`, `/api/v1/auth/logout`, `/api/v1/auth/change-password`) está protegida por la dependencia `verify_csrf_origin`.
+- Se valida que el encabezado `Origin` (o `Referer` en su defecto) pertenezca estrictamente a la lista de orígenes autorizados (`cors_allow_origin_list`).
+- Cualquier solicitud proveniente de un origen no autorizado es rechazada inmediatamente con HTTP 403 Forbidden.
+- En entornos de producción y staging, las solicitudes autenticadas con cookie requieren obligatoriamente un origen verificado.
+
+## 28.2 Atributos Centralizados de Cookies
+- Nombre canónico: `asgard_refresh_token`.
+- Atributos obligatorios: `HttpOnly=True`, `SameSite=Lax`, `Path=/api/v1/auth`.
+- En producción y staging, `Secure=True` es forzoso (`effective_cookie_secure`).
+- El dominio es parametrizable mediante `AUTH_COOKIE_DOMAIN`.
+
+## 28.3 Rotación Real de Refresh Tokens y Prevención de Replay (OAuth 2.0 / RFC 6749)
+- Las sesiones activas se registran en la tabla `user_sessions` identificadas por hash SHA-256 (`refresh_token_hash`), identificador criptográfico único (`jti`) y familia de sesión (`token_family`). No se almacena el refresh token en texto plano.
+- **Rotación de un solo uso (Single-use)**: Cada invocación a `/api/v1/auth/refresh` marca la sesión consumida con `revoked_at = now()` y emite una nueva sesión hija dentro de la misma `token_family`.
+- **Detección de Replay**: Si se recibe un refresh token cuya sesión ya ha sido revocada:
+  1. Se detecta intento de reuso malicioso (replay attack).
+  2. Se revocan inmediatamente todas las sesiones de dicha familia (`token_family`).
+  3. Se incrementa `user.token_version`, invalidando todos los tokens de acceso del usuario.
+  4. Se elimina la cookie y se registra evento de auditoría `REFRESH_TOKEN_REPLAY_DETECTED`.
+  5. Se rechaza con HTTP 401 Unauthorized.
+- Un usuario inactivo o bloqueado es rechazado de inmediato al intentar refrescar (HTTP 401).
+
+## 28.4 Semántica de Cierre de Sesión y Cambio de Contraseña
+- `/api/v1/auth/logout`: Revoca todas las sesiones activas del usuario en base de datos, incrementa `token_version` y limpia la cookie.
+- `/api/v1/auth/change-password`: Modifica el hash de contraseña, incrementa `token_version`, revoca todas las sesiones activas en `user_sessions` y limpia la cookie.
+
+## 28.5 Política CORS Restrictiva
+- La lista de orígenes permitidos se obtiene de `cors_allow_origins`.
+- Queda terminantemente prohibido combinar el wildcard `*` con `allow_credentials=True`. La configuración filtra automáticamente cualquier comodín para evitar que los navegadores bloqueen credenciales o queden expuestas.
+
+## 28.6 Autorización Estricta en Descargas Documentales
+- Endpoints dedicados para descargas de evidencia y matrices:
+  - `GET /api/v1/programas/{referencia_id}/documentos/programa-pdf`
+  - `GET /api/v1/programas/{referencia_id}/documentos/programa-excel`
+  - `GET /api/v1/proyectos/{referencia_id}/documentos/proyecto-pdf`
+  - `GET /api/v1/proyectos/{referencia_id}/excel`
+  - `GET /api/v1/planeaciones/{planeacion_id}/descargar-formato-oficial`
+  - `GET /api/v1/planeaciones/proyecto/{proyecto_id}/descargar-formato-oficial`
+- Principio Deny-by-default: Un UUID válido nunca concede acceso. Una `storage_key` nunca concede acceso directo.
+- Toda descarga valida autorización mediante `AccessScopeService` (`require_process_access`, `can_access_project`, `can_access_planning`).
+- Los líderes solo pueden descargar artefactos correspondientes a procesos de sus equipos ejecutores. Intentos entre equipos distintos generan HTTP 403 Forbidden.
+- Los administradores y superadministradores conservan acceso institucional global.
+
+## 28.7 Frontend Single-Flight Refresh
+- La capa de red del frontend (`authFetch` en `lib/api.ts`) implementa un mecanismo de bloqueo con promesa compartida (`refreshTokenSingleFlight`).
+- Múltiples errores 401 simultáneos disparan una sola solicitud a `/auth/refresh`. Todas las peticiones esperan la misma promesa y reintentan con el nuevo token, impidiendo condiciones de carrera frente a la rotación de un solo uso.
+
+## 28.8 Limitación del Rate Limiter en Memoria
+- El rate limiter actual opera en memoria por instancia (sliding window).
+- **Nota técnica de escalabilidad**: Si el despliegue escala a múltiples réplicas (`replicas > 1`), el estado del rate limiting debe migrarse a un backend compartido (Redis o tabla en base de datos). Para la arquitectura actual de instancia única, la implementación en memoria es suficiente y eficiente.
+
+

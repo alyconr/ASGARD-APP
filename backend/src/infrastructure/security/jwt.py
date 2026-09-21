@@ -1,4 +1,4 @@
-﻿"""JWT token creation and validation."""
+"""JWT token creation and validation."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+
+import uuid
 
 from src.infrastructure.config.settings import get_settings
 
@@ -38,6 +40,7 @@ def create_refresh_token(
         expire = now + expires_delta
     else:
         expire = now + timedelta(days=settings.jwt_refresh_token_expire_days)
+    to_encode.setdefault("jti", str(uuid.uuid4()))
     to_encode.update({"iat": now, "exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 

@@ -553,3 +553,14 @@ La Fase 1 se considera exitosa cuando:
 - el proyecto puede revisarse y cerrarse,
 - todo el avance se guarda en borrador,
 - toda la información queda persistida y trazable.
+
+---
+
+# 18. Micro-Hardening Final de Seguridad (RBAC-AUTH-FINAL-HARDENING-ASGARD)
+
+A partir de esta fase de micro-hardening:
+- **CSRF & Origin Validation**: Endpoints mutables de autenticación basados en cookies (`refresh`, `logout`, `change-password`) exigen validación estricta de origen (`Origin` o `Referer` contra lista permitida `cors_allow_origin_list`). Orígenes no permitidos resultan en HTTP 403.
+- **Refresh Token Rotation & Anti-Replay (RFC 6749)**: Cada refresh rota el token inmediatamente (`revoked_at = now()`), asigna un nuevo `jti` y registra la sesión en `user_sessions` mediante hash SHA-256 (`refresh_token_hash`). Si se detecta reuso de un token revocado, se revoca la familia completa (`token_family`), se incrementa `user.token_version` invalidando todas las sesiones y access tokens activos, y se rechaza con HTTP 401.
+- **Cookies y CORS**: Cookie canónica `asgard_refresh_token` configurada con `HttpOnly=True`, `SameSite=Lax`, `Path=/api/v1/auth` y `Secure=True` obligatorio en producción/staging. Prohibido mezclar `allow_credentials=True` con wildcard `*` en CORS.
+- **Descargas Documentales Protegidas**: Descargas de PDF institucional, matriz Excel y formatos GPFI individuales/consolidados se realizan a través de endpoints dedicados protegidos por `AccessScopeService` (`require_process_access`, `can_access_project`, `can_access_planning`). Jamás se expone acceso directo por `storage_key` o UUID sin validar membresía del equipo ejecutor o rol institucional.
+- **Frontend Single-Flight**: `authFetch` agrupa llamadas concurrentes ante 401 en una única promesa compartida de refresh (`refreshTokenSingleFlight`), evitando condiciones de carrera contra la rotación de un solo uso.

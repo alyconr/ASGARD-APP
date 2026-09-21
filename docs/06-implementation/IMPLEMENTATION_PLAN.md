@@ -780,3 +780,26 @@ Antes de generar código, Codex debe:
 5. Exponer generación, estado y descarga tipada.
 6. Integrar configuración, brechas, contadores y Blob en el wizard.
 7. Verificar OOXML, imágenes, merges, filas adicionales, impresión y regresiones.
+
+---
+
+# 17. Hito de Micro-Hardening de Seguridad (RBAC-AUTH-FINAL-HARDENING-ASGARD)
+
+## 17.1 Entregables Técnicos
+1. **CSRF & Origin Validation**:
+   - Dependencia `verify_csrf_origin` en `backend/src/infrastructure/security/cookie_auth.py`.
+   - Protección de `/refresh`, `/logout` y `/change-password` ante peticiones sin Origin/Referer válido.
+2. **Rotación Real de Refresh Tokens & Anti-Replay (RFC 6749)**:
+   - Tabla `user_sessions` y migración Alembic `e3f4a5b6c7d8_add_user_sessions.py`.
+   - Hash SHA-256 para almacenamiento (`refresh_token_hash`), `token_family` y `jti`.
+   - Rotación con consumo atómico (`revoked_at = now()`).
+   - Detección de replay con revocación de familia completa e invalidación de `token_version`.
+3. **Endurecimiento de Cookies y CORS**:
+   - Helper `set_auth_refresh_cookie` con `HttpOnly=True`, `SameSite=Lax`, `Secure=True` condicional a producción/staging.
+   - Sanitización de `cors_allow_origins` descartando `*`.
+4. **Protección Integral de Descargas Documentales**:
+   - Endpoints dedicados para PDF, Excel y GPFI pasando por validación de alcance `AccessScopeService`.
+   - Deny-by-default para usuarios ajenos al equipo ejecutor asignado al proceso.
+5. **Frontend Concurrency Hardening**:
+   - Función `refreshTokenSingleFlight` en `frontend/src/lib/api.ts` para coalescencia de reintentos concurrentes de 401.
+

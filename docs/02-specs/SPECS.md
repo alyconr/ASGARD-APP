@@ -768,3 +768,50 @@ La Fase 1 se considera terminada cuando el sistema permite:
 - Endpoints individuales: `POST/GET /api/v1/planeaciones/{planeacion_id}/generar-formato-oficial` y `descargar-formato-oficial`.
 - Endpoints consolidados: `POST/GET /api/v1/planeaciones/proyecto/{proyecto_id}/generar-formato-oficial` y `descargar-formato-oficial`.
 - La descarga usa `StreamingResponse`, content type OOXML y `Content-Disposition` UTF-8.
+
+---
+
+# 21. Especificación Técnica de Micro-Hardening de Seguridad (RBAC-AUTH-FINAL-HARDENING-ASGARD)
+
+## 21.1 Protección CSRF y Validación de Origen
+- Endpoints mutables dependientes de cookie (`POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout`, `POST /api/v1/auth/change-password`) aplican `verify_csrf_origin`.
+- Comprobación estricta de encabezados `Origin` y `Referer` contra `cors_allow_origin_list`.
+- Rechazo inmediato HTTP 403 Forbidden ante orígenes no permitidos o faltantes en producción/staging.
+
+## 21.2 Gestión de Sesiones y Rotación de Refresh Tokens (RFC 6749)
+- Modelo `UserSession` en base de datos:
+  - `id`: UUID (PK).
+  - `usuario_id`: UUID (FK `usuarios.id`, cascada).
+  - `refresh_token_hash`: String(64) SHA-256 del token (indexado, sin texto plano).
+  - `token_family`: UUID (indexado).
+  - `jti`: UUID (único, indexado).
+  - `expires_at`: DateTime con zona horaria.
+  - `revoked_at`: DateTime con zona horaria (nullable, indexado).
+  - `ip_address`: String(45) (nullable).
+  - `user_agent`: Text (nullable).
+- **Mecanismo Anti-Replay**:
+  - Al refrescar, se marca la sesión actual con `revoked_at = now()` y se genera un nuevo par de tokens con nuevo `jti` y misma `token_family`.
+  - Si un token ya revocado intenta refrescar: se detecta ataque de replay, se revocan todas las sesiones de la familia, se incrementa `user.token_version` invalidando todos los access tokens emitidos, y se retorna HTTP 401 Unauthorized.
+
+## 21.3 Cookies y CORS
+- Cookie `asgard_refresh_token`:
+  - `HttpOnly`: true
+  - `SameSite`: "lax"
+  - `Path`: "/api/v1/auth"
+  - `Secure`: true (producción/staging via `effective_cookie_secure`)
+  - `Domain`: configurable via `AUTH_COOKIE_DOMAIN`
+- CORS: `allow_credentials=True` con orígenes explícitos. Se descarta automáticamente `*` de la lista de orígenes.
+
+## 21.4 Endpoints de Descarga Protegidos
+- `GET /api/v1/programas/{referencia_id}/documentos/programa-pdf`
+- `GET /api/v1/programas/{referencia_id}/documentos/programa-excel`
+- `GET /api/v1/proyectos/{referencia_id}/documentos/proyecto-pdf`
+- `GET /api/v1/proyectos/{referencia_id}/excel`
+- `GET /api/v1/planeaciones/{planeacion_id}/descargar-formato-oficial`
+- `GET /api/v1/planeaciones/proyecto/{proyecto_id}/descargar-formato-oficial`
+- Todos los endpoints validan la identidad con `get_current_user` y el alcance de permisos con `AccessScopeService`. Si el usuario no pertenece al equipo ejecutor ni posee rol institucional (SUPERADMIN/ADMIN), la descarga es rechazada con HTTP 403 Forbidden.
+
+## 21.5 Single-Flight en Cliente Web
+- `authFetch` en frontend gestiona un singleton de refresco (`refreshTokenSingleFlight`).
+- Las peticiones concurrentes que fallen con 401 esperan la resolución de una única solicitud de rotación y reintentan secuencialmente con el nuevo bearer token en memoria.
+

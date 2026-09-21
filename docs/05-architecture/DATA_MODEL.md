@@ -854,4 +854,24 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
   - Indexes: `ix_procesos_curriculares_programa_id`, `ix_procesos_curriculares_proyecto_id`
 
+## 17.4 Sesiones de Usuario y Rotación de Tokens (`user_sessions`)
+- **`user_sessions`**:
+  - `id` (UUID, PK)
+  - `usuario_id` (UUID, FK -> `usuarios.id` ON DELETE CASCADE, NOT NULL)
+  - `refresh_token_hash` (VARCHAR 64, NOT NULL) — Digest SHA-256 del refresh token (índice para búsqueda O(1))
+  - `token_family` (UUID, NOT NULL) — Identificador de la cadena familiar de emisión para revocación en cascada ante replay
+  - `jti` (UUID, UNIQUE, NOT NULL) — Identificador único del JWT refresh
+  - `expires_at` (TIMESTAMPTZ, NOT NULL)
+  - `revoked_at` (TIMESTAMPTZ, NULL) — Marca temporal de consumo o invalidación
+  - `ip_address` (VARCHAR 45, NULL) — Auditoría de origen de red
+  - `user_agent` (TEXT, NULL) — Auditoría de cliente HTTP
+  - Indexes:
+    - `ix_user_sessions_usuario_id`
+    - `ix_user_sessions_refresh_token_hash`
+    - `ix_user_sessions_token_family`
+    - `ix_user_sessions_jti`
+    - `ix_user_sessions_expires_at`
+    - `ix_user_sessions_revoked_at`
+
+
 

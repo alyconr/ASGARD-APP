@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
@@ -13,10 +15,15 @@ from sqlalchemy.orm import selectinload
 
 from src.domain.shared.enums import RolUsuario
 from src.infrastructure.config.settings import get_settings
-from src.infrastructure.db.models.auth import Rol, Usuario
+from src.infrastructure.db.models.auth import Rol, UserSession, Usuario
 from src.infrastructure.db.models.organizacion import Coordinacion, Especialidad
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
+from src.infrastructure.security.cookie_auth import (
+    clear_auth_refresh_cookie,
+    set_auth_refresh_cookie,
+    verify_csrf_origin,
+)
 from src.infrastructure.security.jwt import create_access_token, create_refresh_token, decode_token
 from src.infrastructure.security.password import hash_password, verify_password
 from src.interfaces.http.deps import get_current_user, require_roles
@@ -30,6 +37,10 @@ from src.interfaces.http.schemas.auth import (
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 # In-memory sliding-window tracker for login rate limiting: key -> list of failure timestamps
 _login_failures: dict[str, list[float]] = {}
@@ -125,6 +136,8 @@ async def login(
 
     _clear_login_failures(rate_limit_key)
 
+    token_family = uuid.uuid4()
+    jti = str(uuid.uuid4())
     token_data = {
         "sub": str(user.id),
         "email": user.email,
@@ -132,19 +145,27 @@ async def login(
         "token_version": getattr(user, "token_version", 1),
     }
     access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
+    refresh_token = create_refresh_token({
+        **token_data,
+        "jti": jti,
+        "token_family": str(token_family),
+    })
 
     settings = get_settings()
-    # Set HttpOnly refresh cookie for browser security
-    response.set_cookie(
-        key="asgard_refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="lax",
-        max_age=settings.jwt_refresh_token_expire_days * 86400,
-        path="/api/v1/auth",
+    now = datetime.now(UTC)
+    new_session = UserSession(
+        usuario_id=user.id,
+        refresh_token_hash=_hash_token(refresh_token),
+        token_family=token_family,
+        jti=jti,
+        expires_at=now + timedelta(days=settings.jwt_refresh_token_expire_days),
+        ip_address=client_ip if client_ip != "unknown" else None,
+        user_agent=request.headers.get("user-agent"),
     )
+    session.add(new_session)
+
+    # Set HttpOnly refresh cookie for browser security
+    set_auth_refresh_cookie(response, refresh_token)
 
     await audit_repo.add_event(
         entidad="Usuario",
@@ -170,14 +191,15 @@ async def get_me(
     return _map_user_response(current_user)
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(verify_csrf_origin)])
 async def refresh_token(
+    request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_async_session)],
     payload: RefreshTokenRequest | None = None,
     asgard_refresh_token: str | None = Cookie(None),
-) -> dict[str, str]:
-    """Exchange a valid refresh token for a new access token and rotated refresh token."""
+) -> dict[str, Any]:
+    """Exchange a valid refresh token for a new access token and rotated refresh token with replay protection."""
     raw_token = asgard_refresh_token or (payload.refresh_token if payload else None)
     if not raw_token:
         raise HTTPException(
@@ -207,7 +229,15 @@ async def refresh_token(
             detail="Token no contiene identificador de usuario válido",
         )
 
-    user = await session.get(Usuario, user_id, options=[selectinload(Usuario.roles)])
+    user = await session.get(
+        Usuario,
+        user_id,
+        options=[
+            selectinload(Usuario.roles),
+            selectinload(Usuario.coordinacion),
+            selectinload(Usuario.especialidad),
+        ],
+    )
     if user is None or not user.activo:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -222,6 +252,66 @@ async def refresh_token(
             detail="El token de refresco fue revocado o expiró",
         )
 
+    # Locate active UserSession by jti or hash
+    jti = decoded.get("jti")
+    token_hash = _hash_token(raw_token)
+    audit_repo = AuditRepository(session)
+
+    if jti:
+        sess_stmt = select(UserSession).where(UserSession.jti == jti)
+    else:
+        sess_stmt = select(UserSession).where(UserSession.refresh_token_hash == token_hash)
+
+    sess_res = await session.execute(sess_stmt)
+    user_sess = sess_res.scalar_one_or_none()
+
+    now = datetime.now(UTC)
+
+    # REPLAY ATTACK DETECTION
+    if user_sess is not None and user_sess.revoked_at is not None:
+        # Replay detected! Invalidate entire family and bump token_version immediately
+        revoke_stmt = (
+            select(UserSession)
+            .where(
+                UserSession.token_family == user_sess.token_family,
+                UserSession.revoked_at.is_(None),
+            )
+        )
+        family_res = await session.execute(revoke_stmt)
+        for s in family_res.scalars().all():
+            s.revoked_at = now
+
+        user.token_version = getattr(user, "token_version", 1) + 1
+        clear_auth_refresh_cookie(response)
+        await audit_repo.add_event(
+            entidad="Usuario",
+            entidad_id=user.id,
+            accion="REFRESH_TOKEN_REPLAY_DETECTED",
+            detalle={"token_family": str(user_sess.token_family), "jti": jti},
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de refresco reutilizado. Todas las sesiones de esta familia han sido revocadas por seguridad.",
+        )
+
+    if user_sess is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión no válida o no encontrada",
+        )
+
+    if user_sess.expires_at < now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de refresco expirado",
+        )
+
+    # Single-use rotation: revoke the consumed session
+    user_sess.revoked_at = now
+
+    # Issue new refresh token within the same token_family
+    new_jti = str(uuid.uuid4())
     token_data = {
         "sub": str(user.id),
         "email": user.email,
@@ -229,31 +319,55 @@ async def refresh_token(
         "token_version": getattr(user, "token_version", 1),
     }
     new_access_token = create_access_token(token_data)
-    new_refresh_token = create_refresh_token(token_data)
+    new_refresh_token = create_refresh_token({
+        **token_data,
+        "jti": new_jti,
+        "token_family": str(user_sess.token_family),
+    })
 
     settings = get_settings()
-    response.set_cookie(
-        key="asgard_refresh_token",
-        value=new_refresh_token,
-        httponly=True,
-        secure=not settings.debug,
-        samesite="lax",
-        max_age=settings.jwt_refresh_token_expire_days * 86400,
-        path="/api/v1/auth",
+    client_ip = request.client.host if request.client else None
+    rotated_session = UserSession(
+        usuario_id=user.id,
+        refresh_token_hash=_hash_token(new_refresh_token),
+        token_family=user_sess.token_family,
+        jti=new_jti,
+        expires_at=now + timedelta(days=settings.jwt_refresh_token_expire_days),
+        ip_address=client_ip if client_ip != "unknown" else None,
+        user_agent=request.headers.get("user-agent"),
     )
+    session.add(rotated_session)
+    await session.commit()
 
-    return {"access_token": new_access_token, "token_type": "bearer"}
+    set_auth_refresh_cookie(response, new_refresh_token)
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+        "user": _map_user_response(user).model_dump(),
+    }
 
 
-@router.post("/logout")
+@router.post("/logout", dependencies=[Depends(verify_csrf_origin)])
 async def logout(
     response: Response,
     current_user: Annotated[Usuario, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    """Revoke user session immediately by incrementing token_version and clearing cookie."""
+    """Revoke user session immediately by incrementing token_version, revoking DB sessions, and clearing cookie."""
+    now = datetime.now(UTC)
     current_user.token_version = getattr(current_user, "token_version", 1) + 1
-    response.delete_cookie(key="asgard_refresh_token", path="/api/v1/auth")
+
+    stmt = select(UserSession).where(
+        UserSession.usuario_id == current_user.id,
+        UserSession.revoked_at.is_(None),
+    )
+    active_sessions = (await session.execute(stmt)).scalars().all()
+    for s in active_sessions:
+        s.revoked_at = now
+
+    clear_auth_refresh_cookie(response)
 
     audit_repo = AuditRepository(session)
     await audit_repo.add_event(
@@ -266,13 +380,14 @@ async def logout(
     return {"message": "Sesión cerrada exitosamente"}
 
 
-@router.post("/change-password")
+@router.post("/change-password", dependencies=[Depends(verify_csrf_origin)])
 async def change_password(
+    response: Response,
     payload: ChangePasswordRequest,
     current_user: Annotated[Usuario, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    """Change current user password, invalidating all existing sessions."""
+    """Change current user password, invalidating all existing sessions and revoking tokens."""
     if payload.new_password != payload.confirm_new_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -291,8 +406,19 @@ async def change_password(
             detail="La contraseña actual es incorrecta",
         )
 
+    now = datetime.now(UTC)
     current_user.hashed_password = hash_password(payload.new_password)
     current_user.token_version = getattr(current_user, "token_version", 1) + 1
+
+    stmt = select(UserSession).where(
+        UserSession.usuario_id == current_user.id,
+        UserSession.revoked_at.is_(None),
+    )
+    active_sessions = (await session.execute(stmt)).scalars().all()
+    for s in active_sessions:
+        s.revoked_at = now
+
+    clear_auth_refresh_cookie(response)
 
     audit_repo = AuditRepository(session)
     await audit_repo.add_event(
@@ -303,6 +429,7 @@ async def change_password(
     )
     await session.commit()
     return {"message": "Contraseña actualizada exitosamente. Todas las sesiones activas han sido invalidadas."}
+
 
 
 @router.post(

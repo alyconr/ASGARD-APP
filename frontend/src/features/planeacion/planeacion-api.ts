@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export interface ContextoResultado {
   id: string;
@@ -380,7 +380,7 @@ async function requestJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await authFetch(`${getApiBaseUrl()}${path}`, {
     cache: "no-store",
     ...init,
   });
@@ -394,7 +394,7 @@ async function downloadWorkbook(
   path: string,
   fallbackName: string,
 ): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await authFetch(`${getApiBaseUrl()}${path}`, {
     method: "GET",
     cache: "no-store",
   });
