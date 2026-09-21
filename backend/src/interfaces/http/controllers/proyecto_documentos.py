@@ -23,7 +23,7 @@ from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.proyecto_documentos import (
     ProyectoPdfUploadResponse,
 )
@@ -53,12 +53,11 @@ async def upload_project_pdf(
     referencia_id: uuid.UUID,
     file: UploadFile = File(...),
     service: ProjectDocumentService = Depends(get_proyecto_document_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProyectoPdfUploadResponse:
     """Upload a project PDF, store it as evidence and return metadata."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
     filename = file.filename or ""
     content_type = file.content_type or "application/octet-stream"
     content = await file.read()
@@ -92,12 +91,12 @@ async def download_project_pdf(
     referencia_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
     settings: Settings = Depends(get_settings),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Download stored project PDF evidence, enforcing strict process scope."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
+
 
     draft_repo = DraftRepository(session)
     draft = await draft_repo.get_by_block_reference(

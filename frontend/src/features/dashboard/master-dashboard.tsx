@@ -19,12 +19,13 @@ import {
   Trash2,
   LogIn,
   LogOut,
-  Users,
+  Shield,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { LoginDialog } from "@/features/auth/login-dialog";
-import { EquiposAdmin } from "@/features/admin/equipos-admin";
+import { ForceChangePasswordDialog } from "@/features/auth/force-change-password-dialog";
+import { AdminWorkspace } from "@/features/admin/admin-workspace";
 
 import {
   deleteProgramFlow,
@@ -404,9 +405,9 @@ function ProgramFlowsPanel({
 
 export function MasterDashboard(): React.JSX.Element {
   const confirm = useConfirm();
-  const { user, isAuthenticated, logout, hasRole } = useAuth();
+  const { user, isAuthenticated, logout, hasRole, refreshUser } = useAuth();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "equipos">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "admin">("dashboard");
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [programFlows, setProgramFlows] = useState<DashboardProgramFlow[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
@@ -667,23 +668,23 @@ export function MasterDashboard(): React.JSX.Element {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("equipos")}
+                onClick={() => setActiveTab("admin")}
                 className={cn(
                   "pb-2.5 text-sm font-semibold border-b-2 -mb-px transition flex items-center gap-2",
-                  activeTab === "equipos"
+                  activeTab === "admin"
                     ? "border-[var(--accent)] text-[var(--accent-strong)]"
                     : "border-transparent text-slate-500 hover:text-slate-700"
                 )}
               >
-                <Users className="h-4 w-4" />
-                Equipos Ejecutores & Scope
+                <Shield className="h-4 w-4" />
+                Administración Organizacional
               </button>
             </div>
           )}
         </header>
 
-        {activeTab === "equipos" ? (
-          <EquiposAdmin />
+        {activeTab === "admin" ? (
+          <AdminWorkspace />
         ) : (
           <>
             <ProgramFlowsPanel
@@ -805,6 +806,12 @@ export function MasterDashboard(): React.JSX.Element {
         </>
       )}
       <LoginDialog isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+      <ForceChangePasswordDialog
+        isOpen={Boolean(isAuthenticated && user?.debe_cambiar_password)}
+        onPasswordChanged={() => {
+          void refreshUser();
+        }}
+      />
     </div>
   </main>
 );

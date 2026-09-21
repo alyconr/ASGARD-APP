@@ -1,4 +1,4 @@
-﻿"""ORM models for organization, teams, memberships, and curricular processes."""
+"""ORM models for organization, teams, memberships, and curricular processes."""
 
 from __future__ import annotations
 
@@ -106,6 +106,7 @@ class EquipoEjecutor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_equipos_ejecutores_coordinacion_id", "coordinacion_id"),
         Index("ix_equipos_ejecutores_especialidad_id", "especialidad_id"),
         Index("ix_equipos_ejecutores_lider_id", "lider_id"),
+        Index("ix_equipos_ejecutores_estado", "estado"),
     )
 
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
@@ -213,6 +214,10 @@ class ProcesoCurricular(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_procesos_curriculares_equipo_id", "equipo_ejecutor_id"),
         Index("ix_procesos_curriculares_lider_id", "lider_id"),
         Index("ix_procesos_curriculares_estado_scope", "estado_scope"),
+        Index("ix_procesos_curriculares_coordinacion_id", "coordinacion_id"),
+        Index("ix_procesos_curriculares_especialidad_id", "especialidad_id"),
+        Index("ix_procesos_curriculares_programa_id", "programa_id"),
+        Index("ix_procesos_curriculares_proyecto_id", "proyecto_id"),
     )
 
     referencia_id: Mapped[uuid.UUID] = mapped_column(
@@ -284,5 +289,15 @@ class ProcesoCurricular(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     lider: Mapped[Usuario | None] = relationship(
         "Usuario",
         foreign_keys=[lider_id],
+        lazy="selectin",
+    )
+    programa: Mapped[ProgramaFormacion | None] = relationship(
+        "ProgramaFormacion",
+        foreign_keys=[programa_id],
+        lazy="selectin",
+    )
+    proyecto: Mapped[ProyectoFormativo | None] = relationship(
+        "ProyectoFormativo",
+        foreign_keys=[proyecto_id],
         lazy="selectin",
     )

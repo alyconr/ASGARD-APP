@@ -25,7 +25,7 @@ from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.pendientes_curriculares import (
     PendientesCurricularesRepository,
 )
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.pendientes_curriculares import (
     PendienteCurricularAsignacionRequest,
     PendienteCurricularAsignacionResponse,
@@ -38,11 +38,11 @@ router = APIRouter(prefix="/api/v1/programas", tags=["programa-pendientes"])
 def get_pendientes_curriculares_service(
     session: AsyncSession = Depends(get_async_session),
 ) -> PendientesCurricularesService:
-    """Build the pending reconciliation service with request-scoped dependencies."""
+    """Build the pending curriculum service using request-scoped dependencies."""
     return PendientesCurricularesService(
         session=session,
-        pending_repository=PendientesCurricularesRepository(session),
         draft_repository=DraftRepository(session),
+        pending_repository=PendientesCurricularesRepository(session),
         audit_repository=AuditRepository(session),
     )
 
@@ -57,12 +57,11 @@ async def list_pendientes_curriculares(
     service: PendientesCurricularesService = Depends(
         get_pendientes_curriculares_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PendienteCurricularListResponse:
     """List unresolved Excel rows for manual assignment."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.list_pendientes(referencia_id)
@@ -83,12 +82,11 @@ async def asignar_pendiente_curricular(
     service: PendientesCurricularesService = Depends(
         get_pendientes_curriculares_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PendienteCurricularAsignacionResponse:
     """Assign one unresolved Excel row to a competence/result."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.asignar_pendiente(

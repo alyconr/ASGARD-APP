@@ -30,7 +30,7 @@ from src.infrastructure.repositories.programa_excel import (
     ProgramaExcelImportRepository,
 )
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.programa_excel import (
     ProgramaExcelImportResponse,
     ProgramaExcelPreviewResponse,
@@ -43,7 +43,7 @@ def get_programa_excel_service(
     session: AsyncSession = Depends(get_async_session),
     settings: Settings = Depends(get_settings),
 ) -> ProgramaExcelImportService:
-    """Build the Excel import service with request-scoped dependencies."""
+    """Build the program Excel import service using request-scoped dependencies."""
     return ProgramaExcelImportService(
         session=session,
         draft_repository=DraftRepository(session),
@@ -62,12 +62,11 @@ async def preview_program_excel(
     referencia_id: uuid.UUID,
     file: UploadFile = File(...),
     service: ProgramaExcelImportService = Depends(get_programa_excel_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaExcelPreviewResponse:
     """Validate and store a canonical Excel workbook for preview."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     filename = file.filename or ""
     content_type = file.content_type or "application/octet-stream"
@@ -101,12 +100,11 @@ async def preview_program_excel(
 async def confirm_program_excel_import(
     referencia_id: uuid.UUID,
     service: ProgramaExcelImportService = Depends(get_programa_excel_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaExcelImportResponse:
     """Confirm and materialize the previously previewed canonical Excel."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.confirm_program_excel_import(
@@ -144,12 +142,11 @@ async def download_program_excel(
     referencia_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
     settings: Settings = Depends(get_settings),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Download stored program Excel workbook, enforcing strict process scope."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     draft_repo = DraftRepository(session)
     draft = await draft_repo.get_by_block_reference(

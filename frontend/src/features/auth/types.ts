@@ -1,4 +1,4 @@
-﻿export interface CoordinacionSimple {
+export interface CoordinacionSimple {
   id: string;
   codigo: string;
   nombre: string;
@@ -16,7 +16,11 @@ export interface User {
   nombre: string;
   apellido: string;
   telefono?: string | null;
+  area?: string | null;
+  estado: string;
   activo: boolean;
+  debe_cambiar_password: boolean;
+  ultimo_acceso?: string | null;
   roles: string[];
   coordinacion?: CoordinacionSimple | null;
   especialidad?: EspecialidadSimple | null;

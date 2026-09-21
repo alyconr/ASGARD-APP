@@ -1,4 +1,4 @@
-.PHONY: help install install-frontend install-backend dev dev-frontend dev-backend start-frontend db-up db-up-admin db-down db-logs db-psql lint lint-frontend lint-backend typecheck typecheck-frontend typecheck-backend test test-backend format format-check build build-frontend db-check alembic-current validate
+.PHONY: help preflight install install-frontend install-backend dev dev-frontend dev-backend start-frontend db-up db-up-admin db-down db-logs db-psql lint lint-frontend lint-backend typecheck typecheck-frontend typecheck-backend test test-backend format format-check build build-frontend db-check alembic-current validate
 
 NPM ?= npm.cmd
 UV ?= uv
@@ -7,6 +7,7 @@ DOCKER_COMPOSE ?= docker compose
 help:
 	@echo Comandos disponibles:
 	@echo   make install            Instala dependencias frontend y backend
+	@echo   make preflight          Verifica contexto de repositorio ASGARD
 	@echo   make dev                Levanta PostgreSQL, backend y frontend
 	@echo   make dev-frontend       Levanta Next.js en http://localhost:3000
 	@echo   make dev-backend        Levanta FastAPI en http://localhost:8000
@@ -101,4 +102,7 @@ db-check:
 alembic-current:
 	cd backend && $(UV) run alembic current
 
-validate: lint typecheck test format-check build alembic-current
+preflight:
+	python scripts/assert_asgard_context.py
+
+validate: preflight lint typecheck test format-check build alembic-current

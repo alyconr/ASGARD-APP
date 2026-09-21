@@ -1,7 +1,11 @@
 # CODEX_TASKS.md
 ## Proyecto: Aplicación web para construcción de guías de aprendizaje SENA
 ## Fase: 1
-## Estado: Tareas listas para ejecución incremental con Codex
+## Estado: Fase 1 completa + Planeación Pedagógica + GPFI-F-134 V05 + RBAC/Scope + Hardening Seguridad + Sprint A Guardrails
+> [!IMPORTANT]
+> **ESTADO AUTORITATIVO DEL PRODUCTO**:
+> Las tareas históricas de Fase 1 (programa, proyecto, extractor, wizard), así como las extensiones autorizadas de Planeación Pedagógica (multi-RAP, 1:N), formato GPFI-F-134 V05 en MinIO, RBAC/Scope con Equipos Ejecutores y Hardening de Seguridad Auth se encuentran ya construidas y operativas.
+> El Sprint A incorpora los guardrails de repositorio y preflight (`scripts/assert_asgard_context.py`), cerrando aspectos residuales de seguridad.
 ## Última actualización: [YYYY-MM-DD]
 
 ---
@@ -985,4 +989,48 @@ Una tarea se considera terminada cuando:
 - [x] Proteger descargas documentales (PDF, Excel, GPFI) mediante `AccessScopeService` (`require_process_access`).
 - [x] Implementar `refreshTokenSingleFlight` y reintentos 401 transparentes en cliente frontend.
 - [x] Pruebas unitarias/integración de micro-hardening en backend (8/8) y frontend (coalescencia de tokens y UI de login).
+
+## TASK-CIERRE-DEFINITIVO-SEGURIDAD. Cierre Definitivo RBAC/Auth/Scope en ASGARD
+- [x] Reemplazar `get_optional_current_user` por `get_current_user` en todos los controladores privados.
+- [x] Garantizar respuesta `401 Unauthorized` ante cualquier petición anónima a rutas privadas.
+- [x] Eliminar `refresh_token` de la respuesta JSON (`TokenResponse`, `/login`, `/refresh`), confinándolo a la cookie HttpOnly.
+- [x] Implementar consumo atómico de sesión con row-level locking (`with_for_update`) en PostgreSQL para `/refresh`.
+- [x] Sanitizar CORS en manejador global de excepciones HTTP 500 validando `origin in settings.cors_allow_origin_list`.
+- [x] Fail-fast en producción/staging ante secretos JWT o credenciales MinIO por defecto.
+- [x] Reducir TTL por defecto del Access Token a 30 minutos.
+- [x] Pruebas exhaustivas de cierre: matriz de rutas privadas 401, no exposición de refresh en JSON, rotación y concurrencia atómica, CORS 500 y validación de secrets.
+
+## TASK-SPRINT-B-ADMINISTRACION-ORGANIZACIONAL. Administración Organizacional Multiusuario
+- [x] Extender modelo `Usuario` (`area`, `estado`, `debe_cambiar_password`, `ultimo_acceso`) e índice en `equipos_ejecutores`.
+- [x] Crear y verificar migración Alembic append-only `f4a5b6c7d8e9_sprint_b_organizational_admin.py` con single head.
+- [x] Crear script de sembrado idempotente de catálogo organizacional (`scripts/seed_organization_catalog.py`).
+- [x] Implementar servicio `UserAdminService` con verificación anti-escalación (`ADMIN` vs `SUPERADMIN`), invariantes y reseteo administrativo.
+- [x] Implementar servicio `OrganizationAdminService` con guardias activas contra desactivación de dependencias.
+- [x] Implementar servicio `TeamAdminService` con cambio de líder y sincronización transaccional sobre procesos curriculares.
+- [x] Endurecer middleware `deps.py` con rechazo de usuarios inactivos y whitelist obligatoria si `debe_cambiar_password == true`.
+- [x] Exponer endpoint `GET /api/v1/auth/me` para rehidratación de perfil autenticado.
+- [x] Construir frontend `ForceChangePasswordDialog` (modal no cancelable) para primer acceso con credenciales temporales.
+- [x] Construir frontend `UserFormDialog`, `UserStatusDialog`, `UserResetPasswordDialog`, `CoordinationFormDialog`, `SpecialtyFormDialog` y `TeamFormDialog`.
+- [x] Construir vistas `UsersAdmin`, `OrganizationAdmin` y `EquiposAdmin` integradas en el workspace `AdminWorkspace`.
+- [x] Conectar `AdminWorkspace` y `ForceChangePasswordDialog` en `MasterDashboard` para roles autorizados.
+- [x] Pruebas exhaustivas: 22 tests en backend (`test_sprint_b_admin.py`), tests unitarios en frontend (`admin-workspace.test.tsx`), typecheck y build de producción limpios.
+
+## TASK-SPRINT-C-SUPERVISION-AUDIT-E2E. Dashboard Jerárquico, Visor de Auditoría y Pruebas E2E
+- [x] Extender modelo `EventoAuditoria` con `actor_usuario_id`, `referencia_id`, relación relacional `actor` e índices.
+- [x] Optimizar `ProcesoCurricular` con índices de jerarquía (`coordinacion_id`, `especialidad_id`) y relaciones `programa`/`proyecto`.
+- [x] Crear y verificar migración Alembic append-only `a1b2c3d4e5f6_sprint_c_audit_evolution.py` con single head.
+- [x] Implementar DTOs y servicio de lectura `AdminDashboardQueryService` (resumen reactivo, procesos paginados, detalle).
+- [x] Implementar DTOs y servicio de lectura `AuditQueryService` con saneamiento y redacción recursiva de secretos.
+- [x] Crear controladores `/api/v1/admin/dashboard` y `/api/v1/admin/audit` protegidos por `require_roles(SUPERADMIN, ADMIN)`.
+- [x] Garantizar inmutabilidad estricta del log de auditoría (sin rutas de modificación, rechazo 405 Method Not Allowed).
+- [x] Construir frontend de Supervisión Jerárquica: `SummaryCards`, `ProcessFilters`, `ProcessesTable`, `ProcessDetailDrawer`, `AdminDashboard`.
+- [x] Construir frontend de Visor de Auditoría: `AuditFilters`, `AuditTable`, `AuditDetailDialog`, `AuditViewer`.
+- [x] Integrar pestañas en `AdminWorkspace` (`supervision`, `usuarios`, `organizacion`, `equipos`, `auditoria`).
+- [x] Instalar y configurar Playwright en `frontend/playwright.config.ts`.
+- [x] Crear suites E2E: `auth.spec.ts`, `supervision-audit.spec.ts` y `curricular-flow.spec.ts`.
+- [x] Ejecutar suites de pruebas: backend (352 passing), frontend unitario (135 passing), typecheck limpio y build de producción exitoso.
+- [x] Actualizar documentación institucional en `AGENTS.md` y `docs/01` a `docs/06`.
+
+
+
 

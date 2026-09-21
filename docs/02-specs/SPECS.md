@@ -815,3 +815,130 @@ La Fase 1 se considera terminada cuando el sistema permite:
 - `authFetch` en frontend gestiona un singleton de refresco (`refreshTokenSingleFlight`).
 - Las peticiones concurrentes que fallen con 401 esperan la resolución de una única solicitud de rotación y reintentan secuencialmente con el nuevo bearer token en memoria.
 
+---
+
+# 22. Especificación de Cierre Definitivo de Seguridad (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+## 22.1 Autenticación Obligatoria en Rutas Privadas
+- Se erradica `get_optional_current_user` en todos los controladores privados (`dashboard`, `drafts`, `programa_documentos`, `programa_excel`, `programa_cierre`, `competencias`, `resultados_aprendizaje`, `conocimientos_saber`, `conocimientos_proceso`, `criterios`, `pendientes_curriculares`, `proyecto_gate`, `proyecto_cargue`, `proyecto_documentos`, `proyecto_excel`, `proyecto_cierre`, `planeacion`, `equipos`).
+- Todo endpoint privado declara `current_user: Annotated[Usuario, Depends(get_current_user)]`. Solicitudes sin token Bearer válido reciben `401 Unauthorized`.
+
+## 22.2 Refresh Token Exclusivo en Cookie
+- `/api/v1/auth/login` y `/api/v1/auth/refresh` emiten `TokenResponse` con:
+  ```json
+  {
+    "access_token": "<jwt>",
+    "token_type": "bearer",
+    "user": { ... }
+  }
+  ```
+- El `refresh_token` nunca se incluye en el cuerpo JSON; se transporta únicamente en la cookie `asgard_refresh_token` (`HttpOnly=True`).
+
+## 22.3 Consumo Atómico de Refresh Token con Bloqueo de Fila
+- En `/api/v1/auth/refresh`, la consulta de sesión ejecuta:
+  ```python
+  select(UserSession).where(UserSession.jti == jti).with_for_update()
+  ```
+  y ante detección de reuso de token revocado (`revoked_at is not None`), bloquea y revoca todas las sesiones de la familia:
+  ```python
+  select(UserSession).where(UserSession.token_family == user_sess.token_family, UserSession.revoked_at.is_(None)).with_for_update()
+  ```
+  garantizando atomicidad a nivel de PostgreSQL y evitando que múltiples peticiones concurrentes roten simultáneamente el mismo token.
+
+## 22.4 Manejador de Errores 500 y Sanitización CORS
+- El manejador global para `Exception` no controlada verifica `origin and origin in settings.cors_allow_origin_list` antes de incluir `Access-Control-Allow-Origin: <origin>`.
+- Si el origen no está en la lista blanca de CORS, no se inyecta la cabecera.
+
+## 22.5 Fail-Fast de Configuración en Producción y Staging
+- `Settings.validate_production_secrets` intercepta la inicialización de la aplicación y rechaza el arranque si `app_env in ('production', 'staging')` y se detectan:
+  - Claves JWT inseguras o por defecto (`asgard-super-secret-key-change-in-production-2026`, longitud < 32).
+  - Credenciales MinIO inseguras (`admin`, `admin123`, `minioadmin`).
+
+## 22.6 TTL de Access Token
+- Configuración por defecto: `jwt_access_token_expire_minutes = 30`.
+
+---
+
+# 23. Especificación de Administración Organizacional Multiusuario (SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD)
+
+## 23.1 Endpoints de Administración de Usuarios
+- `POST /api/v1/auth/users`: Registra usuario nuevo. Requiere rol `SUPERADMIN` o `ADMIN`. `ADMIN` no puede crear cuentas con rol `SUPERADMIN`. Valida confirmación de contraseña, unicidad de correo institucional, coordinación y especialidad activas obligatorias para `LIDER_EQUIPO_EJECUTOR` y `USUARIO_ADICIONAL`. Establece `debe_cambiar_password = true`.
+- `GET /api/v1/auth/users`: Listado paginado con filtros (`page`, `page_size`, `search`, `role`, `estado`, `coordinacion_id`, `especialidad_id`). `ADMIN` no recibe ni puede ver detalles de cuentas `SUPERADMIN`.
+- `GET /api/v1/auth/users/{id}`: Detalle completo de usuario. `ADMIN` bloqueado ante `SUPERADMIN`.
+- `PATCH /api/v1/auth/users/{id}`: Edición de nombre, apellido, roles, coordinación, especialidad y área.
+- `PATCH /api/v1/auth/users/{id}/estado`: Transición de estado (`ACTIVO`, `INACTIVO`, `BLOQUEADO`). Revoca atómicamente sesiones e incrementa `token_version`.
+- `POST /api/v1/auth/users/{id}/reset-password`: Reseteo administrativo de clave con contraseña temporal autogenerada o manual. Establece `debe_cambiar_password = true`, revoca sesiones previas e incrementa `token_version`.
+- `GET /api/v1/auth/me`: Retorna el perfil completo del usuario autenticado (incluido en whitelist de primer acceso).
+
+## 23.2 Endpoints de Coordinaciones y Especialidades
+- `GET /api/v1/coordinaciones`: Catálogo con contadores de especialidades y equipos.
+- `POST /api/v1/coordinaciones`: Creación con código alfanumérico en mayúsculas único.
+- `PATCH /api/v1/coordinaciones/{id}`: Actualización de datos o estado. Inactivación rechazada si existen especialidades activas vinculadas.
+- `GET /api/v1/coordinaciones/{id}/especialidades`: Listado de especialidades filtradas por coordinación (`solo_activas=true` opcional).
+- `POST /api/v1/coordinaciones/{id}/especialidades`: Creación de especialidad bajo coordinación activa.
+- `PATCH /api/v1/especialidades/{id}`: Actualización o cambio de estado. Inactivación rechazada si existen equipos ejecutores activos vinculados.
+
+## 23.3 Endpoints de Equipos Ejecutores y Procesos
+- `GET /api/v1/equipos`: Listado paginado de equipos ejecutores (`items`, `total`, `page`, `page_size`, `total_pages`).
+- `POST /api/v1/equipos`: Creación validando líder con rol `LIDER_EQUIPO_EJECUTOR`, activo y de la misma coordinación/especialidad.
+- `PATCH /api/v1/equipos/{id}`: Edición de equipo. Al cambiar `lider_id`, ejecuta una transacción que actualiza `usuario_lider_id` en todos los `procesos_curriculares` asignados a dicho equipo.
+- `POST /api/v1/equipos/{id}/miembros`: Vinculación de `USUARIO_ADICIONAL` activo de la misma coordinación/especialidad.
+- `PATCH /api/v1/equipos/{id}/miembros/{usuario_id}`: Activación/desactivación de membresía de apoyo.
+
+## 23.4 Interfaz de Usuario y Flujo de Primer Acceso
+- `AdminWorkspace`: Módulo unificado con pestañas institucionales:
+  1. **Usuarios y Credenciales**: Tabla paginada con búsqueda, filtros, insignias de estado, acciones rápidas de edición, cambio de estado y reseteo de clave.
+  2. **Coordinaciones & Especialidades**: Vista dividida (dual-pane) con creación, edición y activación/inactivación protegida.
+  3. **Equipos Ejecutores & Procesos**: Cuadrícula de equipos, asignación de líderes, gestión de miembros de apoyo y asignación de procesos curriculares huérfanos.
+- `ForceChangePasswordDialog`: Modal no cancelable montado globalmente en el dashboard maestro cuando `user.debe_cambiar_password == true`. Exige ingresar clave actual y nueva contraseña de al menos 8 caracteres con confirmación idéntica antes de desbloquear el acceso a la plataforma.
+
+---
+
+# 24. Especificación de Supervisión Jerárquica Institucional, Visor de Auditoría y Verificación E2E (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 24.1 Endpoints del Dashboard Administrativo Jerárquico
+- `GET /api/v1/admin/dashboard/resumen`:
+  - Retorna métricas cuantitativas consolidadas (`total_procesos`, `procesos_sin_asignar`, `programas_completos`, `proyectos_completos`, `planeaciones_totales`, `planeaciones_completas`, `porcentaje_avance_global`).
+  - Parámetros de consulta opcionales: `coordinacion_id`, `especialidad_id`, `equipo_id`, `estado_programa`, `estado_proyecto`, `solo_sin_asignar`, `search`.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/dashboard/procesos`:
+  - Retorna listado paginado de procesos con resolución relacional completa (`referencia_id`, coordinación, especialidad, programa, proyecto, equipo ejecutor, líder asignado, contadores de planeaciones y estado global).
+  - Parámetros de consulta: `page`, `page_size`, `coordinacion_id`, `especialidad_id`, `equipo_id`, `estado_programa`, `estado_proyecto`, `solo_sin_asignar`, `search`.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/dashboard/procesos/{referencia_id}`:
+  - Retorna vista en profundidad (drill-down) del proceso curricular: configuración del borrador, miembros del equipo, planeaciones pedagógicas y enlaces a artefactos documentales generados.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+
+## 24.2 Endpoints del Visor Institucional de Auditoría
+- `GET /api/v1/admin/audit`:
+  - Retorna historial paginado de eventos de auditoría ordenado descendentemente por `fecha_evento`.
+  - Parámetros de consulta: `page`, `page_size`, `actor_id`, `accion`, `entidad`, `referencia_id`, `fecha_desde`, `fecha_hasta`.
+  - Cada evento incluye: `id`, `fecha_evento`, `accion`, `entidad`, `registro_id`, `referencia_id`, `ip_origen`, `actor` (`id`, `email`, `nombre_completo`, `roles`) y `detalle` saneado (sin secretos ni contraseñas).
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- `GET /api/v1/admin/audit/{event_id}`:
+  - Retorna detalle JSON completo del evento con payload formateado e información forense ampliada.
+  - Roles autorizados: `SUPERADMIN`, `ADMIN`.
+- Inmutabilidad estricta: No existen endpoints de modificación (`DELETE`, `PATCH`, `PUT`) para el log de auditoría. Peticiones HTTP en estos verbos responden `HTTP 405 Method Not Allowed`.
+
+## 24.3 Frontend de Supervisión y Auditoría
+- Componentes de Supervisión:
+  - `SummaryCards`: Tarjetas reactivas de KPIs con soporte de estado vacío y alertas sobre procesos sin equipo asignado.
+  - `ProcessFilters`: Filtros en cascada con selectores dinámicos de coordinación, especialidad, equipo y estados curriculares.
+  - `ProcessesTable`: Tabla institucional paginada con insignias de estado, barras de progreso y acción de inspección.
+  - `ProcessDetailDrawer`: Drawer lateral que expone el detalle del proceso, asignación de equipo y planeaciones vinculadas.
+- Componentes de Auditoría:
+  - `AuditFilters`: Búsqueda por texto libre, filtros de acción (`CREACION`, `MODIFICACION`, `ELIMINACION`, `LOGIN`, `LOGOUT`), entidad y rango de fechas.
+  - `AuditTable`: Tabla de auditoría con identificación de actor, acción etiquetada y botón de inspección técnica.
+  - `AuditDetailDialog`: Modal con visor formateado de payload JSON y copiado seguro al portapapeles.
+- Pestañas en `AdminWorkspace`: Integración de `Supervisión` y `Auditoría` junto a las existentes (`Usuarios`, `Organización`, `Equipos`).
+
+## 24.4 Arquitectura y Especificación de Pruebas E2E (Playwright)
+- Configuración: Playwright configurado en `frontend/playwright.config.ts` apuntando a `http://localhost:3000`.
+- Especificaciones de prueba:
+  - `auth.spec.ts`: Login para los 4 roles, bloqueo por rol, forzado de cambio de clave para usuarios con `debe_cambiar_password = true`, y deslogueo con destrucción de cookies HttpOnly.
+  - `supervision-audit.spec.ts`: Visualización de tarjetas KPI, filtrado reactivo de procesos, inspección drawer, visor de auditoría, paginación y modal de inspección de payload saneado.
+  - `curricular-flow.spec.ts`: Flujo completo desde creación/selección de programa, confirmación de matriz Excel estructurada, desbloqueo y confirmación de proyecto formativo, planeación pedagógica integrada multi-RAP y exportación oficial GPFI-F-134 V05 en MinIO.
+
+
+
+

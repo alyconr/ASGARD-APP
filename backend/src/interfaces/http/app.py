@@ -14,6 +14,10 @@ from src.infrastructure.runtime import configure_asyncio_event_loop_policy
 configure_asyncio_event_loop_policy()
 
 
+from src.interfaces.http.controllers.admin_dashboard import (
+    router as admin_dashboard_router,
+)
+from src.interfaces.http.controllers.audit import router as audit_router
 from src.interfaces.http.controllers.auth import router as auth_router
 from src.interfaces.http.controllers.competencias import (
     router as competencias_router,
@@ -89,26 +93,34 @@ def create_application() -> FastAPI:
     async def unhandled_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        logger.error(
+        current_settings = get_settings()
+        logger.exception(
             "Unhandled exception on %s %s: %s",
             request.method,
             request.url.path,
             exc,
-            exc_info=True,
         )
+        if current_settings.is_production:
+            detail = "Internal server error"
+        else:
+            detail = str(exc) or "Internal server error"
+
         response = JSONResponse(
             status_code=500,
-            content={"detail": str(exc) or "Internal server error"},
+            content={"detail": detail},
         )
         origin = request.headers.get("origin")
-        if origin:
+        if origin and origin in current_settings.cors_allow_origin_list:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
         return response
 
     application.include_router(health_router)
     application.include_router(auth_router)
     application.include_router(equipos_router)
+    application.include_router(admin_dashboard_router)
+    application.include_router(audit_router)
     application.include_router(dashboard_router)
     application.include_router(drafts_router)
 

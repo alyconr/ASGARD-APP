@@ -791,11 +791,16 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `nombre` (VARCHAR 100, NOT NULL)
   - `apellido` (VARCHAR 100, NOT NULL)
   - `telefono` (VARCHAR 20, NULL)
+  - `area` (VARCHAR 100, NULL)
   - `coordinacion_id` (UUID, FK -> `coordinaciones.id`, NULL para administradores globales)
   - `especialidad_id` (UUID, FK -> `especialidades.id`, NULL para administradores globales)
-  - `activo` (BOOLEAN, DEFAULT TRUE)
-  - `token_version` (INTEGER, NOT NULL, DEFAULT 1) — Versión de token para revocación instantánea en logout y cambio de clave
+  - `estado` (VARCHAR 20, NOT NULL, DEFAULT 'ACTIVO'): `ACTIVO`, `INACTIVO`, `BLOQUEADO` (índice `ix_usuarios_estado`)
+  - `debe_cambiar_password` (BOOLEAN, NOT NULL, DEFAULT FALSE) — Flag para obligatoriedad de primer acceso
+  - `ultimo_acceso` (TIMESTAMPTZ, NULL) — Marca temporal del último inicio de sesión
+  - `activo` (BOOLEAN property derivada: `estado == 'ACTIVO'`)
+  - `token_version` (INTEGER, NOT NULL, DEFAULT 1) — Versión de token para revocación instantánea en logout, cambio de estado y reseteo de clave
   - `creado_en`, `actualizado_en` (TIMESTAMPTZ)
+  - Indexes: `ix_usuarios_estado`, `ix_usuarios_area`, `ix_usuarios_email`
 
 - **`roles`**:
   - `id` (UUID, PK)
@@ -830,6 +835,7 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
   - `especialidad_id` (UUID, FK -> `especialidades.id`, NOT NULL)
   - `lider_id` (UUID, FK -> `usuarios.id`, NOT NULL)
   - `estado` (VARCHAR 20, NOT NULL, DEFAULT 'ACTIVO'): `ACTIVO`, `INACTIVO`
+  - Indexes: `ix_equipos_ejecutores_estado`, `ix_equipos_ejecutores_coordinacion_id`, `ix_equipos_ejecutores_especialidad_id`, `ix_equipos_ejecutores_lider_id`
 
 - **`equipos_ejecutores_miembros`**:
   - `id` (UUID, PK)
@@ -872,6 +878,51 @@ A fin de garantizar la autenticación de usuarios, roles multinivel y el aislami
     - `ix_user_sessions_jti`
     - `ix_user_sessions_expires_at`
     - `ix_user_sessions_revoked_at`
+
+## 17.5 Integridad y Concurrencia en Rotación de Tokens (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+- Las operaciones de rotación en `user_sessions` aplican bloqueo a nivel de fila (`SELECT ... FOR UPDATE`) sobre el registro correspondiente al `jti`.
+- El consumo de tokens es estrictamente atómico: una sola transacción por `jti` puede completar la rotación. Intentos simultáneos con el mismo `jti` detectan `revoked_at IS NOT NULL`, revocan todas las sesiones asociadas a `token_family` y rechazan con HTTP 401.
+- El refresh token no se persiste en claro en ningún campo ni se transmite en el cuerpo de respuestas JSON.
+
+---
+
+# 18. Modelo de Auditoría Institucional y Read Models Jerárquicos (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 18.1 Evolución de `EventoAuditoria` (`eventos_auditoria`)
+- **`eventos_auditoria`**:
+  - `id` (UUID, PK)
+  - `fecha_evento` (TIMESTAMPTZ, NOT NULL, DEFAULT now())
+  - `actor_usuario_id` (UUID, FK -> `usuarios.id` ON DELETE SET NULL, NULL) — Identificador relacional del actor
+  - `accion` (VARCHAR 100, NOT NULL) — Ej: `CREACION`, `MODIFICACION`, `ELIMINACION`, `LOGIN`, `LOGOUT`
+  - `entidad` (VARCHAR 100, NOT NULL) — Ej: `PROCESO_CURRICULAR`, `USUARIO`, `EQUIPO_EJECUTOR`
+  - `registro_id` (VARCHAR 100, NOT NULL)
+  - `referencia_id` (UUID, NULL) — Correlación directa con el proceso curricular o borrador activo
+  - `origen` (VARCHAR 100, NOT NULL, DEFAULT 'APP')
+  - `ip_origen` (VARCHAR 45, NULL)
+  - `user_agent` (TEXT, NULL)
+  - `detalle` (JSONB, NOT NULL, DEFAULT {}) — Payload de cambios (saneado en capa de consulta)
+  - Relationship: `actor` -> `Usuario` (lazy="joined")
+  - Indexes:
+    - `ix_eventos_auditoria_fecha_evento` (sobre `fecha_evento DESC`)
+    - `ix_eventos_auditoria_accion`
+    - `ix_eventos_auditoria_entidad`
+    - `ix_eventos_auditoria_actor_usuario_id`
+    - `ix_eventos_auditoria_referencia_id`
+
+## 18.2 Índices Jerárquicos en `procesos_curriculares`
+- Optimización de consultas de supervisión agregada mediante índices específicos:
+  - `ix_procesos_curriculares_coordinacion_id`
+  - `ix_procesos_curriculares_especialidad_id`
+  - Relaciones bidireccionales `programa` y `proyecto` hacia `ProgramaFormacion` y `ProyectoFormativo` respectivamente.
+
+## 18.3 Read Models en Capa de Aplicación
+- `AdminDashboardQueryService`: Realiza consultas agregadas multi-tabla con `OUTER JOIN` sobre `ProcesoCurricular`, `ProgramaFormacion`, `ProyectoFormativo`, `EquipoEjecutor`, `Usuario` y `PlaneacionPedagogica` para suministrar:
+  - Resumen KPI reactivo (`AdminDashboardResumenDTO`).
+  - Lista paginada con proyección relacional limpia (`AdminProcesoItemDTO`).
+  - Inspección técnica en profundidad por `referencia_id` (`AdminProcesoDetailDTO`).
+- `AuditQueryService`: Consulta paginada con filtros sobre `eventos_auditoria` con resolución de actor y saneamiento recursivo de campos sensibles (`AuditPaginatedResponseDTO`, `AuditItemDTO`).
+
+
 
 
 

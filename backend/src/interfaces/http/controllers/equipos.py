@@ -5,32 +5,31 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from src.domain.shared.enums import EstadoEquipo, EstadoScopeProceso, RolUsuario
+from src.application.services.organization_admin import OrganizationAdminService
+from src.application.services.team_admin import TeamAdminService
+from src.domain.shared.enums import EstadoScopeProceso, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
-from src.infrastructure.db.models.organizacion import (
-    Coordinacion,
-    EquipoEjecutor,
-    EquipoEjecutorMiembro,
-    Especialidad,
-    ProcesoCurricular,
-)
+from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
-from src.infrastructure.repositories.audit import AuditRepository
-from src.interfaces.http.controllers.auth import _map_user_response
 from src.interfaces.http.deps import get_current_user, require_roles
 from src.interfaces.http.schemas.organizacion import (
+    CoordinacionCreate,
     CoordinacionResponse,
+    CoordinacionUpdate,
     EquipoEjecutorCreate,
     EquipoEjecutorResponse,
+    EquipoEjecutorUpdate,
+    EspecialidadCreate,
     EspecialidadResponse,
+    EspecialidadUpdate,
     MiembroCreate,
     MiembroResponse,
     MiembroUpdate,
+    PaginatedEquiposResponse,
     ProcesoAsignarRequest,
     ProcesoCurricularResponse,
 )
@@ -38,90 +37,166 @@ from src.interfaces.http.schemas.organizacion import (
 router = APIRouter(prefix="/api/v1", tags=["organizacion"])
 
 
+# ==========================================
+# COORDINACIONES
+# ==========================================
+
+
 @router.get("/coordinaciones", response_model=list[CoordinacionResponse])
 async def list_coordinaciones(
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    solo_activas: bool = Query(False),
 ) -> list[CoordinacionResponse]:
-    """Return all active academic coordinations."""
-    stmt = select(Coordinacion).where(Coordinacion.activo.is_(True)).order_by(Coordinacion.nombre)
-    res = await session.execute(stmt)
-    return [CoordinacionResponse.model_validate(c) for c in res.scalars().all()]
+    """Return academic coordinations with optional active-only filter."""
+    service = OrganizationAdminService(session)
+    return await service.list_coordinaciones(solo_activas=solo_activas)
+
+
+@router.get("/coordinaciones/{coordinacion_id}", response_model=CoordinacionResponse)
+async def get_coordinacion(
+    coordinacion_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> CoordinacionResponse:
+    """Return single coordination detail."""
+    service = OrganizationAdminService(session)
+    return await service.get_coordinacion(coordinacion_id)
+
+
+@router.post(
+    "/coordinaciones",
+    response_model=CoordinacionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def create_coordinacion(
+    payload: CoordinacionCreate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> CoordinacionResponse:
+    """Create a new coordination with unique code."""
+    service = OrganizationAdminService(session)
+    return await service.create_coordinacion(current_user, payload)
+
+
+@router.patch(
+    "/coordinaciones/{coordinacion_id}",
+    response_model=CoordinacionResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def update_coordinacion(
+    coordinacion_id: uuid.UUID,
+    payload: CoordinacionUpdate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> CoordinacionResponse:
+    """Update coordination details or status with dependency validation."""
+    service = OrganizationAdminService(session)
+    return await service.update_coordinacion(current_user, coordinacion_id, payload)
+
+
+# ==========================================
+# ESPECIALIDADES
+# ==========================================
 
 
 @router.get("/coordinaciones/{coordinacion_id}/especialidades", response_model=list[EspecialidadResponse])
 async def list_especialidades_by_coordinacion(
     coordinacion_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    solo_activas: bool = Query(False),
 ) -> list[EspecialidadResponse]:
-    """Return all active specialties under a coordination."""
-    stmt = (
-        select(Especialidad)
-        .where(
-            Especialidad.coordinacion_id == coordinacion_id,
-            Especialidad.activo.is_(True),
-        )
-        .order_by(Especialidad.nombre)
-    )
-    res = await session.execute(stmt)
-    return [EspecialidadResponse.model_validate(e) for e in res.scalars().all()]
+    """Return specialties under a coordination."""
+    service = OrganizationAdminService(session)
+    return await service.list_especialidades_by_coordinacion(coordinacion_id, solo_activas=solo_activas)
 
 
-def _map_equipo_response(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
-    miembros_dtos = [
-        MiembroResponse(
-            id=m.id,
-            equipo_id=m.equipo_id,
-            usuario_id=m.usuario_id,
-            activo=m.activo,
-            fecha_asignacion=m.fecha_asignacion,
-            usuario=_map_user_response(m.usuario) if m.usuario else None,
-        )
-        for m in equipo.miembros
-    ]
-    return EquipoEjecutorResponse(
-        id=equipo.id,
-        nombre=equipo.nombre,
-        coordinacion_id=equipo.coordinacion_id,
-        especialidad_id=equipo.especialidad_id,
-        lider_id=equipo.lider_id,
-        estado=equipo.estado.value,
-        lider=_map_user_response(equipo.lider) if equipo.lider else None,
-        miembros=miembros_dtos,
-    )
+@router.get("/especialidades/{especialidad_id}", response_model=EspecialidadResponse)
+async def get_especialidad(
+    especialidad_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> EspecialidadResponse:
+    """Return single specialty detail."""
+    service = OrganizationAdminService(session)
+    return await service.get_especialidad(especialidad_id)
 
 
-@router.get("/equipos", response_model=list[EquipoEjecutorResponse])
+@router.post(
+    "/coordinaciones/{coordinacion_id}/especialidades",
+    response_model=EspecialidadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def create_especialidad(
+    coordinacion_id: uuid.UUID,
+    payload: EspecialidadCreate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> EspecialidadResponse:
+    """Create a new specialty under an active coordination."""
+    service = OrganizationAdminService(session)
+    return await service.create_especialidad(current_user, coordinacion_id, payload)
+
+
+@router.patch(
+    "/especialidades/{especialidad_id}",
+    response_model=EspecialidadResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def update_especialidad(
+    especialidad_id: uuid.UUID,
+    payload: EspecialidadUpdate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> EspecialidadResponse:
+    """Update specialty details or status enforcing dependency checks."""
+    service = OrganizationAdminService(session)
+    return await service.update_especialidad(current_user, especialidad_id, payload)
+
+
+# ==========================================
+# EQUIPOS EJECUTORES
+# ==========================================
+
+
+@router.get("/equipos", response_model=PaginatedEquiposResponse)
 async def list_equipos(
     session: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[Usuario, Depends(get_current_user)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None),
+    estado: str | None = Query(None),
     coordinacion_id: uuid.UUID | None = Query(None),
     especialidad_id: uuid.UUID | None = Query(None),
-) -> list[EquipoEjecutorResponse]:
-    """List executing teams according to user role and filters."""
-    stmt = (
-        select(EquipoEjecutor)
-        .options(
-            selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
-            selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
-        )
-        .order_by(EquipoEjecutor.nombre)
+    lider_id: uuid.UUID | None = Query(None),
+) -> PaginatedEquiposResponse:
+    """List executing teams paginated server-side with role scoping."""
+    service = TeamAdminService(session)
+    return await service.list_teams_paginated(
+        actor=current_user,
+        page=page,
+        page_size=page_size,
+        search=search,
+        estado=estado,
+        coordinacion_id=coordinacion_id,
+        especialidad_id=especialidad_id,
+        lider_id=lider_id,
     )
 
-    if current_user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-        stmt = stmt.where(EquipoEjecutor.lider_id == current_user.id)
-    elif current_user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
-        stmt = stmt.join(EquipoEjecutorMiembro).where(
-            EquipoEjecutorMiembro.usuario_id == current_user.id,
-            EquipoEjecutorMiembro.activo.is_(True),
-        )
-    else:
-        if coordinacion_id:
-            stmt = stmt.where(EquipoEjecutor.coordinacion_id == coordinacion_id)
-        if especialidad_id:
-            stmt = stmt.where(EquipoEjecutor.especialidad_id == especialidad_id)
 
-    res = await session.execute(stmt)
-    return [_map_equipo_response(e) for e in res.scalars().unique().all()]
+@router.get("/equipos/{equipo_id}", response_model=EquipoEjecutorResponse)
+async def get_equipo(
+    equipo_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> EquipoEjecutorResponse:
+    """Return executing team details."""
+    service = TeamAdminService(session)
+    return await service.get_team(equipo_id)
 
 
 @router.post(
@@ -135,61 +210,25 @@ async def create_equipo(
     current_user: Annotated[Usuario, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> EquipoEjecutorResponse:
-    """Create a new executing team enforcing leader and specialty integrity."""
-    lider = await session.get(
-        Usuario,
-        payload.lider_id,
-        options=[selectinload(Usuario.roles)],
-    )
-    if lider is None or not lider.activo:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="El líder especificado no existe o está inactivo",
-        )
+    """Create a new executing team enforcing leader role, status, and coordination/specialty integrity."""
+    service = TeamAdminService(session)
+    return await service.create_team(current_user, payload)
 
-    # Invariant: Líder debe pertenecer a la misma coordinación y especialidad
-    if lider.coordinacion_id != payload.coordinacion_id or lider.especialidad_id != payload.especialidad_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="La coordinación y especialidad del equipo deben coincidir exactamente con las del líder",
-        )
 
-    # Verify specialty belongs to coordination
-    esp = await session.get(Especialidad, payload.especialidad_id)
-    if esp is None or esp.coordinacion_id != payload.coordinacion_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="La especialidad no pertenece a la coordinación especificada",
-        )
-
-    equipo = EquipoEjecutor(
-        nombre=payload.nombre.strip(),
-        coordinacion_id=payload.coordinacion_id,
-        especialidad_id=payload.especialidad_id,
-        lider_id=payload.lider_id,
-        estado=EstadoEquipo.ACTIVO,
-    )
-    session.add(equipo)
-    await session.flush()
-
-    audit_repo = AuditRepository(session)
-    await audit_repo.add_event(
-        entidad="EquipoEjecutor",
-        entidad_id=equipo.id,
-        accion="TEAM_CREATED",
-        detalle={"creado_por": str(current_user.id), "nombre": equipo.nombre, "lider_id": str(equipo.lider_id)},
-    )
-    await session.commit()
-
-    reloaded = await session.get(
-        EquipoEjecutor,
-        equipo.id,
-        options=[
-            selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
-            selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
-        ],
-    )
-    return _map_equipo_response(reloaded)  # type: ignore
+@router.patch(
+    "/equipos/{equipo_id}",
+    response_model=EquipoEjecutorResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def update_equipo(
+    equipo_id: uuid.UUID,
+    payload: EquipoEjecutorUpdate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> EquipoEjecutorResponse:
+    """Update team details, including leader change with transactional propagation to assigned processes."""
+    service = TeamAdminService(session)
+    return await service.update_team(current_user, equipo_id, payload)
 
 
 @router.post(
@@ -205,73 +244,8 @@ async def add_miembro_equipo(
     current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> MiembroResponse:
     """Attach an additional user to an executing team, validating organizational consistency."""
-    equipo = await session.get(EquipoEjecutor, equipo_id)
-    if equipo is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
-
-    usuario = await session.get(Usuario, payload.usuario_id, options=[selectinload(Usuario.roles)])
-    if usuario is None or not usuario.activo:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Usuario no válido o inactivo")
-
-    # Invariant: Usuario de apoyo debe pertenecer a la misma coordinación y especialidad
-    if usuario.coordinacion_id != equipo.coordinacion_id or usuario.especialidad_id != equipo.especialidad_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="El usuario de apoyo debe pertenecer a la misma coordinación y especialidad del equipo ejecutor",
-        )
-
-    audit_repo = AuditRepository(session)
-    stmt = select(EquipoEjecutorMiembro).where(
-        EquipoEjecutorMiembro.equipo_id == equipo_id,
-        EquipoEjecutorMiembro.usuario_id == payload.usuario_id,
-    )
-    res = await session.execute(stmt)
-    existing = res.scalar_one_or_none()
-    if existing:
-        existing.activo = True
-        await audit_repo.add_event(
-            entidad="EquipoEjecutorMiembro",
-            entidad_id=existing.id,
-            accion="TEAM_MEMBER_ADDED",
-            detalle={"equipo_id": str(equipo_id), "usuario_id": str(payload.usuario_id), "reactivado": True},
-        )
-        await session.commit()
-        await session.refresh(existing)
-        return MiembroResponse(
-            id=existing.id,
-            equipo_id=existing.equipo_id,
-            usuario_id=existing.usuario_id,
-            activo=existing.activo,
-            fecha_asignacion=existing.fecha_asignacion,
-            usuario=_map_user_response(usuario),
-        )
-
-    miembro = EquipoEjecutorMiembro(
-        equipo_id=equipo_id,
-        usuario_id=payload.usuario_id,
-        activo=True,
-        asignado_por=current_user.id,
-    )
-    session.add(miembro)
-    await session.flush()
-
-    await audit_repo.add_event(
-        entidad="EquipoEjecutorMiembro",
-        entidad_id=miembro.id,
-        accion="TEAM_MEMBER_ADDED",
-        detalle={"equipo_id": str(equipo_id), "usuario_id": str(payload.usuario_id)},
-    )
-    await session.commit()
-    await session.refresh(miembro)
-
-    return MiembroResponse(
-        id=miembro.id,
-        equipo_id=miembro.equipo_id,
-        usuario_id=miembro.usuario_id,
-        activo=miembro.activo,
-        fecha_asignacion=miembro.fecha_asignacion,
-        usuario=_map_user_response(usuario),
-    )
+    service = TeamAdminService(session)
+    return await service.add_member(current_user, equipo_id, payload)
 
 
 @router.patch(
@@ -284,39 +258,16 @@ async def update_miembro_status(
     usuario_id: uuid.UUID,
     payload: MiembroUpdate,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> MiembroResponse:
     """Activate or deactivate an additional user's team membership."""
-    stmt = (
-        select(EquipoEjecutorMiembro)
-        .where(
-            EquipoEjecutorMiembro.equipo_id == equipo_id,
-            EquipoEjecutorMiembro.usuario_id == usuario_id,
-        )
-        .options(selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles))
-    )
-    res = await session.execute(stmt)
-    miembro = res.scalar_one_or_none()
-    if miembro is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membresía no encontrada")
+    service = TeamAdminService(session)
+    return await service.update_member_status(current_user, equipo_id, usuario_id, payload)
 
-    miembro.activo = payload.activo
-    audit_repo = AuditRepository(session)
-    await audit_repo.add_event(
-        entidad="EquipoEjecutorMiembro",
-        entidad_id=miembro.id,
-        accion="TEAM_MEMBER_DISABLED" if not payload.activo else "TEAM_MEMBER_ENABLED",
-        detalle={"equipo_id": str(equipo_id), "usuario_id": str(usuario_id), "activo": payload.activo},
-    )
-    await session.commit()
-    await session.refresh(miembro)
-    return MiembroResponse(
-        id=miembro.id,
-        equipo_id=miembro.equipo_id,
-        usuario_id=miembro.usuario_id,
-        activo=miembro.activo,
-        fecha_asignacion=miembro.fecha_asignacion,
-        usuario=_map_user_response(miembro.usuario) if miembro.usuario else None,
-    )
+
+# ==========================================
+# PROCESOS CURRICULARES
+# ==========================================
 
 
 @router.post(
@@ -328,48 +279,11 @@ async def asignar_proceso(
     referencia_id: uuid.UUID,
     payload: ProcesoAsignarRequest,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> ProcesoCurricularResponse:
     """Assign or reassign a curricular process to an executing team and leader."""
-    equipo = await session.get(EquipoEjecutor, payload.equipo_ejecutor_id)
-    if equipo is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
-
-    lider_id = payload.lider_id or equipo.lider_id
-
-    stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
-    res = await session.execute(stmt)
-    proceso = res.scalar_one_or_none()
-
-    audit_repo = AuditRepository(session)
-    accion = "PROCESS_REASSIGNED" if proceso and proceso.equipo_ejecutor_id else "PROCESS_ASSIGNED"
-
-    if proceso is None:
-        proceso = ProcesoCurricular(
-            referencia_id=referencia_id,
-            coordinacion_id=equipo.coordinacion_id,
-            especialidad_id=equipo.especialidad_id,
-            equipo_ejecutor_id=equipo.id,
-            lider_id=lider_id,
-            estado_scope=EstadoScopeProceso.ASIGNADO,
-        )
-        session.add(proceso)
-    else:
-        proceso.coordinacion_id = equipo.coordinacion_id
-        proceso.especialidad_id = equipo.especialidad_id
-        proceso.equipo_ejecutor_id = equipo.id
-        proceso.lider_id = lider_id
-        proceso.estado_scope = EstadoScopeProceso.ASIGNADO
-
-    await session.flush()
-    await audit_repo.add_event(
-        entidad="ProcesoCurricular",
-        entidad_id=proceso.id,
-        accion=accion,
-        detalle={"referencia_id": str(referencia_id), "equipo_id": str(equipo.id), "lider_id": str(lider_id)},
-    )
-    await session.commit()
-    await session.refresh(proceso)
-    return ProcesoCurricularResponse.model_validate(proceso)
+    service = TeamAdminService(session)
+    return await service.assign_process(current_user, referencia_id, payload)
 
 
 @router.get(

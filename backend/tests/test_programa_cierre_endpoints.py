@@ -14,8 +14,12 @@ from src.application.dto.programa_cierre import (
 )
 from src.application.services.programa_cierre import ProgramaCierreValidationError
 from src.domain.shared.enums import EstadoBloque
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.programa_cierre import get_programa_cierre_service
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProgramaCierreService:

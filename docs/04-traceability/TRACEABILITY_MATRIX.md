@@ -491,3 +491,26 @@ Esta matriz se usa para:
 | Exportación consolidada | generar/descargar por `proyecto_id` | Contadores y descarga consolidada | endpoints y wizard |
 | Validación de horas y brechas | estado de formato oficial | Vista previa y asistente | servicio y guide engine |
 | MinIO real | `save_excel` / `read_excel` | descarga Blob | pruebas HTTP y API |
+
+## Trazabilidad Sprint B — Administración Organizacional Multiusuario
+
+| Requisito / Historia | Backend | Frontend | Prueba |
+|---|---|---|---|
+| HU-25: Gestión de Usuarios y Roles | `UserAdminService`, `/api/v1/auth/users` | `UsersAdmin`, `UserFormDialog` | `test_sprint_b_admin.py` |
+| HU-26: Estado y Cambio Forzoso de Clave | `deps.py`, `UserAdminService`, `/api/v1/auth/change-password` | `UserStatusDialog`, `ForceChangePasswordDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| HU-27: Coordinaciones y Especialidades | `OrganizationAdminService`, `/api/v1/coordinaciones` | `OrganizationAdmin`, `CoordinationFormDialog`, `SpecialtyFormDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| HU-28: Equipos Ejecutores y Procesos | `TeamAdminService`, `/api/v1/equipos`, `/procesos/{ref}/asignar` | `EquiposAdmin`, `TeamFormDialog` | `test_sprint_b_admin.py`, `admin-workspace.test.tsx` |
+| Jerarquía y Anti-Escalación | `UserAdminService` (invariantes ADMIN vs SUPERADMIN) | Condicionales de rol en UI | `test_sprint_b_admin.py` |
+| Revocación Atómica de Sesiones | `token_version` + `UserSession.revoked_at` | Redirección y bloqueo central | `test_sprint_b_admin.py` |
+
+## Trazabilidad Sprint C — Supervisión Jerárquica, Visor de Auditoría y Pruebas E2E
+
+| Requisito / Historia | Backend | Frontend | Prueba |
+|---|---|---|---|
+| HU-29: Supervisión Jerárquica | `AdminDashboardQueryService`, `/api/v1/admin/dashboard/*` | `SummaryCards`, `ProcessFilters`, `ProcessesTable`, `ProcessDetailDrawer` | `test_sprint_c_admin_dashboard.py`, `supervision-audit.spec.ts` |
+| HU-30: Visor de Auditoría Inmutable | `AuditQueryService`, `/api/v1/admin/audit/*` | `AuditFilters`, `AuditTable`, `AuditDetailDialog`, `AuditViewer` | `test_sprint_c_audit.py`, `supervision-audit.spec.ts` |
+| HU-31: Verificación E2E de Roles y Flujo | Configuración Playwright (`playwright.config.ts`) | E2E specs en `frontend/e2e/` | `auth.spec.ts`, `supervision-audit.spec.ts`, `curricular-flow.spec.ts` |
+| Redacción Recursiva de Secretos | `sanitize_audit_payload` en `audit_admin.py` | Visor de payload JSON | `test_sprint_c_audit.py` |
+| Inmutabilidad de Auditoría | Bloqueo nativo (sin rutas DELETE/PATCH en router) | Ausencia de acciones destructivas en UI | `test_sprint_c_audit.py` (405 Method Not Allowed) |
+
+

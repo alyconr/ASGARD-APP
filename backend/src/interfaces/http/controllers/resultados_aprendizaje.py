@@ -24,7 +24,7 @@ from src.infrastructure.repositories.drafts import DraftRepository
 from src.infrastructure.repositories.resultados_aprendizaje import (
     ResultadoAprendizajeRepository,
 )
-from src.interfaces.http.deps import get_access_scope_service, get_optional_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.resultados_aprendizaje import (
     ResultadoAprendizajeDeleteResponse,
     ResultadoAprendizajeListResponse,
@@ -57,12 +57,11 @@ async def list_resultados(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """List learning outcomes for a competence in the current program draft."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.list_resultados(referencia_id, competencia_id)
@@ -85,12 +84,11 @@ async def create_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """Create a learning outcome linked to the given competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.create_resultado(
@@ -126,12 +124,11 @@ async def update_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeListResponse:
     """Update a learning outcome without moving it to another competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.update_resultado(
@@ -169,12 +166,11 @@ async def delete_resultado(
     service: ProgramaResultadoAprendizajeService = Depends(
         get_programa_resultado_service
     ),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ResultadoAprendizajeDeleteResponse:
     """Delete a learning outcome from a competence."""
-    if current_user is not None:
-        await scope_service.require_process_access(current_user, referencia_id)
+    await scope_service.require_process_access(current_user, referencia_id)
 
     try:
         result = await service.delete_resultado(

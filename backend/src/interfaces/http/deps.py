@@ -5,23 +5,36 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.application.services.access_scope import AccessScopeService
+from src.domain.shared.enums import EstadoUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.security.jwt import decode_token
 
 http_bearer = HTTPBearer(auto_error=False)
 
+PASSWORD_CHANGE_WHITELIST = {
+    "/api/v1/auth/me",
+    "/api/v1/auth/change-password",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/refresh",
+}
+
+
+def _get_request(request: Request) -> Request:
+    return request
+
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    request: Annotated[Request, Depends(_get_request)] = None,  # type: ignore
 ) -> Usuario:
     """Validate Bearer JWT token and return active Usuario ORM instance."""
     if credentials is None:
@@ -76,10 +89,15 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.activo:
+    # Validate user status
+    if getattr(user, "estado", EstadoUsuario.ACTIVO) != EstadoUsuario.ACTIVO:
+        if getattr(user, "estado", None) == EstadoUsuario.BLOQUEADO:
+            detail = "La cuenta de usuario está bloqueada"
+        else:
+            detail = "La cuenta de usuario está desactivada"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="La cuenta de usuario está desactivada",
+            detail=detail,
         )
 
     token_ver = payload.get("token_version")
@@ -89,6 +107,15 @@ async def get_current_user(
             detail="La sesión ha expirado o fue cerrada",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Invariant 13: Mandatory first access password change
+    if getattr(user, "debe_cambiar_password", False) and request is not None:
+        path = request.url.path.rstrip("/")
+        if path not in PASSWORD_CHANGE_WHITELIST:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Debe cambiar su contraseña antes de continuar operando en el sistema",
+            )
 
     return user
 

@@ -15,10 +15,14 @@ from src.application.dto.competencias import (
 )
 from src.application.services.competencias import CompetenciaDuplicateCodeError
 from src.domain.shared.enums import EstadoBloque, EstadoCampo
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.competencias import (
     get_programa_competencia_service,
 )
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProgramaCompetenciaService:

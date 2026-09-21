@@ -12,9 +12,13 @@ from src.application.services.drafts import DraftNotFoundError
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoBloque
 from src.infrastructure.db.models.drafts import BorradorSesion
+import pytest
+
 from src.infrastructure.db.session import get_async_session
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.drafts import get_draft_service
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeDraftService:

@@ -10,8 +10,15 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from src.domain.shared.enums import EstadoUsuario
 from src.infrastructure.db.base import Base
-from src.infrastructure.db.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from src.infrastructure.db.models.mixins import (
+    TimestampMixin,
+    UUIDPrimaryKeyMixin,
+    build_postgres_enum,
+)
+
+estado_usuario_enum = build_postgres_enum(EstadoUsuario, "estado_usuario")
 
 if TYPE_CHECKING:
     from src.infrastructure.db.models.organizacion import (
@@ -72,6 +79,8 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_usuarios_email", "email"),
         Index("ix_usuarios_coordinacion_id", "coordinacion_id"),
         Index("ix_usuarios_especialidad_id", "especialidad_id"),
+        Index("ix_usuarios_estado", "estado"),
+        Index("ix_usuarios_area", "area"),
     )
 
     email: Mapped[str] = mapped_column(
@@ -84,6 +93,7 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     apellido: Mapped[str] = mapped_column(String(100), nullable=False)
     telefono: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    area: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     coordinacion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -95,7 +105,22 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("especialidades.id", ondelete="SET NULL"),
         nullable=True,
     )
-    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    estado: Mapped[EstadoUsuario] = mapped_column(
+        estado_usuario_enum,
+        default=EstadoUsuario.ACTIVO,
+        server_default=EstadoUsuario.ACTIVO.value,
+        nullable=False,
+    )
+    debe_cambiar_password: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
+    ultimo_acceso: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     token_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     roles: Mapped[list[Rol]] = relationship(
@@ -126,6 +151,15 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         foreign_keys="EquipoEjecutorMiembro.usuario_id",
         lazy="selectin",
     )
+
+    @property
+    def activo(self) -> bool:
+        """Derived property ensuring backward compatibility without duplicate source of truth."""
+        return self.estado == EstadoUsuario.ACTIVO
+
+    @activo.setter
+    def activo(self, value: bool) -> None:
+        self.estado = EstadoUsuario.ACTIVO if value else EstadoUsuario.INACTIVO
 
     @property
     def role_names(self) -> set[str]:

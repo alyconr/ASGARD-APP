@@ -18,10 +18,14 @@ from src.application.services.conocimientos_proceso import (
     ConocimientoProcesoNotFoundError,
 )
 from src.domain.shared.enums import EstadoCampo, TipoConocimiento
+import pytest
+
 from src.interfaces.http.app import app
 from src.interfaces.http.controllers.conocimientos_proceso import (
     get_programa_conocimiento_proceso_service,
 )
+
+pytestmark = pytest.mark.usefixtures("auth_overrides")
 
 
 class FakeProgramaConocimientoProcesoService:

@@ -370,3 +370,92 @@ Nota vigente: los criterios aparecen primero en un selector eficiente y se rende
 - Debe recordar si el usuario colapso la ayuda.
 
 ---
+
+# 7. Épica: Administración Organizacional Multiusuario (SPRINT-B)
+
+## HU-25. Administración multiusuario y credenciales
+**Como** administrador o superadministrador de ASGARD  
+**Quiero** registrar y gestionar usuarios con roles canónicos y asignación curricular  
+**Para** gobernar el acceso de líderes y apoyos al sistema según su especialidad.
+
+### Criterios de aceptación
+- Solo `SUPERADMIN` y `ADMIN` pueden gestionar usuarios.
+- `ADMIN` no puede crear, editar, listar en detalle, bloquear ni resetear a un `SUPERADMIN`.
+- Roles `LIDER_EQUIPO_EJECUTOR` y `USUARIO_ADICIONAL` requieren coordinación y especialidad activas válidas.
+- Toda cuenta creada administrativamente recibe flag `debe_cambiar_password = true`.
+
+---
+
+## HU-26. Control de estado y cambio de contraseña forzoso
+**Como** usuario con credenciales temporales o administrador que bloquea acceso  
+**Quiero** que el sistema impida el acceso no autorizado y fuerce la personalización de credenciales  
+**Para** garantizar la seguridad institucional de la información curricular.
+
+### Criterios de aceptación
+- El estado puede ser `ACTIVO`, `INACTIVO` o `BLOQUEADO`.
+- Al cambiar estado o resetear clave, se revoca inmediatamente toda sesión activa (`token_version` + revocación DB).
+- Con `debe_cambiar_password = true`, se bloquea todo endpoint salvo la whitelist de autenticación y se despliega modal no cancelable.
+
+---
+
+## HU-27. Catálogo organizacional con guardias de integridad
+**Como** administrador de la entidad  
+**Quiero** gestionar el catálogo de coordinaciones y especialidades  
+**Para** estructurar los centros de formación y restringir equipos ejecutores.
+
+### Criterios de aceptación
+- Los códigos son alfanuméricos en mayúsculas y únicos.
+- No se permite inactivar una coordinación con especialidades activas.
+- No se permite inactivar una especialidad con equipos ejecutores activos.
+
+---
+
+## HU-28. Equipos ejecutores y sincronización transaccional de procesos
+**Como** administrador de formación  
+**Quiero** crear equipos ejecutores, asociar miembros y actualizar su líder  
+**Para** asegurar que los procesos curriculares queden bajo la responsabilidad del líder correcto de forma inmediata.
+
+### Criterios de aceptación
+- El líder debe tener rol `LIDER_EQUIPO_EJECUTOR` y coincidir en coordinación y especialidad.
+- Los miembros de apoyo deben tener rol `USUARIO_ADICIONAL` y pertenecer a la misma coordinación y especialidad.
+- Al cambiar el líder de un equipo, el sistema actualiza de forma transaccional `usuario_lider_id` en todos los procesos curriculares vinculados al equipo.
+
+---
+
+## HU-29. Supervisión jerárquica de procesos formativos
+**Como** directivo institucional (SUPERADMIN o ADMIN)  
+**Quiero** visualizar un tablero centralizado con filtros jerárquicos (Coordinación → Especialidad → Equipo → Líder)  
+**Para** supervisar el estado global de programas, proyectos y planeaciones pedagógicas, identificando procesos huérfanos o rezagados.
+
+### Criterios de aceptación
+- Tarjetas KPI con totales agregados, procesos sin asignar y porcentaje de avance.
+- Filtros reactivos en cascada que recalculan métricas y actualizan la lista paginada.
+- Drawer lateral de inspección técnica con desglose de equipo y planeaciones vinculadas.
+- Acceso restringido exclusivamente a roles directivos (`SUPERADMIN`, `ADMIN`).
+
+---
+
+## HU-30. Visor institucional de auditoría inmutable
+**Como** oficial de cumplimiento y control institucional  
+**Quiero** consultar la bitácora inmutable de eventos con identificación del actor y proceso  
+**Para** realizar seguimiento forense de acciones y modificaciones curriculares sin riesgo de alteración del registro.
+
+### Criterios de aceptación
+- Registro con actor (`id`, `nombre`, `email`, `roles`), acción, entidad, fecha y proceso referenciado.
+- Redacción recursiva automática de contraseñas, secretos y tokens en el payload JSON.
+- Modal de inspección detallada con formateo JSON y función de copiado.
+- Inmutabilidad total: ausencia de endpoints o capacidades de modificación/borrado (`405 Method Not Allowed`).
+
+---
+
+## HU-31. Verificación integral de flujo curricular y roles (E2E)
+**Como** equipo de calidad y aseguramiento de la plataforma  
+**Quiero** contar con pruebas End-to-End automatizadas sobre navegadores reales  
+**Para** certificar que los 4 roles canónicos, el control de primer acceso y el flujo curricular completo (Programa → Proyecto → Planeación → GPFI) funcionan armónicamente sin regresiones.
+
+### Criterios de aceptación
+- Escenarios de autenticación y autorización para `SUPERADMIN`, `ADMIN`, `LIDER` y `USUARIO_ADICIONAL`.
+- Verificación del modal obligatorio de primer acceso (`debe_cambiar_password = true`).
+- Ejecución automatizada de supervisión, auditoría y flujo curricular completo.
+
+

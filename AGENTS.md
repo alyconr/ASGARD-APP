@@ -1,6 +1,14 @@
 # AGENTS.md
 # SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
 
+## PRECHECK OBLIGATORIO ANTES DE MODIFICAR ARCHIVOS
+
+Antes de cualquier cambio:
+1. ejecutar `python scripts/assert_asgard_context.py`;
+2. si retorna código distinto de 0, DETENERSE;
+3. no editar, crear, borrar, mover ni commitear archivos;
+4. reportar que el contexto del repositorio no corresponde a ASGARD.
+
 # Importante
 Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
 
@@ -12,7 +20,14 @@ Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes a
 Aplicación web para construcción de guías de aprendizaje SENA
 
 ## Fase activa
-Fase 1
+Fase 1 y extensiones autorizadas ya construidas y operativas.
+IMPORTANTE: El producto actual ya cuenta con:
+- Cierre y gestión de Programa de Formación y Proyecto Formativo.
+- Módulo completo de Planeación Pedagógica multi-RAP y multi-competencia.
+- Generación de formato institucional GPFI-F-134 V05 (individual y consolidado) en MinIO.
+- Modelo RBAC completo, Equipos Ejecutores, Membresías y AccessScopeService.
+- Autenticación segura con cookies HttpOnly, rotación de refresh tokens y protección anti-replay.
+Ningún agente debe asumir que estos módulos están pendientes o sin construir.
 
 ## Propósito operativo
 Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
@@ -189,6 +204,36 @@ A partir de la implementacion del asistente guiado:
 - la planeacion pedagogica conserva el bloqueo backend que exige programa y proyecto en estado `COMPLETO`;
 - el asistente puede recordar de forma ligera si el usuario lo colapso para no invadir el flujo;
 - la guia nunca reemplaza las validaciones funcionales ni habilita modulos por si sola.
+
+## Decision funcional SPRINT-A-REPOSITORY-GUARDRAILS-SECURITY-CLOSURE
+A partir de Sprint A:
+- El preflight `scripts/assert_asgard_context.py` es obligatorio antes de cualquier modificación.
+- La identidad canónica del repositorio es `ASGARD-APP` (`alyconr/ASGARD-APP`). Proyectos externos como `schedule-stack`, `horarios-app` o `SCHEDULE` provocan aborto inmediato.
+- Ramas permitidas para agentes: `develop`, `feature/*`, `fix/*`, `chore/*`, `test/*`, `docs/*`. La rama `main` aborta por defecto modificaciones automáticas de agentes.
+- La cookie de refresco (`asgard_refresh_token`) siempre se marca `Secure=True` en entornos `production`, `prod` y `staging`, ignorando configuraciones inseguras de flags.
+- Los errores HTTP 500 no exponen `str(exc)` ni detalles internos en producción/staging; se registran en logs y responden mensaje genérico.
+- El contrato de `/api/v1/auth/refresh` opera exclusivamente mediante cookie HttpOnly sin esquema ni payload `RefreshTokenRequest`.
+- La rotación de refresh tokens concurrente con la misma sesión está respaldada por `SELECT ... FOR UPDATE` en PostgreSQL para prevenir race conditions y reuso de tokens.
+
+## Decision funcional SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD
+A partir de Sprint B:
+- Se implementa el módulo completo de Administración Organizacional sobre RBAC y modelo de alcance (`AccessScopeService`).
+- Roles canónicos soportados estrictamente: `SUPERADMIN`, `ADMIN`, `LIDER_EQUIPO_EJECUTOR`, `USUARIO_ADICIONAL` (sin roles nuevos ni combinaciones arbitrarias).
+- Los administradores (`ADMIN`) no pueden crear, listar en detalle, editar, bloquear, desactivar ni resetear credenciales de un `SUPERADMIN` (jerarquía estricta).
+- El estado de usuario soporta `ACTIVO`, `INACTIVO` y `BLOQUEADO`; los usuarios inactivos o bloqueados son rechazados de inmediato en autenticación y validación de tokens.
+- Toda cuenta creada o reseteada administrativamente requiere forzosamente cambio de clave (`debe_cambiar_password = true`) en su primer acceso antes de operar en cualquier módulo.
+- El cambio o bloqueo de estado y reseteo de contraseña revoca de forma atómica todas las sesiones activas en base de datos (`revoked_at = now()`) e incrementa el `token_version` del usuario.
+- Catálogo de Coordinaciones y Especialidades gestionado con validaciones de unicidad de código mayúscula y restricciones de integridad: no se puede inactivar una coordinación con especialidades activas ni una especialidad con equipos ejecutores activos.
+- En Equipos Ejecutores, el cambio de líder actualiza atómicamente la columna `usuario_lider_id` en todos los procesos curriculares vinculados a dicho equipo.
+- No se alteran modelos ni lógica de negocio de los dominios curriculares (`Programa`, `Proyecto`, `Planeacion`, `GPFI-F-134 V05`).
+
+## Decision funcional SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD
+A partir de Sprint C:
+- Supervisión administrativa jerárquica: `AdminDashboardQueryService` implementa agregaciones reactivas y listado paginado server-side (`Coordinación → Especialidad → Programa/Proceso → Proyecto → Equipo → Líder → Planeaciones/Estado`) sin alterar el dashboard operativo existente (`/api/v1/dashboard/{referencia_id}`).
+- Visor institucional de auditoría inmutable: `AuditQueryService` ofrece trazabilidad estructurada con orden descendente por fecha, filtrado multidimensional y sanitización recursiva obligatoria de claves sensibles (`password`, `token`, `secret`, `cookie`, `key`, `credencial`).
+- Invariante de auditoría de solo lectura: queda estrictamente prohibida la creación de endpoints de eliminación o mutación (`DELETE`/`PUT`/`PATCH`) para registros de auditoría (la API responde 405 Method Not Allowed).
+- Evolución del modelo `EventoAuditoria`: adición de claves `actor_usuario_id` (FK `usuarios.id` con `ondelete="SET NULL"`) y `referencia_id` respaldados por migración Alembic `a1b2c3d4e5f6` e índices de alto rendimiento.
+- Suite E2E real: validación con Playwright sobre los 4 roles canónicos, aislamiento estricto de equipos en `AccessScopeService`, cambio forzado de contraseña en primer acceso y happy path curricular integral desde Programa hasta la descarga de `GPFI-F-134 V05`.
 
 ---
 
@@ -564,3 +609,16 @@ A partir de esta fase de micro-hardening:
 - **Cookies y CORS**: Cookie canónica `asgard_refresh_token` configurada con `HttpOnly=True`, `SameSite=Lax`, `Path=/api/v1/auth` y `Secure=True` obligatorio en producción/staging. Prohibido mezclar `allow_credentials=True` con wildcard `*` en CORS.
 - **Descargas Documentales Protegidas**: Descargas de PDF institucional, matriz Excel y formatos GPFI individuales/consolidados se realizan a través de endpoints dedicados protegidos por `AccessScopeService` (`require_process_access`, `can_access_project`, `can_access_planning`). Jamás se expone acceso directo por `storage_key` o UUID sin validar membresía del equipo ejecutor o rol institucional.
 - **Frontend Single-Flight**: `authFetch` agrupa llamadas concurrentes ante 401 en una única promesa compartida de refresh (`refreshTokenSingleFlight`), evitando condiciones de carrera contra la rotación de un solo uso.
+
+---
+
+# 19. Cierre Definitivo de Seguridad y Autenticación Obligatoria (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+A partir de esta corrección final de seguridad:
+- **Autenticación Obligatoria e Irrestricta**: Queda prohibido `get_optional_current_user` en cualquier ruta privada de la API. Todo endpoint privado exige `get_current_user` (o `require_roles`). Cualquier solicitud sin token Bearer válido retorna `401 Unauthorized`. Las validaciones de `AccessScopeService` se evalúan de forma incondicional sobre el usuario autenticado.
+- **Refresh Token Exclusivo en Cookie**: `TokenResponse` y los endpoints `/login` y `/refresh` jamás exponen el refresh token en el cuerpo JSON. El token vive estrictamente en la cookie HttpOnly `asgard_refresh_token`.
+- **Consumo Atómico en PostgreSQL**: La rotación de refresh token en `/api/v1/auth/refresh` ejecuta bloqueo de fila `with_for_update()` tanto en la búsqueda del `jti` como en la revocación de la familia `token_family`, evitando carreras y garantizando que solo una solicitud rote el token.
+- **Sanitización CORS en Errores 500**: El exception handler global no controlado para errores HTTP 500 valida `origin in settings.cors_allow_origin_list` antes de inyectar `Access-Control-Allow-Origin`. Orígenes no confiables jamás se reflejan.
+- **Fail-Fast en Producción y Staging**: El modelo `Settings` aborta el arranque (`ValidationError`) si `app_env` es `production` o `staging` y se usan claves JWT por defecto/débiles o credenciales MinIO por defecto (`admin`/`admin123`).
+- **TTL de Access Token**: Reducido por defecto a 30 minutos (`jwt_access_token_expire_minutes = 30`).
+

@@ -1,7 +1,16 @@
 # IMPLEMENTATION_PLAN.md
 ## Proyecto: Aplicación web para construcción de guías de aprendizaje SENA
 ## Fase: 1
-## Estado: Plan de implementación listo para ejecución
+## Estado: Fase 1 completa + Planeación Pedagógica + GPFI-F-134 V05 + RBAC/Scope + Hardening Seguridad + Sprint A Guardrails
+> [!IMPORTANT]
+> **ESTADO AUTORITATIVO DEL PRODUCTO**: El sistema ya tiene implementados y operativos:
+> - Cierre y gestión de Programa de Formación y Proyecto Formativo.
+> - Módulo de Planeación Pedagógica multi-RAP y multi-competencia.
+> - Generación institucional del formato GPFI-F-134 V05 (individual y consolidado) en MinIO.
+> - Modelo RBAC con Roles, Equipos Ejecutores, Membresías y AccessScopeService.
+> - Autenticación con cookies HttpOnly, rotación de refresh tokens con row-locking y sanitización de errores 500.
+> - Preflight obligatorio de contexto `scripts/assert_asgard_context.py`.
+> Ningún agente debe re-implementar estas áreas.
 ## Última actualización: [YYYY-MM-DD]
 
 ---
@@ -802,4 +811,112 @@ Antes de generar código, Codex debe:
    - Deny-by-default para usuarios ajenos al equipo ejecutor asignado al proceso.
 5. **Frontend Concurrency Hardening**:
    - Función `refreshTokenSingleFlight` en `frontend/src/lib/api.ts` para coalescencia de reintentos concurrentes de 401.
+
+---
+
+# 18. Hito de Cierre Definitivo de Seguridad (RBAC-AUTH-MANDATORY-PRIVATE-ROUTES)
+
+## 18.1 Entregables Técnicos
+1. **Autenticación Obligatoria en Endpoints Privados**:
+   - Sustitución completa de `get_optional_current_user` por `get_current_user` en todos los controladores privados.
+   - Eliminación de bypasses silenciosos: toda solicitud anónima a un endpoint privado resulta en `401 Unauthorized`.
+   - Invocaciones a `AccessScopeService` ejecutadas de forma incondicional sobre el usuario autenticado.
+2. **Confinamiento Estricto de Refresh Token**:
+   - Remoción de `refresh_token` en el esquema de respuesta `TokenResponse` y en las rutas `/login` y `/refresh`.
+   - Transmisión exclusiva vía cookie `asgard_refresh_token` (`HttpOnly=True`).
+3. **Consumo Atómico en PostgreSQL**:
+   - Inclusión de `.with_for_update()` en la consulta de `UserSession` por `jti` y en la revocación de la familia en `/api/v1/auth/refresh`.
+4. **CORS en Manejador Global de Errores 500**:
+   - Validación estricta de `Origin` contra `settings.cors_allow_origin_list` antes de emitir encabezado `Access-Control-Allow-Origin`.
+5. **Fail-Fast en Producción y Staging**:
+   - Validador en `Settings` que aborta el arranque si se usan secretos JWT o credenciales MinIO por defecto.
+6. **Reducción de TTL de Access Token**:
+   - Expiración de Access Token ajustada a 30 minutos por defecto.
+
+---
+
+# 19. Hito Sprint B — Administración Organizacional Multiusuario (SPRINT-B-ADMINISTRACION-ORGANIZACIONAL-ASGARD)
+
+## 19.1 Entregables Técnicos Backend
+1. **Persistencia y Modelo**:
+   - Campos `area`, `estado`, `debe_cambiar_password`, `ultimo_acceso` en `Usuario`, índices sobre `estado` y `area`, e índice `ix_equipos_ejecutores_estado`.
+   - Migración Alembic append-only `f4a5b6c7d8e9_sprint_b_organizational_admin.py` con single head validado.
+   - Script de sembrado idempotente `backend/scripts/seed_organization_catalog.py` para coordinaciones TEL, CRE, LOG, MER, TRA y especialidades REDES, ADSO.
+2. **Servicios de Aplicación**:
+   - `UserAdminService`: Creación con verificación anti-escalación (`ADMIN` no puede tocar `SUPERADMIN`), listado paginado con filtros, actualización, transición de estados con revocación de sesiones, reseteo administrativo con contraseña temporal.
+   - `OrganizationAdminService`: CRUD para coordinaciones y especialidades con guardias activas contra desactivación si existen dependencias vivas.
+   - `TeamAdminService`: Creación y actualización de equipos con validación de rol de líder y ámbito coordinacion/especialidad; actualización de líder con propagación transaccional inmediata sobre `procesos_curriculares.usuario_lider_id`; membresías de apoyo.
+3. **Controladores y Seguridad**:
+   - Controladores `auth.py` y `equipos.py` actualizados con DTOs de paginación y endpoints dedicados.
+   - Endpoint `GET /api/v1/auth/me` para consulta y rehidratación de perfil autenticado.
+   - Enforcement central en `deps.py`: rechazo de usuarios inactivos/bloqueados y bloqueo HTTP 403 con whitelist estricta (`/me`, `/change-password`, `/logout`, `/refresh`) si `debe_cambiar_password == true`.
+
+## 19.2 Entregables Técnicos Frontend
+1. **Componentes y Diálogos**:
+   - `ForceChangePasswordDialog`: Diálogo modal obligatorio, no cancelable y con confirmación para primer acceso con credenciales temporales.
+   - `UserFormDialog`: Creación y edición de usuarios con selects dependientes coordinación -> especialidad y confirmación de contraseña.
+   - `UserStatusDialog`: Modificación de estado con advertencias claras de revocación inmediata de sesiones activas.
+   - `UserResetPasswordDialog`: Reseteo administrativo de clave con copiado seguro al portapapeles.
+   - `CoordinationFormDialog` y `SpecialtyFormDialog`: Gestión de catálogo organizacional con códigos canónicos en mayúsculas.
+   - `TeamFormDialog`: Creación y edición de equipos ejecutores con selección de líder compatible.
+2. **Vistas Administrativas**:
+   - `UsersAdmin`: Tabla paginada en servidor con filtros de búsqueda, rol, estado y coordinación.
+   - `OrganizationAdmin`: Vista dual-pane de coordinaciones y especialidades con contadores y guardias de activación.
+   - `EquiposAdmin`: Cuadrícula paginada de equipos con membresías de apoyo y asignación de procesos sin asignar.
+   - `AdminWorkspace`: Centro unificado de administración organizacional con navegación por pestañas e indicadores de seguridad institucional.
+   - `MasterDashboard`: Integración de la pestaña administrativa para roles con privilegio y montaje global de `ForceChangePasswordDialog`.
+
+## 19.3 Calidad y Verificación
+- Suite backend: 339 tests pasando, 2 skipped (`pytest -q`).
+- Suite frontend: 23 archivos de prueba, 133 tests pasando (`vitest run`).
+- Verificación de tipos: `npm run typecheck` completado con 0 errores.
+- Build de producción: `npm run build` completado exitosamente con todas las rutas compiladas.
+
+---
+
+# 20. Hito Sprint C — Dashboard Administrativo Jerárquico + Visor de Auditoría + Pruebas E2E (SPRINT-C-SUPERVISION-AUDIT-E2E-ASGARD)
+
+## 20.1 Entregables Técnicos Backend
+1. **Evolución del Modelo y Persistencia**:
+   - `EventoAuditoria` extendido con `actor_usuario_id` (FK `usuarios.id` ON DELETE SET NULL), `referencia_id`, relación relacional `actor` e índices optimizados para consulta y ordenamiento temporal.
+   - `ProcesoCurricular` optimizado con índices jerárquicos sobre `coordinacion_id` y `especialidad_id`, y relaciones declarativas `programa` y `proyecto`.
+   - Migración Alembic append-only `a1b2c3d4e5f6_sprint_c_audit_evolution.py` con single head validado.
+2. **Servicios de Lectura (Read Models)**:
+   - `AdminDashboardQueryService`: Métricas reactivas agregadas (`get_resumen`), listado paginado multi-criterio (`list_procesos_paginated`) y detalle en profundidad (`get_proceso_detail`).
+   - `AuditQueryService`: Listado paginado con filtros combinados (`list_events_paginated`), inspección forense (`get_event_by_id`) y saneamiento recursivo profundo de campos sensibles (`sanitize_audit_payload`).
+3. **Controladores e Inmutabilidad**:
+   - Controladores `/api/v1/admin/dashboard` y `/api/v1/admin/audit` protegidos estrictamente con `require_roles(SUPERADMIN, ADMIN)`.
+   - Inmutabilidad estricta: Ausencia total de endpoints de eliminación o edición en auditoría (rechazo `HTTP 405 Method Not Allowed`).
+
+## 20.2 Entregables Técnicos Frontend
+1. **Supervisión Jerárquica**:
+   - `SummaryCards`: KPIs reactivos de programas, proyectos, planeaciones y procesos sin asignar.
+   - `ProcessFilters`: Filtros en cascada (coordinación -> especialidad -> equipo -> estados).
+   - `ProcessesTable`: Tabla institucional con barras de avance, insignias de estado y selector de inspección.
+   - `ProcessDetailDrawer`: Inspección lateral completa del proceso, equipo y planeaciones.
+   - `AdminDashboard`: Vista integradora con actualización reactiva.
+2. **Visor de Auditoría Institucional**:
+   - `AuditFilters`: Búsqueda por texto y filtros por acción, entidad y rango de fechas.
+   - `AuditTable`: Historial con formato institucional, actor identificado y badges de acción.
+   - `AuditDetailDialog`: Modal con visualizador formateado de payload JSON saneado y función de copiado.
+   - `AuditViewer`: Vista unificada de auditoría.
+3. **AdminWorkspace**:
+   - Evolución a 5 pestañas unificadas: `Supervisión`, `Usuarios`, `Organización`, `Equipos`, `Auditoría`.
+
+## 20.3 Entregables de Verificación E2E (Playwright)
+1. **Configuración y Entorno**:
+   - `@playwright/test` integrado en `frontend/package.json` con script `test:e2e` y configuración `playwright.config.ts`.
+2. **Suites de Prueba E2E**:
+   - `auth.spec.ts`: Cobertura de autenticación para los 4 roles canónicos, bloqueo por rol y flujo forzoso de cambio de contraseña en primer acceso (`debe_cambiar_password = true`).
+   - `supervision-audit.spec.ts`: Validación de tablero de supervisión jerárquica, filtros en cascada, drawer de detalle, visor de auditoría, paginación y modal de inspección JSON.
+   - `curricular-flow.spec.ts`: Happy path completo de creación/selección de programa, confirmación de matriz Excel estructurada, desbloqueo de proyecto formativo, planeación pedagógica integrada y generación de GPFI-F-134 V05 en MinIO.
+
+## 20.4 Calidad y Verificación
+- Suite backend: 352 tests pasando, 2 skipped (`pytest -q`).
+- Suite frontend unitaria: 23 archivos de prueba, 135 tests pasando (`vitest run`).
+- Verificación de tipos: `npm run typecheck` completado con 0 errores.
+- Build de producción: `npm run build` completado exitosamente.
+
+
+
 

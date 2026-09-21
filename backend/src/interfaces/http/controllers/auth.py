@@ -6,14 +6,15 @@ import hashlib
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.domain.shared.enums import RolUsuario
+from src.application.services.user_admin import UserAdminService
+from src.domain.shared.enums import EstadoUsuario, RolUsuario
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.db.models.auth import Rol, UserSession, Usuario
 from src.infrastructure.db.models.organizacion import Coordinacion, Especialidad
@@ -30,13 +31,17 @@ from src.interfaces.http.deps import get_current_user, require_roles
 from src.interfaces.http.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
-    RefreshTokenRequest,
+    PaginatedUsersResponse,
     TokenResponse,
     UserCreateRequest,
+    UserResetPasswordRequest,
     UserResponse,
+    UserStatusUpdateRequest,
+    UserUpdateRequest,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -67,16 +72,21 @@ def _clear_login_failures(key: str) -> None:
 
 
 def _map_user_response(user: Usuario) -> UserResponse:
+    estado_val = user.estado.value if hasattr(getattr(user, "estado", None), "value") else str(getattr(user, "estado", None) or "ACTIVO")
     return UserResponse(
         id=user.id,
         email=user.email,
         nombre=user.nombre,
         apellido=user.apellido,
         telefono=user.telefono,
+        area=getattr(user, "area", None),
+        estado=estado_val,
         activo=user.activo,
+        debe_cambiar_password=bool(getattr(user, "debe_cambiar_password", False) or False),
+        ultimo_acceso=getattr(user, "ultimo_acceso", None),
         roles=list(user.role_names),
-        coordinacion=user.coordinacion,
-        especialidad=user.especialidad,
+        coordinacion=user.coordinacion,  # type: ignore
+        especialidad=user.especialidad,  # type: ignore
     )
 
 
@@ -121,20 +131,26 @@ async def login(
             detail="Credenciales incorrectas",
         )
 
-    if not user.activo:
+    # Invariant 68: Inactive or blocked users are rejected
+    if user.estado != EstadoUsuario.ACTIVO:
+        motivo = "Cuenta bloqueada" if user.estado == EstadoUsuario.BLOQUEADO else "Cuenta desactivada"
         await audit_repo.add_event(
             entidad="Usuario",
             entidad_id=user.id,
             accion="LOGIN_FAILED",
-            detalle={"ip": client_ip, "motivo": "Cuenta desactivada"},
+            detalle={"ip": client_ip, "motivo": motivo},
         )
         await session.commit()
+        detail = "Cuenta de usuario bloqueada" if user.estado == EstadoUsuario.BLOQUEADO else "Cuenta de usuario inactiva"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cuenta de usuario inactiva",
+            detail=detail,
         )
 
     _clear_login_failures(rate_limit_key)
+
+    # Invariant 14: update ultimo_acceso only after LOGIN_SUCCESS
+    user.ultimo_acceso = datetime.now(UTC)
 
     token_family = uuid.uuid4()
     jti = str(uuid.uuid4())
@@ -177,7 +193,6 @@ async def login(
 
     return TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
         token_type="bearer",
         user=_map_user_response(user),
     )
@@ -196,15 +211,14 @@ async def refresh_token(
     request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_async_session)],
-    payload: RefreshTokenRequest | None = None,
     asgard_refresh_token: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Exchange a valid refresh token for a new access token and rotated refresh token with replay protection."""
-    raw_token = asgard_refresh_token or (payload.refresh_token if payload else None)
+    raw_token = asgard_refresh_token
     if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de refresco no proporcionado",
+            detail="Token de refresco no proporcionado en cookie de sesión",
         )
 
     try:
@@ -238,7 +252,7 @@ async def refresh_token(
             selectinload(Usuario.especialidad),
         ],
     )
-    if user is None or not user.activo:
+    if user is None or user.estado != EstadoUsuario.ACTIVO:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario inválido o inactivo",
@@ -258,9 +272,9 @@ async def refresh_token(
     audit_repo = AuditRepository(session)
 
     if jti:
-        sess_stmt = select(UserSession).where(UserSession.jti == jti)
+        sess_stmt = select(UserSession).where(UserSession.jti == jti).with_for_update()
     else:
-        sess_stmt = select(UserSession).where(UserSession.refresh_token_hash == token_hash)
+        sess_stmt = select(UserSession).where(UserSession.refresh_token_hash == token_hash).with_for_update()
 
     sess_res = await session.execute(sess_stmt)
     user_sess = sess_res.scalar_one_or_none()
@@ -269,13 +283,13 @@ async def refresh_token(
 
     # REPLAY ATTACK DETECTION
     if user_sess is not None and user_sess.revoked_at is not None:
-        # Replay detected! Invalidate entire family and bump token_version immediately
         revoke_stmt = (
             select(UserSession)
             .where(
                 UserSession.token_family == user_sess.token_family,
                 UserSession.revoked_at.is_(None),
             )
+            .with_for_update()
         )
         family_res = await session.execute(revoke_stmt)
         for s in family_res.scalars().all():
@@ -343,7 +357,6 @@ async def refresh_token(
 
     return {
         "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
         "token_type": "bearer",
         "user": _map_user_response(user).model_dump(),
     }
@@ -387,7 +400,7 @@ async def change_password(
     current_user: Annotated[Usuario, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    """Change current user password, invalidating all existing sessions and revoking tokens."""
+    """Change current user password, invalidating all existing sessions and clearing force change flag."""
     if payload.new_password != payload.confirm_new_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -408,6 +421,7 @@ async def change_password(
 
     now = datetime.now(UTC)
     current_user.hashed_password = hash_password(payload.new_password)
+    current_user.debe_cambiar_password = False
     current_user.token_version = getattr(current_user, "token_version", 1) + 1
 
     stmt = select(UserSession).where(
@@ -431,6 +445,13 @@ async def change_password(
     return {"message": "Contraseña actualizada exitosamente. Todas las sesiones activas han sido invalidadas."}
 
 
+@router.get("/me", response_model=UserResponse)
+async def get_me(
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> UserResponse:
+    """Return current authenticated user profile."""
+    return _map_user_response(current_user)
+
 
 @router.post(
     "/users",
@@ -444,99 +465,97 @@ async def create_user(
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> UserResponse:
     """Register a new user enforcing privilege escalation restrictions and organizational invariants."""
-    # Privilege escalation prevention: ADMIN cannot create SUPERADMIN
-    if RolUsuario.SUPERADMIN.value in payload.roles and not current_user.has_role(RolUsuario.SUPERADMIN.value):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo un SUPERADMIN puede asignar o crear usuarios con rol SUPERADMIN",
-        )
-
-    email_clean = payload.email.strip().lower()
-    existing = await session.execute(select(Usuario).where(Usuario.email == email_clean))
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="El correo electrónico ya se encuentra registrado",
-        )
-
-    # Invariant: Líder o Usuario Adicional REQUIEREN coordinación y especialidad
-    needs_org = any(
-        r in [RolUsuario.LIDER_EQUIPO_EJECUTOR.value, RolUsuario.USUARIO_ADICIONAL.value]
-        for r in payload.roles
-    )
-    if needs_org:
-        if not payload.coordinacion_id or not payload.especialidad_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Líder y Usuario Adicional requieren asignación obligatoria de Coordinación y Especialidad",
-            )
-        # Check specialty belongs to coordination
-        esp = await session.get(Especialidad, payload.especialidad_id)
-        if esp is None or esp.coordinacion_id != payload.coordinacion_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="La especialidad seleccionada no pertenece a la coordinación especificada",
-            )
-
-    new_user = Usuario(
-        email=email_clean,
-        hashed_password=hash_password(payload.password),
-        nombre=payload.nombre.strip(),
-        apellido=payload.apellido.strip(),
-        telefono=payload.telefono.strip() if payload.telefono else None,
-        coordinacion_id=payload.coordinacion_id,
-        especialidad_id=payload.especialidad_id,
-        activo=True,
-        token_version=1,
-    )
-    session.add(new_user)
-    await session.flush()
-
-    if payload.roles:
-        roles_stmt = select(Rol).where(Rol.nombre.in_(payload.roles))
-        roles_res = await session.execute(roles_stmt)
-        roles = list(roles_res.scalars().all())
-        new_user.roles = roles
-
-    audit_repo = AuditRepository(session)
-    await audit_repo.add_event(
-        entidad="Usuario",
-        entidad_id=new_user.id,
-        accion="ROLE_ASSIGNED",
-        detalle={"creado_por": str(current_user.id), "roles": payload.roles},
-    )
-    await session.commit()
-    await session.refresh(new_user, attribute_names=["roles", "coordinacion", "especialidad"])
-    return _map_user_response(new_user)
+    service = UserAdminService(session)
+    return await service.create_user(current_user, payload)
 
 
 @router.get(
     "/users",
-    response_model=list[UserResponse],
+    response_model=PaginatedUsersResponse,
     dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
 )
 async def list_users(
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None),
     role: str | None = Query(None),
+    estado: str | None = Query(None),
     coordinacion_id: uuid.UUID | None = Query(None),
     especialidad_id: uuid.UUID | None = Query(None),
-) -> list[UserResponse]:
-    """List users filtered by role, coordination, or specialty."""
-    stmt = (
-        select(Usuario)
-        .options(
-            selectinload(Usuario.roles),
-            selectinload(Usuario.coordinacion),
-            selectinload(Usuario.especialidad),
-        )
-        .order_by(Usuario.nombre, Usuario.apellido)
+) -> PaginatedUsersResponse:
+    """List users paginated server-side with filters."""
+    service = UserAdminService(session)
+    return await service.list_users_paginated(
+        actor=current_user,
+        page=page,
+        page_size=page_size,
+        search=search,
+        role=role,
+        estado=estado,
+        coordinacion_id=coordinacion_id,
+        especialidad_id=especialidad_id,
     )
-    if coordinacion_id:
-        stmt = stmt.where(Usuario.coordinacion_id == coordinacion_id)
-    if especialidad_id:
-        stmt = stmt.where(Usuario.especialidad_id == especialidad_id)
-    result = await session.execute(stmt)
-    users = result.scalars().all()
-    if role:
-        users = [u for u in users if role in u.role_names]
-    return [_map_user_response(u) for u in users]
+
+
+@router.get(
+    "/users/{usuario_id}",
+    response_model=UserResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def get_user_by_id(
+    usuario_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> UserResponse:
+    """Fetch user detail, ensuring ADMIN cannot inspect or manage SUPERADMIN."""
+    service = UserAdminService(session)
+    return await service.get_user(current_user, usuario_id)
+
+
+@router.patch(
+    "/users/{usuario_id}",
+    response_model=UserResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def update_user(
+    usuario_id: uuid.UUID,
+    payload: UserUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> UserResponse:
+    """Update user profile, organizational scope, or roles."""
+    service = UserAdminService(session)
+    return await service.update_user(current_user, usuario_id, payload)
+
+
+@router.patch(
+    "/users/{usuario_id}/estado",
+    response_model=UserResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def update_user_status(
+    usuario_id: uuid.UUID,
+    payload: UserStatusUpdateRequest,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> UserResponse:
+    """Activate, inactivate, or block a user account with session revocation."""
+    service = UserAdminService(session)
+    return await service.change_user_status(current_user, usuario_id, payload)
+
+
+@router.post(
+    "/users/{usuario_id}/reset-password",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def reset_user_password(
+    usuario_id: uuid.UUID,
+    payload: UserResetPasswordRequest,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Administratively reset user password with forced change on next login."""
+    service = UserAdminService(session)
+    return await service.reset_password(current_user, usuario_id, payload)

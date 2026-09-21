@@ -17,7 +17,7 @@ from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
-from src.interfaces.http.deps import get_optional_current_user
+from src.interfaces.http.deps import get_current_user
 from src.interfaces.http.schemas.dashboard import (
     DashboardProgramFlowResponse,
     DashboardResponse,
@@ -48,7 +48,7 @@ def get_dashboard_service(
 )
 async def listar_flujos_programa(
     service: DashboardService = Depends(get_dashboard_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ) -> list[DashboardProgramFlowResponse]:
     """Return program flows available from the master dashboard."""
     flows = await service.listar_flujos_programa(user=current_user)
@@ -62,13 +62,12 @@ async def listar_flujos_programa(
 async def eliminar_flujo_programa(
     referencia_id: uuid.UUID,
     service: DashboardService = Depends(get_dashboard_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ) -> None:
     """Permanently delete the selected program and all dependent data."""
     try:
-        if current_user is not None:
-            # Check access before allowing deletion
-            await service.consultar(referencia_id, user=current_user)
+        # Check access before allowing deletion
+        await service.consultar(referencia_id, user=current_user)
         await service.eliminar_flujo_programa(referencia_id)
     except DashboardAccessForbiddenError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error))
@@ -84,7 +83,7 @@ async def eliminar_flujo_programa(
 async def consultar_dashboard(
     referencia_id: uuid.UUID,
     service: DashboardService = Depends(get_dashboard_service),
-    current_user: Usuario | None = Depends(get_optional_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ) -> DashboardResponse:
     """Return master dashboard metrics, gates and visual map."""
     try:
@@ -94,4 +93,5 @@ async def consultar_dashboard(
     except DashboardDraftNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
     return DashboardResponse.model_validate(result)
+
 

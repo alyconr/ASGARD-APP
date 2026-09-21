@@ -49,6 +49,7 @@ services:
       STORAGE_ACCESS_KEY: "${MINIO_ROOT_USER:?MINIO_ROOT_USER requerido}"
       STORAGE_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requerido}"
       STORAGE_SECURE: "false"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?JWT_SECRET_KEY requerido}"
     depends_on:
       asgard-postgres:
         condition: service_healthy
