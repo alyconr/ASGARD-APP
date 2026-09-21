@@ -12,7 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from src.domain.shared.enums import EstadoEquipo, EstadoUsuario, RolUsuario
-from src.infrastructure.db.models.auth import Rol, Usuario
+from src.infrastructure.db.models.auth import Rol, Usuario, UsuarioRol
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
     EquipoEjecutor,
@@ -121,14 +121,9 @@ async def seed() -> None:
 
         user_map: dict[str, Usuario] = {}
         for spec in users_spec:
-            u_stmt = (
-                select(Usuario)
-                .options(selectinload(Usuario.roles))
-                .where(Usuario.email == spec["email"])
-            )
+            u_stmt = select(Usuario).where(Usuario.email == spec["email"])
             u_res = await session.execute(u_stmt)
             user = u_res.scalar_one_or_none()
-            target_roles = [role_map[r] for r in spec["roles"]]
             if not user:
                 user = Usuario(
                     id=uuid.uuid4(),
@@ -140,12 +135,22 @@ async def seed() -> None:
                     especialidad_id=spec["esp_id"],
                     estado=EstadoUsuario.ACTIVO,
                     debe_cambiar_password=False,
-                    roles=target_roles,
                 )
                 session.add(user)
                 await session.flush()
-            else:
-                user.roles = target_roles
+
+            # Ensure roles via association table directly (no ORM lazyload risk)
+            for r_name in spec["roles"]:
+                role_obj = role_map[r_name]
+                ur_stmt = select(UsuarioRol).where(
+                    UsuarioRol.usuario_id == user.id,
+                    UsuarioRol.rol_id == role_obj.id,
+                )
+                existing_ur = (await session.execute(ur_stmt)).scalar_one_or_none()
+                if not existing_ur:
+                    session.add(UsuarioRol(usuario_id=user.id, rol_id=role_obj.id))
+                    await session.flush()
+
             user_map[spec["email"]] = user
 
         print("4. Ensuring Executing Teams...")
