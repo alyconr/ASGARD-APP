@@ -9,7 +9,6 @@ __pycache__
 .mypy-cache
 .ruff_cache
 tests
-scripts
 *.xlsx
 *.log
 db_schema_report.md
