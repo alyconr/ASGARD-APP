@@ -47,13 +47,9 @@ def upgrade() -> None:
     # 3. Add optimization filter indices to procesos_curriculares
     op.create_index("ix_procesos_curriculares_coordinacion_id", "procesos_curriculares", ["coordinacion_id"])
     op.create_index("ix_procesos_curriculares_especialidad_id", "procesos_curriculares", ["especialidad_id"])
-    op.create_index("ix_procesos_curriculares_programa_id", "procesos_curriculares", ["programa_id"])
-    op.create_index("ix_procesos_curriculares_proyecto_id", "procesos_curriculares", ["proyecto_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_procesos_curriculares_proyecto_id", table_name="procesos_curriculares")
-    op.drop_index("ix_procesos_curriculares_programa_id", table_name="procesos_curriculares")
     op.drop_index("ix_procesos_curriculares_especialidad_id", table_name="procesos_curriculares")
     op.drop_index("ix_procesos_curriculares_coordinacion_id", table_name="procesos_curriculares")
 
