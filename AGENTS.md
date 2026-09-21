@@ -1,6 +1,14 @@
 # AGENTS.md
 # SOURCE OF TRUTH FOR CODEX INSIDE THIS REPOSITORY
 
+## PRECHECK OBLIGATORIO ANTES DE MODIFICAR ARCHIVOS
+
+Antes de cualquier cambio:
+1. ejecutar `python scripts/assert_asgard_context.py`;
+2. si retorna código distinto de 0, DETENERSE;
+3. no editar, crear, borrar, mover ni commitear archivos;
+4. reportar que el contexto del repositorio no corresponde a ASGARD.
+
 # Importante
 Usa codegraph_explore como tu herramienta PRINCIPAL para cualquier tarea de exploración.
 
@@ -12,7 +20,14 @@ Solo recurre a grep/glob/read para archivos listados bajo 'Archivos relevantes a
 Aplicación web para construcción de guías de aprendizaje SENA
 
 ## Fase activa
-Fase 1
+Fase 1 y extensiones autorizadas ya construidas y operativas.
+IMPORTANTE: El producto actual ya cuenta con:
+- Cierre y gestión de Programa de Formación y Proyecto Formativo.
+- Módulo completo de Planeación Pedagógica multi-RAP y multi-competencia.
+- Generación de formato institucional GPFI-F-134 V05 (individual y consolidado) en MinIO.
+- Modelo RBAC completo, Equipos Ejecutores, Membresías y AccessScopeService.
+- Autenticación segura con cookies HttpOnly, rotación de refresh tokens y protección anti-replay.
+Ningún agente debe asumir que estos módulos están pendientes o sin construir.
 
 ## Propósito operativo
 Implementar únicamente la Fase 1 del sistema para capturar, revisar, editar y validar la información base del programa de formación y del proyecto formativo.
@@ -189,6 +204,16 @@ A partir de la implementacion del asistente guiado:
 - la planeacion pedagogica conserva el bloqueo backend que exige programa y proyecto en estado `COMPLETO`;
 - el asistente puede recordar de forma ligera si el usuario lo colapso para no invadir el flujo;
 - la guia nunca reemplaza las validaciones funcionales ni habilita modulos por si sola.
+
+## Decision funcional SPRINT-A-REPOSITORY-GUARDRAILS-SECURITY-CLOSURE
+A partir de Sprint A:
+- El preflight `scripts/assert_asgard_context.py` es obligatorio antes de cualquier modificación.
+- La identidad canónica del repositorio es `ASGARD-APP` (`alyconr/ASGARD-APP`). Proyectos externos como `schedule-stack`, `horarios-app` o `SCHEDULE` provocan aborto inmediato.
+- Ramas permitidas para agentes: `develop`, `feature/*`, `fix/*`, `chore/*`, `test/*`, `docs/*`. La rama `main` aborta por defecto modificaciones automáticas de agentes.
+- La cookie de refresco (`asgard_refresh_token`) siempre se marca `Secure=True` en entornos `production`, `prod` y `staging`, ignorando configuraciones inseguras de flags.
+- Los errores HTTP 500 no exponen `str(exc)` ni detalles internos en producción/staging; se registran en logs y responden mensaje genérico.
+- El contrato de `/api/v1/auth/refresh` opera exclusivamente mediante cookie HttpOnly sin esquema ni payload `RefreshTokenRequest`.
+- La rotación de refresh tokens concurrente con la misma sesión está respaldada por `SELECT ... FOR UPDATE` en PostgreSQL para prevenir race conditions y reuso de tokens.
 
 ---
 

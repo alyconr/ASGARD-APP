@@ -1,7 +1,16 @@
 # IMPLEMENTATION_PLAN.md
 ## Proyecto: Aplicación web para construcción de guías de aprendizaje SENA
 ## Fase: 1
-## Estado: Plan de implementación listo para ejecución
+## Estado: Fase 1 completa + Planeación Pedagógica + GPFI-F-134 V05 + RBAC/Scope + Hardening Seguridad + Sprint A Guardrails
+> [!IMPORTANT]
+> **ESTADO AUTORITATIVO DEL PRODUCTO**: El sistema ya tiene implementados y operativos:
+> - Cierre y gestión de Programa de Formación y Proyecto Formativo.
+> - Módulo de Planeación Pedagógica multi-RAP y multi-competencia.
+> - Generación institucional del formato GPFI-F-134 V05 (individual y consolidado) en MinIO.
+> - Modelo RBAC con Roles, Equipos Ejecutores, Membresías y AccessScopeService.
+> - Autenticación con cookies HttpOnly, rotación de refresh tokens con row-locking y sanitización de errores 500.
+> - Preflight obligatorio de contexto `scripts/assert_asgard_context.py`.
+> Ningún agente debe re-implementar estas áreas.
 ## Última actualización: [YYYY-MM-DD]
 
 ---

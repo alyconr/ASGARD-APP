@@ -47,11 +47,6 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-class RefreshTokenRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-
-
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str

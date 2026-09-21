@@ -89,19 +89,24 @@ def create_application() -> FastAPI:
     async def unhandled_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        logger.error(
+        current_settings = get_settings()
+        logger.exception(
             "Unhandled exception on %s %s: %s",
             request.method,
             request.url.path,
             exc,
-            exc_info=True,
         )
+        if current_settings.is_production:
+            detail = "Internal server error"
+        else:
+            detail = str(exc) or "Internal server error"
+
         response = JSONResponse(
             status_code=500,
-            content={"detail": str(exc) or "Internal server error"},
+            content={"detail": detail},
         )
         origin = request.headers.get("origin")
-        if origin and origin in settings.cors_allow_origin_list:
+        if origin and origin in current_settings.cors_allow_origin_list:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Vary"] = "Origin"

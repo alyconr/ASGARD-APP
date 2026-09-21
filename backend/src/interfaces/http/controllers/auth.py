@@ -30,7 +30,6 @@ from src.interfaces.http.deps import get_current_user, require_roles
 from src.interfaces.http.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
-    RefreshTokenRequest,
     TokenResponse,
     UserCreateRequest,
     UserResponse,
@@ -195,7 +194,6 @@ async def refresh_token(
     request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_async_session)],
-    payload: RefreshTokenRequest | None = None,
     asgard_refresh_token: str | None = Cookie(None),
 ) -> dict[str, Any]:
     """Exchange a valid refresh token for a new access token and rotated refresh token with replay protection."""

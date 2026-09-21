@@ -86,9 +86,13 @@ class Settings(BaseSettings):
     @property
     def effective_cookie_secure(self) -> bool:
         """Determine if refresh cookie must be marked Secure."""
+        if self.is_production:
+            return True
+
         if self.auth_cookie_secure is not None:
             return self.auth_cookie_secure
-        return self.is_production
+
+        return False
 
     @property
     def cors_allow_origin_list(self) -> list[str]:

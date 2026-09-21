@@ -1,7 +1,11 @@
 # CODEX_TASKS.md
 ## Proyecto: Aplicación web para construcción de guías de aprendizaje SENA
 ## Fase: 1
-## Estado: Tareas listas para ejecución incremental con Codex
+## Estado: Fase 1 completa + Planeación Pedagógica + GPFI-F-134 V05 + RBAC/Scope + Hardening Seguridad + Sprint A Guardrails
+> [!IMPORTANT]
+> **ESTADO AUTORITATIVO DEL PRODUCTO**:
+> Las tareas históricas de Fase 1 (programa, proyecto, extractor, wizard), así como las extensiones autorizadas de Planeación Pedagógica (multi-RAP, 1:N), formato GPFI-F-134 V05 en MinIO, RBAC/Scope con Equipos Ejecutores y Hardening de Seguridad Auth se encuentran ya construidas y operativas.
+> El Sprint A incorpora los guardrails de repositorio y preflight (`scripts/assert_asgard_context.py`), cerrando aspectos residuales de seguridad.
 ## Última actualización: [YYYY-MM-DD]
 
 ---

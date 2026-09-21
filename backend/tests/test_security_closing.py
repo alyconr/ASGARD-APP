@@ -445,3 +445,120 @@ def test_production_rejects_insecure_minio_credentials() -> None:
 
     errors = str(exc_info.value)
     assert "storage" in errors.lower() or "credentials" in errors.lower()
+
+
+# ===========================================================================
+# 6. SPRINT A RESIDUAL SECURITY CLOSURE GUARANTEES
+# ===========================================================================
+
+def test_production_forces_secure_refresh_cookie() -> None:
+    """Production forces Secure=True on refresh cookie even if auth_cookie_secure is False."""
+    settings = Settings(
+        app_env="production",
+        auth_cookie_secure=False,
+        jwt_secret_key="a" * 32,
+        storage_access_key="valid-key",
+        storage_secret_key="valid-secret-12345",
+    )
+    assert settings.effective_cookie_secure is True
+
+
+def test_staging_forces_secure_refresh_cookie() -> None:
+    """Staging forces Secure=True on refresh cookie even if auth_cookie_secure is False."""
+    settings = Settings(
+        app_env="staging",
+        auth_cookie_secure=False,
+        jwt_secret_key="b" * 32,
+        storage_access_key="valid-key",
+        storage_secret_key="valid-secret-12345",
+    )
+    assert settings.effective_cookie_secure is True
+
+
+def test_development_can_disable_secure_cookie() -> None:
+    """Development allows Secure=False when auth_cookie_secure is False."""
+    settings = Settings(
+        app_env="development",
+        auth_cookie_secure=False,
+    )
+    assert settings.effective_cookie_secure is False
+
+
+async def test_500_does_not_expose_internal_exception_in_production() -> None:
+    """In production/staging, 500 error handler must return generic detail without leaking internal secrets."""
+    prod_settings = Settings(
+        app_env="production",
+        jwt_secret_key="c" * 32,
+        storage_access_key="valid-key",
+        storage_secret_key="valid-secret-12345",
+    )
+    from unittest.mock import patch
+
+async def test_500_does_not_expose_internal_exception_in_production() -> None:
+    """In production/staging, 500 error handler must return generic detail without leaking internal secrets."""
+    prod_settings = Settings(
+        app_env="production",
+        jwt_secret_key="c" * 32,
+        storage_access_key="valid-key",
+        storage_secret_key="valid-secret-12345",
+    )
+    from unittest.mock import patch
+
+    def _broken_dep() -> None:
+        raise RuntimeError("Internal failure: postgresql://admin:secret-example@db:5432/db")
+
+    app.dependency_overrides[get_current_user] = _broken_dep
+    try:
+        with patch("src.interfaces.http.app.get_settings", return_value=prod_settings):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+                base_url="http://test",
+            ) as client:
+                response = await client.get(
+                    "/api/v1/auth/me",
+                    headers={"Authorization": "Bearer test-token"},
+                )
+                assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+                data = response.json()
+                assert data["detail"] == "Internal server error"
+                assert "secret-example" not in response.text
+                assert "postgresql" not in response.text
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+async def test_500_untrusted_origin_is_not_reflected() -> None:
+    """In unhandled 500 errors, untrusted origin headers are not reflected in CORS."""
+    def _broken_dep() -> None:
+        raise RuntimeError("Unexpected crash")
+
+    app.dependency_overrides[get_current_user] = _broken_dep
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as client:
+            response = await client.get(
+                "/api/v1/auth/me",
+                headers={
+                    "Authorization": "Bearer test-token",
+                    "Origin": "https://attacker.example.com",
+                },
+            )
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            allow_origin = response.headers.get("access-control-allow-origin")
+            assert allow_origin != "https://attacker.example.com"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+async def test_refresh_endpoint_does_not_accept_or_require_body_and_requires_cookie() -> None:
+    """POST /api/v1/auth/refresh requires no body, operates on HttpOnly cookie, and rejects with 401 when missing."""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            headers={"Origin": "http://localhost:3000"},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Token de refresco no proporcionado" in response.json()["detail"]
+
