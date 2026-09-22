@@ -213,7 +213,7 @@
 .blob {
   position: absolute;
   border-radius: 48% 52% 67% 33% / 51% 38% 62% 49%;
-  animation: blobFloat 18s ease-in-out infinite;
+  animation: blobFloat 12s ease-in-out infinite;
 }
 .blobOne {
   width: 86%;
@@ -229,7 +229,7 @@
   left: -1%;
   bottom: 4%;
   background: linear-gradient(120deg, #d9edd990, #a2d39d99);
-  animation-duration: 22s;
+  animation-duration: 15s;
   animation-delay: -6s;
 }
 .blobThree {
@@ -238,7 +238,7 @@
   right: 13%;
   top: 8%;
   background: linear-gradient(140deg, #d9ecd180, #80bf82aa);
-  animation-duration: 14s;
+  animation-duration: 10s;
   animation-delay: -4s;
 }
 .flowLine {
@@ -248,7 +248,7 @@
   width: 100%;
   color: #007346;
   opacity: 0.8;
-  animation: flowFloat 22s ease-in-out infinite;
+  animation: flowFloat 14s ease-in-out infinite;
 }
 .instructor {
   position: absolute;
@@ -273,7 +273,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  animation: cardFloat 9s ease-in-out infinite;
+  animation: cardFloat 6s ease-in-out infinite;
 }
 .floatingCard > svg {
   width: 40px;
@@ -293,7 +293,7 @@
   width: 92px;
   height: 92px;
   rotate: -9deg;
-  animation-duration: 11s;
+  animation-duration: 7s;
 }
 .checklist {
   z-index: 4;
@@ -303,7 +303,7 @@
   padding: 14px 17px;
   rotate: 7deg;
   align-items: stretch;
-  animation-duration: 13s;
+  animation-duration: 8s;
 }
 .checklist > div {
   display: flex;
@@ -333,7 +333,7 @@
   rotate: 7deg;
   width: 113px;
   z-index: 2;
-  animation-duration: 10s;
+  animation-duration: 6.5s;
   animation-delay: -4s;
 }
 .impactCard {
@@ -341,7 +341,7 @@
   bottom: 28%;
   width: 108px;
   rotate: -11deg;
-  animation-duration: 12s;
+  animation-duration: 7.5s;
   animation-delay: -3s;
 }
 .handwriting {
@@ -393,7 +393,7 @@
   height: 12px;
   background: #80bd73;
   border-radius: 50%;
-  animation: particleFloat 8s ease-in-out infinite;
+  animation: particleFloat 5.5s ease-in-out infinite;
 }
 .particle:nth-of-type(2n) {
   width: 8px;
@@ -475,25 +475,25 @@
 }
 @keyframes blobFloat {
   50% {
-    translate: 8px -12px;
-    rotate: 3deg;
-    scale: 1.025;
+    translate: 12px -20px;
+    rotate: 4deg;
+    scale: 1.04;
   }
 }
 @keyframes flowFloat {
   50% {
-    translate: 0 -8px;
-    rotate: -2deg;
+    translate: 0 -14px;
+    rotate: -3deg;
   }
 }
 @keyframes cardFloat {
   50% {
-    translate: 0 -8px;
+    translate: 0 -14px;
   }
 }
 @keyframes particleFloat {
   50% {
-    translate: 0 -12px;
+    translate: 0 -20px;
     opacity: 0.5;
   }
 }
