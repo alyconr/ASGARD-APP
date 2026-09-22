@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Plus, Edit2, Power, AlertCircle, ChevronRight } from "lucide-react";
+import { Plus, Edit2, Power, Trash2, AlertCircle, ChevronRight } from "lucide-react";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
+import { useAuth } from "@/features/auth/auth-context";
 import { CoordinationFormDialog } from "./coordination-form-dialog";
 import { SpecialtyFormDialog } from "./specialty-form-dialog";
 
@@ -23,6 +24,9 @@ interface Especialidad {
 }
 
 export function OrganizationAdmin(): React.JSX.Element {
+  const { hasRole } = useAuth();
+  const canDelete = hasRole("SUPERADMIN", "ADMIN");
+
   const [coordinaciones, setCoordinaciones] = useState<Coordinacion[]>([]);
   const [selectedCoord, setSelectedCoord] = useState<Coordinacion | null>(null);
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
@@ -129,6 +133,58 @@ export function OrganizationAdmin(): React.JSX.Element {
       }
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : "Error al procesar solicitud");
+    }
+  };
+
+  const handleDeleteCoord = async (coord: Coordinacion) => {
+    setActionError(null);
+    const confirmed = window.confirm(
+      `¿Está seguro de eliminar permanentemente la coordinación "${coord.nombre}" (${coord.codigo})?\n\nEsta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/coordinaciones/${coord.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Error al eliminar coordinación" }));
+        throw new Error(err.detail || "Error al eliminar coordinación");
+      }
+
+      if (selectedCoord?.id === coord.id) {
+        setSelectedCoord(null);
+        setEspecialidades([]);
+      }
+      await loadCoordinaciones();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : "Error al procesar eliminación");
+    }
+  };
+
+  const handleDeleteEsp = async (esp: Especialidad) => {
+    setActionError(null);
+    const confirmed = window.confirm(
+      `¿Está seguro de eliminar permanentemente la especialidad "${esp.nombre}" (${esp.codigo})?\n\nEsta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/especialidades/${esp.id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Error al eliminar especialidad" }));
+        throw new Error(err.detail || "Error al eliminar especialidad");
+      }
+
+      if (selectedCoord) {
+        await loadEspecialidades(selectedCoord.id);
+      }
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : "Error al procesar eliminación");
     }
   };
 
@@ -242,6 +298,17 @@ export function OrganizationAdmin(): React.JSX.Element {
                         <Power className="h-3.5 w-3.5" />
                       </button>
 
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCoord(coord)}
+                          title="Eliminar coordinación"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+
                       <ChevronRight
                         className={`h-4 w-4 ml-1 transition ${
                           isSelected ? "text-emerald-600 font-bold" : "text-slate-300 dark:text-slate-600"
@@ -346,6 +413,17 @@ export function OrganizationAdmin(): React.JSX.Element {
                     >
                       <Power className="h-3.5 w-3.5" />
                     </button>
+
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEsp(esp)}
+                        title="Eliminar especialidad"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

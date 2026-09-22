@@ -241,4 +241,19 @@ describe("AdminWorkspace", () => {
       expect(screen.getByText("Gestión de Equipos Ejecutores")).toBeInTheDocument();
     });
   });
+
+  it("renders delete action buttons for coordination when user is admin", async () => {
+    render(<AdminWorkspace />);
+
+    const orgTabBtn = screen.getByRole("button", { name: /coordinaciones & especialidades/i });
+    fireEvent.click(orgTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Estructura Organizacional SENA")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Eliminar coordinación")).toBeInTheDocument();
+    });
+  });
 });

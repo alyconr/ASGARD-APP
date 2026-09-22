@@ -262,3 +262,94 @@ class OrganizationAdminService:
         await self.session.commit()
         await self.session.refresh(esp)
         return EspecialidadResponse.model_validate(esp)
+
+    async def delete_coordinacion(
+        self,
+        actor: Usuario,
+        coordinacion_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Permanently delete a coordination if it has no associated specialties, teams, or users."""
+        coord = await self.session.get(Coordinacion, coordinacion_id)
+        if coord is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coordinación no encontrada")
+
+        # 1. Check associated specialties (both active and inactive)
+        esp_stmt = select(func.count(Especialidad.id)).where(Especialidad.coordinacion_id == coordinacion_id)
+        esp_count = (await self.session.execute(esp_stmt)).scalar_one() or 0
+        if esp_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la coordinación '{coord.nombre}' porque tiene {esp_count} especialidad(es) asociada(s). Elimine primero las especialidades.",
+            )
+
+        # 2. Check associated executing teams
+        teams_stmt = select(func.count(EquipoEjecutor.id)).where(EquipoEjecutor.coordinacion_id == coordinacion_id)
+        teams_count = (await self.session.execute(teams_stmt)).scalar_one() or 0
+        if teams_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la coordinación '{coord.nombre}' porque tiene {teams_count} equipo(s) ejecutor(es) vinculado(s).",
+            )
+
+        # 3. Check associated users
+        users_stmt = select(func.count(Usuario.id)).where(Usuario.coordinacion_id == coordinacion_id)
+        users_count = (await self.session.execute(users_stmt)).scalar_one() or 0
+        if users_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la coordinación '{coord.nombre}' porque está asignada a {users_count} usuario(s).",
+            )
+
+        coord_nombre = coord.nombre
+        coord_codigo = coord.codigo
+
+        await self.session.delete(coord)
+        await self.audit_repo.add_event(
+            entidad="Coordinacion",
+            entidad_id=coord.id,
+            accion="COORDINATION_DELETED",
+            detalle={"eliminado_por": str(actor.id), "codigo": coord_codigo, "nombre": coord_nombre},
+        )
+        await self.session.commit()
+        return {"status": "ok", "message": f"Coordinación '{coord_nombre}' eliminada exitosamente"}
+
+    async def delete_especialidad(
+        self,
+        actor: Usuario,
+        especialidad_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Permanently delete a specialty if it has no associated teams or users."""
+        esp = await self.session.get(Especialidad, especialidad_id)
+        if esp is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Especialidad no encontrada")
+
+        # 1. Check associated executing teams
+        teams_stmt = select(func.count(EquipoEjecutor.id)).where(EquipoEjecutor.especialidad_id == especialidad_id)
+        teams_count = (await self.session.execute(teams_stmt)).scalar_one() or 0
+        if teams_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la especialidad '{esp.nombre}' porque tiene {teams_count} equipo(s) ejecutor(es) vinculado(s).",
+            )
+
+        # 2. Check associated users
+        users_stmt = select(func.count(Usuario.id)).where(Usuario.especialidad_id == especialidad_id)
+        users_count = (await self.session.execute(users_stmt)).scalar_one() or 0
+        if users_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la especialidad '{esp.nombre}' porque está asignada a {users_count} usuario(s).",
+            )
+
+        esp_nombre = esp.nombre
+        esp_codigo = esp.codigo
+
+        await self.session.delete(esp)
+        await self.audit_repo.add_event(
+            entidad="Especialidad",
+            entidad_id=esp.id,
+            accion="SPECIALTY_DELETED",
+            detalle={"eliminado_por": str(actor.id), "codigo": esp_codigo, "nombre": esp_nombre},
+        )
+        await self.session.commit()
+        return {"status": "ok", "message": f"Especialidad '{esp_nombre}' eliminada exitosamente"}

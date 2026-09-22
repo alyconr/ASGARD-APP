@@ -85,6 +85,12 @@ class AdminMockDbSession:
     async def rollback(self) -> None:
         pass
 
+    async def delete(self, obj: Any) -> None:
+        if hasattr(obj, "id") and obj.id in self.objects:
+            del self.objects[obj.id]
+        if obj in self.added:
+            self.added.remove(obj)
+
     async def execute(self, statement: Any) -> MagicMock:
         mock_result = MagicMock()
         text = str(statement).lower()
@@ -186,33 +192,38 @@ class AdminMockDbSession:
 
         # 7. Count queries for dependencies
         if "count" in text:
-            # Especialidades activas
-            if "especialidades" in text and "activo" in text:
+            # Especialidades
+            if "especialidades" in text:
                 coord_id = next((v for k, v in params.items() if "coordinacion_id" in k), None)
-                cnt = sum(1 for e in self.added if isinstance(e, Especialidad) and e.coordinacion_id == coord_id and e.activo)
+                cnt = sum(
+                    1 for e in self.added
+                    if isinstance(e, Especialidad)
+                    and (coord_id is None or e.coordinacion_id == coord_id)
+                    and ("activo" not in text or e.activo)
+                )
                 mock_result.scalar_one.return_value = cnt
                 return mock_result
-            # Equipos activos
-            if "equipos_ejecutores" in text and "estado" in text:
+            # Equipos
+            if "equipos_ejecutores" in text:
                 coord_id = next((v for k, v in params.items() if "coordinacion_id" in k), None)
                 esp_id = next((v for k, v in params.items() if "especialidad_id" in k), None)
                 cnt = sum(
                     1 for eq in self.added
                     if isinstance(eq, EquipoEjecutor)
-                    and eq.estado == EstadoEquipo.ACTIVO
+                    and ("estado" not in text or eq.estado == EstadoEquipo.ACTIVO)
                     and (coord_id is None or eq.coordinacion_id == coord_id)
                     and (esp_id is None or eq.especialidad_id == esp_id)
                 )
                 mock_result.scalar_one.return_value = cnt
                 return mock_result
-            # Usuarios activos asociados
+            # Usuarios asociados
             if "usuarios" in text:
                 coord_id = next((v for k, v in params.items() if "coordinacion_id" in k), None)
                 esp_id = next((v for k, v in params.items() if "especialidad_id" in k), None)
                 cnt = sum(
                     1 for u in self.added
                     if isinstance(u, Usuario)
-                    and u.estado == EstadoUsuario.ACTIVO
+                    and ("estado" not in text or u.estado == EstadoUsuario.ACTIVO)
                     and (coord_id is None or u.coordinacion_id == coord_id)
                     and (esp_id is None or u.especialidad_id == esp_id)
                 )
@@ -858,3 +869,62 @@ async def test_process_assignment_rejects_foreign_leader():
         await service.assign_process(admin, ref, ProcesoAsignarRequest(equipo_ejecutor_id=team.id, lider_id=foreign_leader.id))
     assert exc.value.status_code == 422
     assert "no coincide" in exc.value.detail
+
+
+async def test_delete_especialidad_and_dependency_invariants():
+    session = AdminMockDbSession()
+    service = OrganizationAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    coord = Coordinacion(id=uuid.uuid4(), codigo="TEL", nombre="TELEINFORMATICA", activo=True)
+    esp = Especialidad(id=uuid.uuid4(), coordinacion_id=coord.id, codigo="TEST_ESP", nombre="Especialidad Test", activo=True)
+    session.add(admin)
+    session.add(coord)
+    session.add(esp)
+
+    # 1. Blocked if team linked
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="Equipo Test", coordinacion_id=coord.id, especialidad_id=esp.id, lider_id=admin.id, estado=EstadoEquipo.ACTIVO)
+    session.add(team)
+    with pytest.raises(HTTPException) as exc_team:
+        await service.delete_especialidad(admin, esp.id)
+    assert exc_team.value.status_code == 409
+    assert "equipo(s) ejecutor(es)" in exc_team.value.detail
+
+    # Remove team to test user dependency
+    session.added.remove(team)
+    user = _build_user("instructor@sena.edu.co", RolUsuario.USUARIO_ADICIONAL.value, coord.id, esp.id)
+    session.add(user)
+    with pytest.raises(HTTPException) as exc_user:
+        await service.delete_especialidad(admin, esp.id)
+    assert exc_user.value.status_code == 409
+    assert "usuario(s)" in exc_user.value.detail
+
+    # Remove user to test clean deletion
+    session.added.remove(user)
+    res = await service.delete_especialidad(admin, esp.id)
+    assert res["status"] == "ok"
+    assert esp.id not in session.objects
+
+
+async def test_delete_coordinacion_and_dependency_invariants():
+    session = AdminMockDbSession()
+    service = OrganizationAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    coord = Coordinacion(id=uuid.uuid4(), codigo="CRE", nombre="INDUSTRIAS CREATIVAS", activo=True)
+    session.add(admin)
+    session.add(coord)
+
+    # 1. Blocked if specialty linked
+    esp = Especialidad(id=uuid.uuid4(), coordinacion_id=coord.id, codigo="CAD", nombre="TORNO Y MESA", activo=True)
+    session.add(esp)
+    with pytest.raises(HTTPException) as exc_esp:
+        await service.delete_coordinacion(admin, coord.id)
+    assert exc_esp.value.status_code == 409
+    assert "especialidad(es)" in exc_esp.value.detail
+
+    # Clean specialty deletion first
+    await service.delete_especialidad(admin, esp.id)
+
+    # 2. Clean coordination deletion
+    res = await service.delete_coordinacion(admin, coord.id)
+    assert res["status"] == "ok"
+    assert coord.id not in session.objects

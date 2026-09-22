@@ -96,6 +96,20 @@ async def update_coordinacion(
     return await service.update_coordinacion(current_user, coordinacion_id, payload)
 
 
+@router.delete(
+    "/coordinaciones/{coordinacion_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def delete_coordinacion(
+    coordinacion_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Permanently delete coordination if it has no dependencies (SUPERADMIN/ADMIN only)."""
+    service = OrganizationAdminService(session)
+    return await service.delete_coordinacion(current_user, coordinacion_id)
+
+
 # ==========================================
 # ESPECIALIDADES
 # ==========================================
@@ -155,6 +169,20 @@ async def update_especialidad(
     """Update specialty details or status enforcing dependency checks."""
     service = OrganizationAdminService(session)
     return await service.update_especialidad(current_user, especialidad_id, payload)
+
+
+@router.delete(
+    "/especialidades/{especialidad_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def delete_especialidad(
+    especialidad_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Permanently delete specialty if it has no dependencies (SUPERADMIN/ADMIN only)."""
+    service = OrganizationAdminService(session)
+    return await service.delete_especialidad(current_user, especialidad_id)
 
 
 # ==========================================
