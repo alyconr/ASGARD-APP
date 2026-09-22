@@ -17,13 +17,11 @@ import {
   Route,
   Sparkles,
   Trash2,
-  LogIn,
   LogOut,
   Shield,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/auth-context";
-import { LoginDialog } from "@/features/auth/login-dialog";
 import { ForceChangePasswordDialog } from "@/features/auth/force-change-password-dialog";
 import { AdminWorkspace } from "@/features/admin/admin-workspace";
 
@@ -406,7 +404,6 @@ function ProgramFlowsPanel({
 export function MasterDashboard(): React.JSX.Element {
   const confirm = useConfirm();
   const { user, isAuthenticated, logout, hasRole, refreshUser } = useAuth();
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "admin">("dashboard");
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [programFlows, setProgramFlows] = useState<DashboardProgramFlow[]>([]);
@@ -428,6 +425,10 @@ export function MasterDashboard(): React.JSX.Element {
   }, []);
 
   const loadProgramFlows = useCallback(async (): Promise<DashboardProgramFlow[]> => {
+    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+      return [];
+    }
+
     setIsLoadingFlows(true);
     setFlowsErrorMessage(null);
     try {
@@ -442,22 +443,30 @@ export function MasterDashboard(): React.JSX.Element {
       });
       return flows;
     } catch (error: unknown) {
-        setFlowsErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "No fue posible cargar los flujos abiertos.",
-        );
+      setFlowsErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "No fue posible cargar los flujos abiertos.",
+      );
       return [];
     } finally {
       setIsLoadingFlows(false);
     }
-  }, []);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+      return;
+    }
     void loadProgramFlows();
-  }, [loadProgramFlows, user]);
+  }, [loadProgramFlows, isAuthenticated, user]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+      setDashboard(null);
+      return;
+    }
+
     if (!activeReference) {
       setDashboard(null);
       return;
@@ -486,7 +495,7 @@ export function MasterDashboard(): React.JSX.Element {
     return () => {
       isActive = false;
     };
-  }, [activeReference]);
+  }, [activeReference, isAuthenticated, user]);
 
   const selectedDraft = useMemo(
     () => knownDrafts.find((draft) => draft.referenciaId === activeReference),
@@ -593,7 +602,7 @@ export function MasterDashboard(): React.JSX.Element {
             </div>
             <div className="flex flex-col items-end gap-3">
               {/* Widget de Usuario / Autenticación */}
-              {isAuthenticated && user ? (
+              {user ? (
                 <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-right">
                   <div>
                     <div className="flex items-center justify-end gap-2">
@@ -619,16 +628,7 @@ export function MasterDashboard(): React.JSX.Element {
                     <LogOut className="h-4 w-4" />
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsLoginOpen(true)}
-                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3.5 py-1.5 text-xs font-semibold !text-white transition hover:bg-[var(--accent-strong)] shadow-sm"
-                >
-                  <LogIn className="h-4 w-4" />
-                  Iniciar sesión
-                </button>
-              )}
+              ) : null}
 
               <div className="w-full rounded-lg border border-[color:var(--card-border)] bg-[var(--paper-strong)] p-4 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
@@ -805,7 +805,6 @@ export function MasterDashboard(): React.JSX.Element {
         )}
         </>
       )}
-      <LoginDialog isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
       <ForceChangePasswordDialog
         isOpen={Boolean(isAuthenticated && user?.debe_cambiar_password)}
         onPasswordChanged={() => {

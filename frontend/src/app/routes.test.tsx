@@ -13,6 +13,19 @@ vi.mock("@/features/landing/landing-page", () => ({
 vi.mock("@/features/dashboard/master-dashboard", () => ({
   MasterDashboard: () => <h1>Panel maestro existente</h1>,
 }));
+vi.mock("@/features/auth/auth-context", () => ({
+  useAuth: () => ({
+    user: { id: "1", roles: ["SUPERADMIN"], debe_cambiar_password: false },
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: vi.fn(),
+    push: vi.fn(),
+  }),
+}));
 afterEach(cleanup);
 it("la raíz renderiza la landing", () => {
   render(<HomePage />);

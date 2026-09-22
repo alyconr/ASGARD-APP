@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AuthState, User } from "./types";
-import { authFetch, getApiBaseUrl, setAuthToken } from "@/lib/api";
+import { authFetch, getApiBaseUrl, setAuthInvalidationHandler, setAuthToken } from "@/lib/api";
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User>;
@@ -20,6 +20,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     isLoading: true,
     isAuthenticated: false,
   });
+
+  useEffect(() => {
+    setAuthInvalidationHandler(() => {
+      setState({
+        user: null,
+        token: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+    });
+
+    return () => {
+      setAuthInvalidationHandler(null);
+    };
+  }, []);
 
   useEffect(() => {
     // Attempt silent refresh using HttpOnly cookie on mount

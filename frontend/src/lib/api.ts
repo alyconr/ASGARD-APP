@@ -3,6 +3,26 @@ const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
 let inMemoryAccessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
+export type AuthInvalidationHandler = () => void;
+let authInvalidationHandler: AuthInvalidationHandler | null = null;
+
+export function setAuthInvalidationHandler(
+  handler: AuthInvalidationHandler | null,
+): void {
+  authInvalidationHandler = handler;
+}
+
+export function notifyAuthInvalidated(): void {
+  setAuthToken(null);
+  if (authInvalidationHandler) {
+    try {
+      authInvalidationHandler();
+    } catch {
+      // Evitar que errores en el listener interrumpan el flujo de red
+    }
+  }
+}
+
 export function getApiBaseUrl(): string {
   return (
     process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -38,16 +58,20 @@ export async function refreshTokenSingleFlight(): Promise<string | null> {
       });
 
       if (!res.ok) {
-        setAuthToken(null);
+        notifyAuthInvalidated();
         return null;
       }
 
       const data = await res.json();
       const newToken = (data.access_token as string) || null;
+      if (!newToken) {
+        notifyAuthInvalidated();
+        return null;
+      }
       setAuthToken(newToken);
       return newToken;
     } catch {
-      setAuthToken(null);
+      notifyAuthInvalidated();
       return null;
     } finally {
       refreshPromise = null;
@@ -93,6 +117,8 @@ export async function authFetch(
         credentials: init?.credentials ?? "include",
         headers: retryHeaders,
       });
+    } else {
+      notifyAuthInvalidated();
     }
   }
 

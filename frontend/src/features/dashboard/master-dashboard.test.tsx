@@ -19,31 +19,58 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+import type { User } from "@/features/auth/types";
+
 // Match AuthProvider: the user identity stays stable between unrelated renders.
-const authUser = vi.hoisted(() => ({
+const authUser: User = {
   id: "admin-1",
   email: "admin@sena.edu.co",
   nombre: "Admin",
   apellido: "SENA",
   roles: ["SUPERADMIN"],
   activo: true,
+  estado: "ACTIVO",
+  debe_cambiar_password: false,
+};
+
+const authState = vi.hoisted(() => ({
+  current: {
+    user: {
+      id: "admin-1",
+      email: "admin@sena.edu.co",
+      nombre: "Admin",
+      apellido: "SENA",
+      roles: ["SUPERADMIN"],
+      activo: true,
+      estado: "ACTIVO",
+      debe_cambiar_password: false,
+    } as User | null,
+    hasRole: (() => true) as (...args: string[]) => boolean,
+    isAuthenticated: true as boolean,
+    isLoading: false as boolean,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+  },
 }));
 
 vi.mock("@/features/auth/auth-context", () => ({
-  useAuth: () => ({
-    user: authUser,
-    hasRole: () => true,
-    isAuthenticated: true,
-    isLoading: false,
-    login: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState.current,
 }));
 
 const referenciaId = "11111111-1111-4111-9111-111111111111";
 
 afterEach(() => {
   localStorage.clear();
+  authState.current = {
+    user: { ...authUser },
+    hasRole: () => true,
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+  };
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -335,5 +362,60 @@ describe("MasterDashboard", () => {
     expect(window.confirm).toHaveBeenCalledWith(
       expect.stringContaining("Esta acción no se puede deshacer"),
     );
+  });
+
+  it("regression: does NOT execute fetchProgramFlows nor fetchDashboard when unauthenticated", async () => {
+    localStorage.setItem("sena.active-programa-draft-reference", referenciaId);
+    mockFetchJson(buildDashboard(), [buildProgramFlow()]);
+    const globalFetch = vi.mocked(global.fetch);
+
+    authState.current = {
+      user: null,
+      hasRole: () => false,
+      isAuthenticated: false,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    };
+
+    render(<MasterDashboard />);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(screen.queryByText("Analisis de software / 228118")).toBeNull();
+  });
+
+  it("regression: does NOT execute fetchProgramFlows nor fetchDashboard when debe_cambiar_password is true", async () => {
+    localStorage.setItem("sena.active-programa-draft-reference", referenciaId);
+    mockFetchJson(buildDashboard(), [buildProgramFlow()]);
+    const globalFetch = vi.mocked(global.fetch);
+
+    authState.current = {
+      user: {
+        id: "admin-1",
+        email: "admin@sena.edu.co",
+        nombre: "Admin",
+        apellido: "SENA",
+        roles: ["SUPERADMIN"],
+        activo: true,
+        estado: "ACTIVO",
+        debe_cambiar_password: true,
+      },
+      hasRole: () => true,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    };
+
+    render(<MasterDashboard />);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(screen.queryByText("Analisis de software / 228118")).toBeNull();
   });
 });
