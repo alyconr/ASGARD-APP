@@ -1,5 +1,5 @@
 import type { ProyectoDisponibilidadResponse } from "@/features/proyecto/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProyectoGateError extends Error {
   readonly status: number;
@@ -72,7 +72,7 @@ async function requestProyectoGate<TResponse>(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<TResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {

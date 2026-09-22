@@ -1,5 +1,5 @@
 import type { ProgramaPdfUploadResponse } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaPdfUploadError extends Error {
   readonly status: number;
@@ -34,7 +34,7 @@ export async function uploadProgramaPdf(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/programas/${referenciaId}/documentos/programa-pdf`,
     {
       method: "POST",

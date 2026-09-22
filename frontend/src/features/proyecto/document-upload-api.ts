@@ -1,5 +1,5 @@
 import type { ProyectoStoredDocument } from "@/features/proyecto/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProyectoPdfUploadError extends Error {
   readonly status: number;
@@ -39,7 +39,7 @@ export async function uploadProyectoPdf(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/proyectos/${referenciaId}/documentos/proyecto-pdf`,
     {
       method: "POST",

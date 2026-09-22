@@ -6,7 +6,7 @@ import type {
   ExcelValidationIssue,
   ProyectoStoredDocument,
 } from "./types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProyectoExcelUploadError extends Error {
   readonly status: number;
@@ -53,7 +53,7 @@ export async function uploadProjectExcelPreview(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/proyectos/${referenciaId}/excel/preview`,
     {
       method: "POST",
@@ -82,7 +82,7 @@ export async function confirmProjectExcelImport(
   resumen: ExcelPreviewSummary;
   pendientes_resumen: ExcelPendingSummary;
 }> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/proyectos/${referenciaId}/excel/confirm`,
     {
       method: "POST",

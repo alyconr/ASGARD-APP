@@ -1,8 +1,8 @@
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { EstadoDocumentalResponse } from "@/features/drafts/types";
 
 export async function eliminarCargueCompleto(referenciaId: string): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/proyectos/cargue/${referenciaId}`,
     {
       method: "DELETE",
@@ -23,7 +23,7 @@ export async function eliminarCargueCompleto(referenciaId: string): Promise<void
 }
 
 export async function eliminarCargueProyecto(referenciaId: string): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/proyectos/cargue-proyecto/${referenciaId}`,
     {
       method: "DELETE",
@@ -47,7 +47,7 @@ export async function eliminarCargueProyecto(referenciaId: string): Promise<void
 export async function getEstadoDocumental(
   referenciaId: string,
 ): Promise<EstadoDocumentalResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/drafts/${referenciaId}/estado-documental`,
     {
       method: "GET",

@@ -4,7 +4,7 @@ import {
   type DraftResponse,
   type DraftSaveRequest,
 } from "@/features/drafts/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 function buildDraftUrl(blockType: DraftBlockType, referenceId: string): string {
   return `${getApiBaseUrl()}/drafts/${blockType}/${referenceId}`;
@@ -27,7 +27,7 @@ async function requestDraft(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<DraftResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {

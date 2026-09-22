@@ -3,7 +3,7 @@ import type {
   ConocimientoSaberListResponse,
   ConocimientoSaberPayload,
 } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaConocimientoSaberError extends Error {
   readonly status: number;
@@ -42,7 +42,7 @@ async function requestConocimientosSaber(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<ConocimientoSaberListResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {
@@ -107,7 +107,7 @@ export async function deleteProgramaConocimientoSaber(
   competenciaId: string,
   conocimientoId: string,
 ): Promise<ConocimientoSaberDeleteResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${buildConocimientosSaberUrl(referenciaId, competenciaId)}/${conocimientoId}`,
     {
       method: "DELETE",

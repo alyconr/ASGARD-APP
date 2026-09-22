@@ -184,7 +184,7 @@ export interface FormatoOficialGenerado {
 export async function fetchPlaneacionContexto(
   referenciaId: string,
 ): Promise<PlaneacionContextoResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/planeaciones/contexto/${referenciaId}`,
     {
       method: "GET",
@@ -209,7 +209,7 @@ export async function fetchPlaneacionContexto(
 export async function listPlaneacionesProyecto(
   proyectoId: string,
 ): Promise<PlaneacionListResponse[]> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/planeaciones/proyecto/${proyectoId}`,
     {
       method: "GET",
@@ -227,7 +227,7 @@ export async function listPlaneacionesProyecto(
 export async function fetchPlaneacionDetalle(
   planeacionId: string,
 ): Promise<PlaneacionResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/planeaciones/${planeacionId}`,
     {
       method: "GET",
@@ -245,7 +245,7 @@ export async function fetchPlaneacionDetalle(
 export async function savePlaneacionBorrador(
   payload: PlaneacionSaveRequest,
 ): Promise<PlaneacionResponse> {
-  const response = await fetch(`${getApiBaseUrl()}/planeaciones`, {
+  const response = await authFetch(`${getApiBaseUrl()}/planeaciones`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -270,7 +270,7 @@ export async function savePlaneacionBorrador(
 export async function confirmarPlaneacion(
   planeacionId: string,
 ): Promise<PlaneacionResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/planeaciones/${planeacionId}/confirmar`,
     {
       method: "POST",
@@ -292,7 +292,7 @@ export async function confirmarPlaneacion(
 }
 
 export async function deletePlaneacion(planeacionId: string): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/planeaciones/${planeacionId}`,
     {
       method: "DELETE",

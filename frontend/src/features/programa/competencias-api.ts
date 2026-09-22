@@ -3,7 +3,7 @@ import type {
   ProgramaCompetenciaListResponse,
   ProgramaCompetenciaPayload,
 } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaCompetenciaError extends Error {
   readonly status: number;
@@ -39,7 +39,7 @@ async function requestCompetencias(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<ProgramaCompetenciaListResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {
@@ -94,7 +94,7 @@ export async function deleteProgramaCompetencia(
   referenciaId: string,
   competenciaId: string,
 ): Promise<ProgramaCompetenciaDeleteResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${buildCompetenciasUrl(referenciaId)}/${competenciaId}`,
     {
       method: "DELETE",

@@ -3,7 +3,7 @@ import type {
   CriterioListResponse,
   CriterioPayload,
 } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaCriterioError extends Error {
   readonly status: number;
@@ -42,7 +42,7 @@ async function requestCriterios(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<CriterioListResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {
@@ -107,7 +107,7 @@ export async function deleteProgramaCriterio(
   competenciaId: string,
   criterioId: string,
 ): Promise<CriterioDeleteResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${buildCriteriosUrl(referenciaId, competenciaId)}/${criterioId}`,
     {
       method: "DELETE",

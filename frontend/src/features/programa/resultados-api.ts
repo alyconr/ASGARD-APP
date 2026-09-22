@@ -3,7 +3,7 @@ import type {
   ResultadoAprendizajeListResponse,
   ResultadoAprendizajePayload,
 } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaResultadoError extends Error {
   readonly status: number;
@@ -39,7 +39,7 @@ async function requestResultados(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<ResultadoAprendizajeListResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {
@@ -98,7 +98,7 @@ export async function deleteProgramaResultado(
   competenciaId: string,
   resultadoId: string,
 ): Promise<ResultadoAprendizajeDeleteResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${buildResultadosUrl(referenciaId, competenciaId)}/${resultadoId}`,
     {
       method: "DELETE",

@@ -2,7 +2,7 @@ import type {
   PendienteCurricularAsignacionResponse,
   PendienteCurricularListResponse,
 } from "@/features/programa/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProgramaPendienteError extends Error {
   readonly status: number;
@@ -37,7 +37,7 @@ async function parsePendienteError(response: Response): Promise<string> {
 export async function listPendientesCurriculares(
   referenciaId: string,
 ): Promise<PendienteCurricularListResponse> {
-  const response = await fetch(buildPendientesUrl(referenciaId), {
+  const response = await authFetch(buildPendientesUrl(referenciaId), {
     method: "GET",
     cache: "no-store",
   });
@@ -60,7 +60,7 @@ export async function assignPendienteCurricular(
     resultado_id?: string | null;
   },
 ): Promise<PendienteCurricularAsignacionResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${buildPendientesUrl(referenciaId)}/${pendienteId}/asignacion`,
     {
       method: "POST",

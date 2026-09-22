@@ -2,7 +2,7 @@ import type {
   ProyectoCierreResponse,
   ProyectoCompletitudResponse,
 } from "@/features/proyecto/types";
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 
 export class ProyectoCierreError extends Error {
   readonly status: number;
@@ -75,7 +75,7 @@ async function requestProyectoCierre<TResponse>(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<TResponse> {
-  const response = await fetch(input, {
+  const response = await authFetch(input, {
     ...init,
     cache: "no-store",
     headers: {

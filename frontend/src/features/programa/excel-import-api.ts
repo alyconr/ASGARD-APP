@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/api";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
 import type {
   ProgramaExcelImportResponse,
   ProgramaExcelPreviewResponse,
@@ -35,7 +35,7 @@ export async function previewProgramaExcel(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/programas/${referenciaId}/documentos/programa-excel/preview`,
     {
       method: "POST",
@@ -56,7 +56,7 @@ export async function previewProgramaExcel(
 export async function confirmProgramaExcelImport(
   referenciaId: string,
 ): Promise<ProgramaExcelImportResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${getApiBaseUrl()}/programas/${referenciaId}/documentos/programa-excel/importacion`,
     {
       method: "POST",
