@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="asgard-mark" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#26a653" />
+      <stop offset="1" stop-color="#064f3c" />
+    </linearGradient>
+  </defs>
+  <path d="M5 55 29 8Q33 1 38 8L43 18 22 58Q21 61 17 61H8Q2 61 5 55Z" fill="url(#asgard-mark)" />
+  <path d="m41 22 8 17-19 5ZM33 48l18-5 9 13q2 5-4 5h-9q-3 0-5-4Z" fill="#086147" />
+  <path d="m38 15 5 10-8 16-8 2Z" fill="#a3d4af" />
+</svg>
