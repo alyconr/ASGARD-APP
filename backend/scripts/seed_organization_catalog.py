@@ -34,17 +34,48 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("seed_catalog")
 
 DEFAULT_COORDINACIONES = [
-    {"codigo": "TEL", "nombre": "TELEINFORMATICA", "descripcion": "Coordinación de Teleinformática"},
-    {"codigo": "CRE", "nombre": "INDUSTRIAS CREATIVAS", "descripcion": "Coordinación de Industrias Creativas"},
-    {"codigo": "LOG", "nombre": "LOGISTICA", "descripcion": "Coordinación de Logística y Transporte"},
-    {"codigo": "MER", "nombre": "MERCADEO", "descripcion": "Coordinación de Mercadeo y Ventas"},
-    {"codigo": "TRA", "nombre": "TRANSVERSALES", "descripcion": "Coordinación de Formación Transversal"},
+    {
+        "codigo": "TEL",
+        "nombre": "TELEINFORMATICA E INDUSTRIAS CREATIVAS",
+        "descripcion": "Coordinación de Teleinformática e Industrias Creativas",
+    },
+    {
+        "codigo": "MER",
+        "nombre": "MERCADEO",
+        "descripcion": "Coordinación de Mercadeo y Ventas",
+    },
+    {
+        "codigo": "LOG",
+        "nombre": "LOGISTICA",
+        "descripcion": "Coordinación de Logística y Transporte",
+    },
+    {
+        "codigo": "TRA",
+        "nombre": "TRANSVERSALES",
+        "descripcion": "Coordinación de Formación Transversal",
+    },
 ]
 
 DEFAULT_ESPECIALIDADES = {
     "TEL": [
-        {"codigo": "REDES", "nombre": "REDES DE DATOS"},
         {"codigo": "ADSO", "nombre": "ANALISIS Y DESARROLLO DE SOFTWARE"},
+        {"codigo": "REDES", "nombre": "GESTIÓN DE REDES DE DATOS"},
+        {"codigo": "DMGV", "nombre": "DESARROLLO DE MEDIOS GRÁFICOS VISUALES"},
+        {"codigo": "A3D", "nombre": "ANIMACIÓN 3D"},
+        {"codigo": "CSD", "nombre": "CONTROL DE LA SEGURIDAD DIGITAL"},
+        {"codigo": "MEC", "nombre": "MANTENIMIENTO DE EQUIPOS DE CÓMPUTO"},
+        {"codigo": "DVEI", "nombre": "DESARROLLO DE VIDEOJUEGOS Y ENTORNOS INTERACTIVOS"},
+        {"codigo": "IITIC", "nombre": "IMPLEMENTACIÓN DE INFRAESTRUCTURA DE TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES"},
+        {"codigo": "PSMA", "nombre": "PRODUCCIÓN DE SONIDO PARA MEDIOS AUDIOVISUALES"},
+    ],
+    "MER": [
+        {"codigo": "MEC-MER", "nombre": "MANTENIMIENTO DE EQUIPOS DE CÓMPUTO"},
+        {"codigo": "ACOM", "nombre": "ASESORÍA COMERCIAL"},
+        {"codigo": "OSOCC", "nombre": "OPERACIÓN DE SERVICIOS OMNICANAL EN CONTACT CENTER Y BPO"},
+        {"codigo": "OCRET", "nombre": "OPERACIONES COMERCIALES EN RETAIL"},
+        {"codigo": "VPL", "nombre": "VENTA DE PRODUCTOS EN LÍNEA"},
+        {"codigo": "CCM", "nombre": "COMUNICACIÓN COMERCIAL Y MARKETING"},
+        {"codigo": "SOBPO", "nombre": "SERVICE OPERATION IN BILINGUAL BPO CHANNELS 137500"},
     ],
 }
 
@@ -67,13 +98,15 @@ async def seed_organization_catalog(session: AsyncSession) -> None:
             await session.flush()
             logger.info("Coordinación creada: %s - %s", coordinacion.codigo, coordinacion.nombre)
         else:
-            logger.info("Coordinación ya existe: %s - %s", coordinacion.codigo, coordinacion.nombre)
+            coordinacion.nombre = coord_data["nombre"]
+            coordinacion.descripcion = coord_data["descripcion"]
+            coordinacion.activo = True
+            logger.info("Coordinación actualizada: %s - %s", coordinacion.codigo, coordinacion.nombre)
 
         # Seed specialties for this coordination if defined
         if coord_data["codigo"] in DEFAULT_ESPECIALIDADES:
             for esp_data in DEFAULT_ESPECIALIDADES[coord_data["codigo"]]:
                 esp_stmt = select(Especialidad).where(
-                    Especialidad.coordinacion_id == coordinacion.id,
                     Especialidad.codigo == esp_data["codigo"],
                 )
                 esp_res = await session.execute(esp_stmt)
@@ -90,7 +123,10 @@ async def seed_organization_catalog(session: AsyncSession) -> None:
                     await session.flush()
                     logger.info("  Especialidad creada: %s - %s", especialidad.codigo, especialidad.nombre)
                 else:
-                    logger.info("  Especialidad ya existe: %s - %s", especialidad.codigo, especialidad.nombre)
+                    especialidad.coordinacion_id = coordinacion.id
+                    especialidad.nombre = esp_data["nombre"]
+                    especialidad.activo = True
+                    logger.info("  Especialidad actualizada: %s - %s", especialidad.codigo, especialidad.nombre)
 
     await session.commit()
     logger.info("Seed de catálogo organizacional completado exitosamente.")

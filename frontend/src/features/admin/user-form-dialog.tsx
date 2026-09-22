@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { User } from "@/features/auth/types";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
+import { SpecialtyFormDialog } from "./specialty-form-dialog";
 
 interface Coordinacion {
   id: string;
@@ -47,8 +48,23 @@ export function UserFormDialog({
 
   const [coordinaciones, setCoordinaciones] = useState<Coordinacion[]>([]);
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
+  const [showNewEspModal, setShowNewEspModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadEspecialidades = async (coordId: string) => {
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/coordinaciones/${coordId}/especialidades?solo_activas=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setEspecialidades(data);
+        return data;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    return [];
+  };
 
   // Load coordinations on mount
   useEffect(() => {
@@ -67,11 +83,7 @@ export function UserFormDialog({
       setSelectedEspId("");
       return;
     }
-    authFetch(`${getApiBaseUrl()}/coordinaciones/${selectedCoordId}/especialidades?solo_activas=true`)
-      .then(async (res) => {
-        if (res.ok) setEspecialidades(await res.json());
-      })
-      .catch(console.error);
+    loadEspecialidades(selectedCoordId);
   }, [selectedCoordId]);
 
   // Pre-fill form when editing
@@ -329,9 +341,20 @@ export function UserFormDialog({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Especialidad Académica {requiresOrg ? "*" : ""}
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                  Especialidad Académica {requiresOrg ? "*" : ""}
+                </label>
+                {selectedCoordId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewEspModal(true)}
+                    className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline"
+                  >
+                    + Nueva especialidad
+                  </button>
+                )}
+              </div>
               <select
                 value={selectedEspId}
                 onChange={(e) => setSelectedEspId(e.target.value)}
@@ -401,6 +424,21 @@ export function UserFormDialog({
           </div>
         </form>
       </div>
+
+      {showNewEspModal && selectedCoordId && (
+        <SpecialtyFormDialog
+          isOpen={showNewEspModal}
+          onClose={() => setShowNewEspModal(false)}
+          onSuccess={async (newEsp) => {
+            await loadEspecialidades(selectedCoordId);
+            if (newEsp?.id) {
+              setSelectedEspId(newEsp.id);
+            }
+          }}
+          coordinacionId={selectedCoordId}
+          coordinacionNombre={coordinaciones.find((c) => c.id === selectedCoordId)?.nombre}
+        />
+      )}
     </div>
   );
 }

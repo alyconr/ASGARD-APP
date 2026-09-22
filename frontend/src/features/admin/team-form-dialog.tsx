@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
+import { SpecialtyFormDialog } from "./specialty-form-dialog";
 
 interface Coordinacion {
   id: string;
@@ -71,11 +72,29 @@ export function TeamFormDialog({
   const [estado, setEstado] = useState("ACTIVO");
 
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
+  const [showNewEspModal, setShowNewEspModal] = useState(false);
   const [lideres, setLideres] = useState<UserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingEspecialidades, setLoadingEspecialidades] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadEspecialidades = async (cId: string) => {
+    setLoadingEspecialidades(true);
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/coordinaciones/${cId}/especialidades?solo_activas=true`);
+      if (res.ok) {
+        const data: Especialidad[] = await res.json();
+        setEspecialidades(data);
+        return data;
+      }
+    } catch (err) {
+      console.error("Error loading specialties:", err);
+    } finally {
+      setLoadingEspecialidades(false);
+    }
+    return [];
+  };
 
   // Fetch all potential leaders
   useEffect(() => {
@@ -121,16 +140,7 @@ export function TeamFormDialog({
       return;
     }
 
-    setLoadingEspecialidades(true);
-    authFetch(`${getApiBaseUrl()}/coordinaciones/${coordinacionId}/especialidades?solo_activas=true`)
-      .then(async (res) => {
-        if (res.ok) {
-          const data: Especialidad[] = await res.json();
-          setEspecialidades(data);
-        }
-      })
-      .catch((err) => console.error("Error loading specialties:", err))
-      .finally(() => setLoadingEspecialidades(false));
+    loadEspecialidades(coordinacionId);
   }, [coordinacionId, isEditing]);
 
   if (!open) return null;
@@ -272,9 +282,20 @@ export function TeamFormDialog({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                Especialidad <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Especialidad <span className="text-rose-500">*</span>
+                </label>
+                {!isEditing && coordinacionId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewEspModal(true)}
+                    className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline"
+                  >
+                    + Nueva especialidad
+                  </button>
+                )}
+              </div>
               <select
                 required
                 disabled={isEditing || !coordinacionId || loadingEspecialidades}
@@ -371,6 +392,21 @@ export function TeamFormDialog({
           </div>
         </form>
       </div>
+
+      {showNewEspModal && coordinacionId && (
+        <SpecialtyFormDialog
+          isOpen={showNewEspModal}
+          onClose={() => setShowNewEspModal(false)}
+          onSuccess={async (newEsp) => {
+            await loadEspecialidades(coordinacionId);
+            if (newEsp?.id) {
+              setEspecialidadId(newEsp.id);
+            }
+          }}
+          coordinacionId={coordinacionId}
+          coordinacionNombre={coordinaciones.find((c) => c.id === coordinacionId)?.nombre}
+        />
+      )}
     </div>
   );
 }

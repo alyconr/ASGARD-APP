@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 
-interface Especialidad {
+export interface Especialidad {
   id: string;
   coordinacion_id: string;
   codigo: string;
@@ -14,7 +14,7 @@ interface Especialidad {
 interface SpecialtyFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (specialty?: Especialidad) => void;
   coordinacionId: string;
   coordinacionNombre?: string;
   specialtyToEdit?: Especialidad | null;
@@ -67,6 +67,9 @@ export function SpecialtyFormDialog({
           const data = await res.json().catch(() => ({ detail: "Error al actualizar especialidad" }));
           throw new Error(data.detail || "Error al actualizar especialidad");
         }
+
+        const updated = (await res.json()) as Especialidad;
+        onSuccess(updated);
       } else {
         const res = await authFetch(`${getApiBaseUrl()}/coordinaciones/${coordinacionId}/especialidades`, {
           method: "POST",
@@ -81,9 +84,11 @@ export function SpecialtyFormDialog({
           const data = await res.json().catch(() => ({ detail: "Error al crear especialidad" }));
           throw new Error(data.detail || "Error al crear especialidad");
         }
+
+        const created = (await res.json()) as Especialidad;
+        onSuccess(created);
       }
 
-      onSuccess();
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al procesar solicitud");
