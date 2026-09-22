@@ -21,11 +21,18 @@ interface Especialidad {
   codigo: string;
   nombre: string;
   activo: boolean;
+  creado_por_id?: string | null;
 }
 
 export function OrganizationAdmin(): React.JSX.Element {
-  const { hasRole } = useAuth();
-  const canDelete = hasRole("SUPERADMIN", "ADMIN");
+  const { user, hasRole } = useAuth();
+  const canDeleteCoord = hasRole("SUPERADMIN", "ADMIN");
+
+  const canDeleteEsp = (esp: Especialidad): boolean => {
+    if (hasRole("SUPERADMIN", "ADMIN")) return true;
+    if (hasRole("LIDER_EQUIPO_EJECUTOR") && user?.id && esp.creado_por_id === user.id) return true;
+    return false;
+  };
 
   const [coordinaciones, setCoordinaciones] = useState<Coordinacion[]>([]);
   const [selectedCoord, setSelectedCoord] = useState<Coordinacion | null>(null);
@@ -298,7 +305,7 @@ export function OrganizationAdmin(): React.JSX.Element {
                         <Power className="h-3.5 w-3.5" />
                       </button>
 
-                      {canDelete && (
+                      {canDeleteCoord && (
                         <button
                           type="button"
                           onClick={() => handleDeleteCoord(coord)}
@@ -384,6 +391,11 @@ export function OrganizationAdmin(): React.JSX.Element {
                             Inactiva
                           </span>
                         )}
+                        {esp.creado_por_id === user?.id && !hasRole("SUPERADMIN", "ADMIN") && (
+                          <span className="rounded bg-emerald-50 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            Creada por mí
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -414,7 +426,7 @@ export function OrganizationAdmin(): React.JSX.Element {
                       <Power className="h-3.5 w-3.5" />
                     </button>
 
-                    {canDelete && (
+                    {canDeleteEsp(esp) && (
                       <button
                         type="button"
                         onClick={() => handleDeleteEsp(esp)}

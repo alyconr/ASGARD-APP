@@ -9,6 +9,7 @@ export interface Especialidad {
   codigo: string;
   nombre: string;
   activo: boolean;
+  creado_por_id?: string | null;
 }
 
 interface SpecialtyFormDialogProps {

@@ -928,3 +928,40 @@ async def test_delete_coordinacion_and_dependency_invariants():
     res = await service.delete_coordinacion(admin, coord.id)
     assert res["status"] == "ok"
     assert coord.id not in session.objects
+
+
+async def test_leader_can_only_delete_own_created_specialty():
+    session = AdminMockDbSession()
+    service = OrganizationAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    leader1 = _build_user("leader1@sena.edu.co", RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
+    leader2 = _build_user("leader2@sena.edu.co", RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
+    coord = Coordinacion(id=uuid.uuid4(), codigo="TEL", nombre="TELEINFORMATICA", activo=True)
+    session.add(admin)
+    session.add(leader1)
+    session.add(leader2)
+    session.add(coord)
+
+    # Leader 1 creates a specialty
+    esp1 = await service.create_especialidad(leader1, coord.id, EspecialidadCreate(codigo="ESP1", nombre="Especialidad 1"))
+    assert esp1.creado_por_id == leader1.id
+
+    # Leader 2 tries to delete Leader 1's specialty -> 403 Forbidden
+    with pytest.raises(HTTPException) as exc_forbidden:
+        await service.delete_especialidad(leader2, esp1.id)
+    assert exc_forbidden.value.status_code == 403
+    assert "solo pueden eliminar las especialidades que ellos mismos han creado" in exc_forbidden.value.detail
+
+    # Leader 1 deletes their own specialty -> Success
+    res_lider = await service.delete_especialidad(leader1, esp1.id)
+    assert res_lider["status"] == "ok"
+    assert esp1.id not in session.objects
+
+    # Leader 2 creates another specialty
+    esp2 = await service.create_especialidad(leader2, coord.id, EspecialidadCreate(codigo="ESP2", nombre="Especialidad 2"))
+    assert esp2.creado_por_id == leader2.id
+
+    # Admin can delete any specialty regardless of creator
+    res_admin = await service.delete_especialidad(admin, esp2.id)
+    assert res_admin["status"] == "ok"
+    assert esp2.id not in session.objects

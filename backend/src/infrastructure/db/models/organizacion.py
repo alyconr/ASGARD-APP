@@ -75,6 +75,7 @@ class Especialidad(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_especialidades_codigo", "codigo", unique=True),
         Index("ix_especialidades_coordinacion_id", "coordinacion_id"),
+        Index("ix_especialidades_creado_por_id", "creado_por_id"),
     )
 
     coordinacion_id: Mapped[uuid.UUID] = mapped_column(
@@ -85,6 +86,11 @@ class Especialidad(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     codigo: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    creado_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     coordinacion: Mapped[Coordinacion] = relationship(
         "Coordinacion",

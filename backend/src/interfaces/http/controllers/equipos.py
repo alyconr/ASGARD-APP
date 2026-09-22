@@ -142,7 +142,15 @@ async def get_especialidad(
     "/coordinaciones/{coordinacion_id}/especialidades",
     response_model=EspecialidadResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+    dependencies=[
+        Depends(
+            require_roles(
+                RolUsuario.SUPERADMIN.value,
+                RolUsuario.ADMIN.value,
+                RolUsuario.LIDER_EQUIPO_EJECUTOR.value,
+            )
+        )
+    ],
 )
 async def create_especialidad(
     coordinacion_id: uuid.UUID,
@@ -150,7 +158,7 @@ async def create_especialidad(
     session: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> EspecialidadResponse:
-    """Create a new specialty under an active coordination."""
+    """Create a new specialty under an active coordination (SUPERADMIN, ADMIN or LIDER)."""
     service = OrganizationAdminService(session)
     return await service.create_especialidad(current_user, coordinacion_id, payload)
 
@@ -173,14 +181,22 @@ async def update_especialidad(
 
 @router.delete(
     "/especialidades/{especialidad_id}",
-    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+    dependencies=[
+        Depends(
+            require_roles(
+                RolUsuario.SUPERADMIN.value,
+                RolUsuario.ADMIN.value,
+                RolUsuario.LIDER_EQUIPO_EJECUTOR.value,
+            )
+        )
+    ],
 )
 async def delete_especialidad(
     especialidad_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_async_session)],
     current_user: Annotated[Usuario, Depends(get_current_user)],
 ) -> dict[str, str]:
-    """Permanently delete specialty if it has no dependencies (SUPERADMIN/ADMIN only)."""
+    """Permanently delete specialty if it has no dependencies. Leaders can only delete their own specialties."""
     service = OrganizationAdminService(session)
     return await service.delete_especialidad(current_user, especialidad_id)
 

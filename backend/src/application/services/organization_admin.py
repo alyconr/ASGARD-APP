@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.domain.shared.enums import EstadoEquipo, EstadoUsuario
+from src.domain.shared.enums import EstadoEquipo, EstadoUsuario, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
@@ -195,6 +195,7 @@ class OrganizationAdminService:
             codigo=code_clean,
             nombre=payload.nombre.strip(),
             activo=True,
+            creado_por_id=actor.id,
         )
         self.session.add(esp)
         await self.session.flush()
@@ -323,7 +324,16 @@ class OrganizationAdminService:
         if esp is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Especialidad no encontrada")
 
-        # 1. Check associated executing teams
+        # 1. Ownership check: leaders can only delete specialties they created
+        is_admin = actor.has_role(RolUsuario.SUPERADMIN.value) or actor.has_role(RolUsuario.ADMIN.value)
+        if not is_admin:
+            if esp.creado_por_id is None or esp.creado_por_id != actor.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Los líderes de equipo solo pueden eliminar las especialidades que ellos mismos han creado",
+                )
+
+        # 2. Check associated executing teams
         teams_stmt = select(func.count(EquipoEjecutor.id)).where(EquipoEjecutor.especialidad_id == especialidad_id)
         teams_count = (await self.session.execute(teams_stmt)).scalar_one() or 0
         if teams_count > 0:

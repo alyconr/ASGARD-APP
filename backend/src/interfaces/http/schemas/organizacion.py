@@ -49,6 +49,7 @@ class EspecialidadResponse(BaseModel):
     codigo: str
     nombre: str
     activo: bool
+    creado_por_id: uuid.UUID | None = None
 
 
 class MiembroResponse(BaseModel):
