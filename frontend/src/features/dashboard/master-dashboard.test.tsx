@@ -19,16 +19,19 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// Match AuthProvider: the user identity stays stable between unrelated renders.
+const authUser = vi.hoisted(() => ({
+  id: "admin-1",
+  email: "admin@sena.edu.co",
+  nombre: "Admin",
+  apellido: "SENA",
+  roles: ["SUPERADMIN"],
+  activo: true,
+}));
+
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
-    user: {
-      id: "admin-1",
-      email: "admin@sena.edu.co",
-      nombre: "Admin",
-      apellido: "SENA",
-      roles: ["SUPERADMIN"],
-      activo: true,
-    },
+    user: authUser,
     hasRole: () => true,
     isAuthenticated: true,
     isLoading: false,

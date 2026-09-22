@@ -11,7 +11,7 @@ test.describe("E2E Curricular Flow: Program → Project → Planning → GPFI-F-
   });
 
   test("master dashboard shows program gate and workflow stages", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/dashboard");
 
     // Verify operational dashboard sections
     await expect(page.locator("body")).toBeVisible();

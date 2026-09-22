@@ -1,0 +1,824 @@
+.landing {
+  min-height: 100svh;
+  --landing-text: #092f29;
+  --landing-green: #087e4e;
+  --landing-muted: #697487;
+  background: #fcfefb;
+  color: var(--landing-text);
+  font-family: var(--font-landing), sans-serif;
+  overflow: clip;
+}
+.landing :is(a, button):focus-visible {
+  outline: 3px solid #00843d;
+  outline-offset: 5px;
+}
+.skipLink {
+  position: absolute;
+  top: -80px;
+  left: 20px;
+  z-index: 60;
+  background: white;
+  padding: 12px;
+}
+.skipLink:focus {
+  top: 12px;
+}
+.header {
+  min-height: 105px;
+  width: 90%;
+  max-width: 1800px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: clamp(25px, 2.25vw, 42px);
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+.brand svg {
+  width: 60px;
+  height: 60px;
+}
+.nav {
+  display: flex;
+  gap: clamp(24px, 3.4vw, 64px);
+  margin-right: auto;
+  margin-left: 4%;
+  font-size: 16px;
+  font-weight: 600;
+}
+.nav a {
+  padding: 12px 0;
+  white-space: nowrap;
+}
+.nav a:hover,
+.nav a[aria-current] {
+  color: #006244;
+  text-decoration: underline;
+  text-underline-offset: 12px;
+  text-decoration-thickness: 2px;
+}
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 15px 28px;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+  white-space: nowrap;
+}
+.primary {
+  background: linear-gradient(110deg, #095a43, #086047);
+  border: 1px solid #065640;
+  color: white;
+  box-shadow: 0 7px 18px #07503912;
+}
+.primary:hover {
+  background: #064632;
+  transform: translateY(-1px);
+}
+.primary:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.primary svg,
+.secondary svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.secondary {
+  border: 1.5px solid #0b6350;
+  background: #ffffff90;
+}
+.secondary:hover {
+  background: #eaf6e8;
+  transform: translateY(-1px);
+}
+.secondary svg {
+  width: 32px;
+  height: 32px;
+  stroke-width: 1.6;
+}
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 51% 49%;
+  min-height: max(620px, calc(100svh - 245px));
+  max-width: 1800px;
+  width: 86%;
+  margin: auto;
+}
+.copy {
+  position: relative;
+  z-index: 5;
+  padding-top: clamp(50px, 5vh, 90px);
+  padding-bottom: 48px;
+  align-self: center;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: clamp(15px, 1.25vw, 23px);
+  font-weight: 600;
+  color: #087e4e;
+  margin: 0 0 28px;
+}
+.eyebrow::before {
+  content: "";
+  width: 46px;
+  height: 4px;
+  border-radius: 4px;
+  background: #79b568;
+}
+.copy h1 {
+  font-size: clamp(36px, 3.6vw, 70px);
+  font-weight: 800;
+  line-height: 1.16;
+  letter-spacing: -0.052em;
+  margin: 0;
+  width: 112%;
+}
+.copy h1 span {
+  color: var(--landing-green);
+}
+.description {
+  color: var(--landing-muted);
+  font-size: clamp(18px, 1.42vw, 27px);
+  line-height: 1.5;
+  max-width: 610px;
+  margin: 32px 0 36px;
+  width: 94%;
+  scroll-margin-top: 30px;
+}
+.actions {
+  display: flex;
+  gap: 16px;
+}
+.claim {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: clamp(12px, 1vw, 18px);
+  color: #626f83;
+  margin: 30px 0 0;
+}
+.claim svg {
+  width: 38px;
+  height: 38px;
+  color: #79b568;
+  flex-shrink: 0;
+}
+.claim span {
+  position: relative;
+}
+.claim span::after {
+  content: "";
+  position: absolute;
+  width: 115px;
+  right: 0;
+  bottom: -14px;
+  height: 7px;
+  border-top: 2px solid #add099;
+  border-radius: 50%;
+  transform: rotate(-3deg);
+}
+.visual {
+  position: relative;
+  align-self: stretch;
+  min-height: 620px;
+  margin-left: -7%;
+  margin-right: -6%;
+}
+.decorations {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.blob {
+  position: absolute;
+  border-radius: 48% 52% 67% 33% / 51% 38% 62% 49%;
+  animation: blobFloat 18s ease-in-out infinite;
+}
+.blobOne {
+  width: 86%;
+  height: 72%;
+  left: 9%;
+  top: 12%;
+  background: linear-gradient(135deg, #eaf6e880, #a9d5a991);
+  transform: rotate(-20deg);
+}
+.blobTwo {
+  width: 84%;
+  height: 50%;
+  left: -1%;
+  bottom: 4%;
+  background: linear-gradient(120deg, #d9edd990, #a2d39d99);
+  animation-duration: 22s;
+  animation-delay: -6s;
+}
+.blobThree {
+  width: 49%;
+  height: 69%;
+  right: 13%;
+  top: 8%;
+  background: linear-gradient(140deg, #d9ecd180, #80bf82aa);
+  animation-duration: 14s;
+  animation-delay: -4s;
+}
+.flowLine {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  color: #007346;
+  opacity: 0.8;
+  animation: flowFloat 22s ease-in-out infinite;
+}
+.instructor {
+  position: absolute;
+  z-index: 3;
+  height: 100%;
+  width: 94%;
+  object-fit: contain;
+  object-position: bottom;
+  bottom: 0;
+  left: 2%;
+}
+.floatingCard {
+  position: absolute;
+  z-index: 4;
+  background: #fffffff0;
+  border: 1px solid #ffffffcc;
+  box-shadow: 0 14px 36px #2d754415;
+  border-radius: 19px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: cardFloat 9s ease-in-out infinite;
+}
+.floatingCard > svg {
+  width: 40px;
+  height: 40px;
+  color: #087c4c;
+  stroke-width: 1.8;
+}
+.floatingCard > span {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.25;
+  margin-top: 10px;
+}
+.bookCard {
+  top: 6%;
+  left: 20%;
+  width: 92px;
+  height: 92px;
+  rotate: -9deg;
+  animation-duration: 11s;
+}
+.checklist {
+  z-index: 4;
+  top: 22%;
+  right: 1%;
+  width: 200px;
+  padding: 14px 17px;
+  rotate: 7deg;
+  align-items: stretch;
+  animation-duration: 13s;
+}
+.checklist > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 0;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #30483f;
+}
+.checklist > div + div {
+  border-top: 1px solid #174c3010;
+}
+.checklist svg {
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 50%;
+  background: #1b9556;
+  color: white;
+  flex-shrink: 0;
+  stroke-width: 3;
+}
+.ideaCard {
+  left: 3%;
+  bottom: 23%;
+  rotate: 7deg;
+  width: 113px;
+  z-index: 2;
+  animation-duration: 10s;
+  animation-delay: -4s;
+}
+.impactCard {
+  right: 4%;
+  bottom: 28%;
+  width: 108px;
+  rotate: -11deg;
+  animation-duration: 12s;
+  animation-delay: -3s;
+}
+.handwriting {
+  position: absolute;
+  z-index: 2;
+  font-family: var(--font-handwriting), cursive;
+  font-size: clamp(21px, 1.8vw, 32px);
+  line-height: 0.95;
+  color: #205b4d;
+  rotate: -7deg;
+}
+.handwriting::after {
+  content: "";
+  display: block;
+  margin: 8px 0 0 26px;
+  width: 80%;
+  height: 12px;
+  border-top: 2px solid #579c5c;
+  border-bottom: 2px solid #91c785;
+  border-radius: 50%;
+  rotate: -5deg;
+}
+.ideas {
+  top: 29%;
+  left: 12%;
+}
+.footnote {
+  right: -2%;
+  bottom: 11%;
+}
+.accents {
+  position: absolute;
+  right: 4%;
+  top: 4%;
+  width: 80px;
+  color: #75b36e;
+}
+.dotGrid {
+  position: absolute;
+  right: -5%;
+  top: 24%;
+  width: 50px;
+  height: 120px;
+  background: radial-gradient(#b4d9ba 2px, transparent 2.5px) 0 0/17px 18px;
+}
+.particle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #80bd73;
+  border-radius: 50%;
+  animation: particleFloat 8s ease-in-out infinite;
+}
+.particle:nth-of-type(2n) {
+  width: 8px;
+  height: 8px;
+  background: #09875a;
+}
+.particle:nth-of-type(3n) {
+  width: 7px;
+  height: 7px;
+  background: white;
+  box-shadow: 0 0 12px 4px #f5ffd2;
+  animation-name: glowPulse;
+}
+.featureStrip {
+  position: relative;
+  z-index: 6;
+  border-top: 1px solid #124c321a;
+  background: #ffffffd9;
+  scroll-margin-top: 20px;
+}
+.featureStrip ul {
+  min-height: 140px;
+  width: 86%;
+  max-width: 1800px;
+  margin: auto;
+  padding: 28px 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+}
+.featureStrip li {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 26px;
+}
+.featureStrip li:first-child {
+  padding-left: 0;
+}
+.featureStrip li + li {
+  border-left: 1px solid #18354a20;
+}
+.featureStrip svg {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  color: #087d4c;
+  stroke-width: 1.7;
+}
+.featureStrip h2 {
+  margin: 0 0 5px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.featureStrip p {
+  margin: 0;
+  font-size: 12px;
+  color: #626f83;
+  white-space: nowrap;
+}
+.contact {
+  padding: 28px 7%;
+  border-top: 1px solid #124c3210;
+  font-size: 13px;
+  color: #52665e;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.contact span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.contact p {
+  margin: 0;
+  max-width: 640px;
+}
+@keyframes blobFloat {
+  50% {
+    translate: 8px -12px;
+    rotate: 3deg;
+    scale: 1.025;
+  }
+}
+@keyframes flowFloat {
+  50% {
+    translate: 0 -8px;
+    rotate: -2deg;
+  }
+}
+@keyframes cardFloat {
+  50% {
+    translate: 0 -8px;
+  }
+}
+@keyframes particleFloat {
+  50% {
+    translate: 0 -12px;
+    opacity: 0.5;
+  }
+}
+@keyframes glowPulse {
+  50% {
+    opacity: 0.35;
+    scale: 0.75;
+  }
+}
+@media (min-width: 1700px) {
+  .header {
+    min-height: 120px;
+  }
+  .hero {
+    min-height: calc(100svh - 280px);
+  }
+  .featureStrip ul {
+    min-height: 160px;
+  }
+  .primary,
+  .secondary {
+    min-height: 70px;
+    font-size: 21px;
+    padding-inline: 32px;
+  }
+  .visual {
+    min-height: 700px;
+  }
+  .checklist {
+    width: 230px;
+  }
+  .checklist > div {
+    font-size: 14px;
+  }
+}
+@media (max-width: 1100px) {
+  .header {
+    width: 92%;
+    gap: 18px;
+    min-height: 90px;
+  }
+  .brand {
+    font-size: 25px;
+    gap: 8px;
+  }
+  .brand svg {
+    width: 44px;
+    height: 44px;
+  }
+  .nav {
+    gap: 20px;
+    margin-left: 0;
+    font-size: 13px;
+  }
+  .header .primary {
+    padding: 12px 18px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+  .hero {
+    width: 90%;
+    min-height: 610px;
+  }
+  .visual {
+    min-height: 610px;
+  }
+  .copy h1 {
+    font-size: 3.6vw;
+  }
+  .primary,
+  .secondary {
+    padding: 13px 17px;
+    font-size: 14px;
+    gap: 8px;
+  }
+  .actions {
+    gap: 10px;
+  }
+  .checklist {
+    width: 160px;
+    padding: 10px;
+    right: -2%;
+  }
+  .checklist > div {
+    font-size: 10px;
+  }
+  .bookCard {
+    width: 76px;
+    height: 76px;
+  }
+  .ideaCard,
+  .impactCard {
+    width: 90px;
+    padding: 14px;
+  }
+  .featureStrip ul {
+    width: 92%;
+  }
+  .featureStrip li {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .featureStrip svg {
+    width: 30px;
+  }
+  .featureStrip h2 {
+    font-size: 14px;
+  }
+  .featureStrip p {
+    font-size: 10px;
+    white-space: normal;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .actions {
+    flex-wrap: wrap;
+  }
+  .actions > * {
+    flex: 1;
+  }
+  .visual {
+    margin-left: 0;
+  }
+  .checklist {
+    top: 5%;
+    right: 0;
+    width: 140px;
+  }
+  .featureStrip li {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+  .featureStrip svg {
+    width: 26px;
+  }
+}
+@media (max-width: 767px) {
+  .header {
+    flex-wrap: wrap;
+    padding-top: 18px;
+    gap: 12px;
+  }
+  .brand {
+    font-size: 25px;
+  }
+  .header .primary {
+    font-size: 13px;
+    padding: 10px 12px;
+    min-height: 43px;
+    gap: 7px;
+  }
+  .header .primary svg {
+    width: 17px;
+  }
+  .nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    font-size: 12px;
+  }
+  .nav a {
+    padding: 10px 0 17px;
+  }
+  .hero {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    min-height: 0;
+  }
+  .copy {
+    padding: 34px 0 20px;
+  }
+  .eyebrow {
+    font-size: 13px;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .eyebrow::before {
+    width: 28px;
+    height: 3px;
+  }
+  .copy h1 {
+    font-size: clamp(36px, 9.65vw, 64px);
+    line-height: 1.13;
+    width: 100%;
+    letter-spacing: -0.055em;
+  }
+  .desktopBreak {
+    display: none;
+  }
+  .description {
+    font-size: 17px;
+    line-height: 1.55;
+    margin: 24px 0;
+    width: 100%;
+  }
+  .actions {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .actions > * {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 14px;
+    min-height: 54px;
+  }
+  .claim {
+    font-size: 12px;
+    gap: 10px;
+    margin-top: 23px;
+    line-height: 1.5;
+  }
+  .claim svg {
+    width: 30px;
+  }
+  .claim span::after {
+    bottom: -9px;
+  }
+  .visual {
+    height: 490px;
+    min-height: 0;
+    width: 111%;
+    margin: 4px -5.5% 0;
+  }
+  .instructor {
+    width: 94%;
+    left: 3%;
+    height: 96%;
+  }
+  .checklist {
+    top: 0;
+    right: 2%;
+    width: 132px;
+    padding: 8px 10px;
+  }
+  .checklist > div {
+    padding: 8px 0;
+    font-size: 9px;
+    gap: 6px;
+  }
+  .checklist svg {
+    width: 14px;
+    height: 14px;
+  }
+  .bookCard {
+    top: 6%;
+    left: 15%;
+    width: 64px;
+    height: 64px;
+    padding: 12px;
+  }
+  .bookCard svg {
+    width: 32px;
+  }
+  .ideas {
+    top: 27%;
+    left: 6%;
+    font-size: 23px;
+  }
+  .footnote {
+    z-index: 4;
+    right: 3%;
+    bottom: 8%;
+    font-size: 22px;
+  }
+  .ideaCard {
+    left: 3%;
+    bottom: 26%;
+    width: 80px;
+  }
+  .impactCard {
+    right: 3%;
+    bottom: 28%;
+    width: 82px;
+  }
+  .floatingCard > span {
+    font-size: 10px;
+  }
+  .floatingCard > svg {
+    width: 30px;
+    height: 30px;
+  }
+  .accents {
+    width: 55px;
+    right: 3%;
+  }
+  .featureStrip ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 90%;
+    padding: 26px 0;
+    gap: 26px 10px;
+  }
+  .featureStrip li,
+  .featureStrip li:first-child {
+    padding: 0 4px;
+    gap: 10px;
+  }
+  .featureStrip li + li {
+    border: 0;
+  }
+  .featureStrip li:last-child {
+    grid-column: 1/-1;
+    justify-self: center;
+  }
+  .featureStrip h2 {
+    font-size: 14px;
+  }
+  .featureStrip p {
+    font-size: 10px;
+  }
+  .contact {
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px 5%;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

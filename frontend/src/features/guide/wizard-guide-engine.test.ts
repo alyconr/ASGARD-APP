@@ -151,6 +151,6 @@ describe("wizard guide engine", () => {
     );
 
     expect(guide.severity).toBe("blocked");
-    expect(guide.primaryAction?.href).toBe("/");
+    expect(guide.primaryAction?.href).toBe("/dashboard");
   });
 });

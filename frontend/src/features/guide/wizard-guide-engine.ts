@@ -419,7 +419,7 @@ export function buildBlockedModuleGuide(
   title: string,
   message: string,
   actionLabel = "Volver al dashboard",
-  href = "/",
+  href = "/dashboard",
 ): WizardGuideState {
   return {
     wizard,

@@ -77,7 +77,7 @@ export default function PlaneacionPage({
           <p>{errorMessage ?? "El módulo se encuentra inaccesible en este momento."}</p>
           <div className="mt-5">
             <Link
-              href="/"
+              href="/dashboard"
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100 transition"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -93,7 +93,7 @@ export default function PlaneacionPage({
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
       <div className="self-start">
         <Link
-          href="/"
+          href="/dashboard"
           className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-[color:var(--card-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />

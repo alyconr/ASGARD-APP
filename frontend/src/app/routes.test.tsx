@@ -1,0 +1,26 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import HomePage from "./page";
+import DashboardPage from "./dashboard/page";
+
+vi.mock("next/font/google", () => ({
+  Plus_Jakarta_Sans: () => ({ variable: "landing-font" }),
+  Caveat: () => ({ variable: "handwriting-font" }),
+}));
+vi.mock("@/features/landing/landing-page", () => ({
+  LandingPage: () => <h1>Landing pública</h1>,
+}));
+vi.mock("@/features/dashboard/master-dashboard", () => ({
+  MasterDashboard: () => <h1>Panel maestro existente</h1>,
+}));
+afterEach(cleanup);
+it("la raíz renderiza la landing", () => {
+  render(<HomePage />);
+  expect(screen.getByRole("heading")).toHaveTextContent("Landing pública");
+});
+it("dashboard conserva el panel maestro", () => {
+  render(<DashboardPage />);
+  expect(screen.getByRole("heading")).toHaveTextContent(
+    "Panel maestro existente",
+  );
+});
