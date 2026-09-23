@@ -11,6 +11,9 @@ export async function eliminarCargueCompleto(referenciaId: string): Promise<void
   );
 
   if (!response.ok) {
+    if (response.status === 404) {
+      return;
+    }
     let errorDetail = "No fue posible eliminar el cargue completo.";
     try {
       const payload = (await response.json()) as { detail?: string };

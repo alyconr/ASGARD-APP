@@ -745,24 +745,28 @@ export function useProgramaWizard(): ProgramaWizardController {
 
   const forgetKnownDraft = useCallback(async (referenceId: string): Promise<void> => {
     setErrorMessage(null);
+    let backendSuccess = true;
     try {
       await eliminarCargueCompleto(referenceId);
-      setKnownDrafts(forgetProgramaDraft(referenceId));
-      if (activeReferenceId === referenceId) {
-        clearActiveProgramaDraftReference();
-      }
+    } catch (error) {
+      backendSuccess = false;
+      console.warn("Could not delete draft on server, cleaning up locally:", error);
+    }
+
+    setKnownDrafts(forgetProgramaDraft(referenceId));
+    if (activeReferenceId === referenceId) {
+      clearActiveProgramaDraftReference();
+    }
+
+    if (backendSuccess) {
       notify.success("Cargue eliminado", {
         description:
           "Se borraron los datos del programa, proyecto y archivos asociados en MinIO.",
       });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "No fue posible eliminar el cargue del programa.";
-      setErrorMessage(message);
-      notify.error("No fue posible eliminar el cargue", {
-        description: message,
+    } else {
+      notify.info("Borrador local removido", {
+        description:
+          "El borrador se removió de la lista local.",
       });
     }
   }, [activeReferenceId]);

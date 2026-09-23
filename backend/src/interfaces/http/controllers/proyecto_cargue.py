@@ -5,12 +5,14 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.access_scope import AccessScopeService
 from src.application.services.proyecto_cargue import ProyectoCargueService
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.auth import Usuario
+from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
 from src.interfaces.http.deps import get_access_scope_service, get_current_user
@@ -39,9 +41,16 @@ async def eliminar_cargue_completo(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> dict[str, str]:
     """Delete training program and project formativo DB records and MinIO files."""
-    await scope_service.require_process_access(current_user, referencia_id)
+    stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+    res = await session.execute(stmt)
+    proceso = res.scalar_one_or_none()
+    if proceso is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
+
     try:
         await service.eliminar_cargue_completo(referencia_id)
+        if proceso is not None:
+            await session.delete(proceso)
         await session.commit()
     except Exception as error:
         raise HTTPException(
@@ -64,7 +73,11 @@ async def eliminar_cargue_proyecto(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> dict[str, str]:
     """Delete project formativo DB records and MinIO files, preserving program."""
-    await scope_service.require_process_access(current_user, referencia_id)
+    stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+    res = await session.execute(stmt)
+    proceso = res.scalar_one_or_none()
+    if proceso is not None:
+        await scope_service.require_process_access(current_user, referencia_id)
 
 
     try:

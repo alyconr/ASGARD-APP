@@ -27,14 +27,10 @@ PASSWORD_CHANGE_WHITELIST = {
 }
 
 
-def _get_request(request: Request) -> Request:
-    return request
-
-
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer)],
     session: Annotated[AsyncSession, Depends(get_async_session)],
-    request: Annotated[Request, Depends(_get_request)] = None,  # type: ignore
+    request: Request = None,  # type: ignore
 ) -> Usuario:
     """Validate Bearer JWT token and return active Usuario ORM instance."""
     if credentials is None:

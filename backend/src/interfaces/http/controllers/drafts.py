@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.application.dto.drafts import SaveDraftCommand
 from src.application.services.access_scope import AccessScopeService
@@ -17,7 +18,7 @@ from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoEquipo, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.organizacion import ProcesoCurricular
+from src.infrastructure.db.models.organizacion import EquipoEjecutor, ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
@@ -56,25 +57,36 @@ async def save_draft(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> DraftResponse:
     """Create or update the draft for a program or project reference."""
-    can_access = await scope_service.can_access_process(current_user, referencia_id)
-    if not can_access:
-        # Check if process already exists
-        stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+    if hasattr(scope_service, "_session") and scope_service._session is not None:
+        stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .options(
+                selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(
+                    EquipoEjecutor.miembros
+                )
+            )
+        )
         proc_res = await scope_service._session.execute(stmt)
         existing_proc = proc_res.scalar_one_or_none()
+
         if existing_proc is not None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes autorización para modificar este borrador",
-            )
-
-
+            can_access = await scope_service.can_access_process(current_user, referencia_id)
+            if not can_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes autorización para modificar este borrador",
+                )
+        else:
             # Process is new. Resolve team assignment
             if current_user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-                active_teams = [
-                    t for t in current_user.equipos_liderados
-                    if t.estado == EstadoEquipo.ACTIVO
-                ]
+                teams_stmt = select(EquipoEjecutor).where(
+                    EquipoEjecutor.lider_id == current_user.id,
+                    EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                )
+                teams_res = await scope_service._session.execute(teams_stmt)
+                active_teams = teams_res.scalars().all()
+
                 if len(active_teams) == 0:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -101,10 +113,18 @@ async def save_draft(
                 especialidad_id = target_team.especialidad_id
                 lider_id = current_user.id
             elif current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-                equipo_id = None
+                equipo_id = request.equipo_ejecutor_id
                 coordinacion_id = current_user.coordinacion_id
                 especialidad_id = current_user.especialidad_id
                 lider_id = None
+                if equipo_id:
+                    team_stmt = select(EquipoEjecutor).where(EquipoEjecutor.id == equipo_id)
+                    team_res = await scope_service._session.execute(team_stmt)
+                    team = team_res.scalar_one_or_none()
+                    if team:
+                        coordinacion_id = team.coordinacion_id
+                        especialidad_id = team.especialidad_id
+                        lider_id = team.lider_id
             else:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -119,11 +139,6 @@ async def save_draft(
                 equipo_ejecutor_id=equipo_id,
                 lider_id=lider_id,
             )
-            if not await scope_service.can_access_process(current_user, referencia_id):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes autorización para modificar este borrador",
-                )
 
     try:
         payload = SaveDraftInput(
