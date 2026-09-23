@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,7 @@ from src.infrastructure.db.models.mixins import (
 estado_usuario_enum = build_postgres_enum(EstadoUsuario, "estado_usuario")
 
 if TYPE_CHECKING:
+    from src.infrastructure.db.models.curriculum import ProgramaFormacion
     from src.infrastructure.db.models.organizacion import (
         Coordinacion,
         EquipoEjecutor,
@@ -151,6 +152,13 @@ class Usuario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         foreign_keys="EquipoEjecutorMiembro.usuario_id",
         lazy="selectin",
     )
+    programas_autorizados: Mapped[list[UsuarioProgramaAutorizado]] = relationship(
+        "UsuarioProgramaAutorizado",
+        back_populates="usuario",
+        foreign_keys="UsuarioProgramaAutorizado.usuario_id",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     @property
     def activo(self) -> bool:
@@ -198,4 +206,50 @@ class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     usuario: Mapped[Usuario] = relationship("Usuario", foreign_keys=[usuario_id])
+ 
+ 
+class UsuarioProgramaAutorizado(UUIDPrimaryKeyMixin, Base):
+    """M2M association for training programs authorized per user."""
+
+    __tablename__ = "usuarios_programas_autorizados"
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "programa_id", name="uq_usuario_programa_autorizado"),
+        Index("ix_usuarios_programas_usuario_id", "usuario_id"),
+        Index("ix_usuarios_programas_programa_id", "programa_id"),
+        Index("ix_usuarios_programas_activo", "activo"),
+    )
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    programa_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("programas_formacion.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    asignado_por: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    fecha_asignacion: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    usuario: Mapped[Usuario] = relationship(
+        "Usuario",
+        foreign_keys=[usuario_id],
+        back_populates="programas_autorizados",
+        lazy="selectin",
+    )
+    programa: Mapped[ProgramaFormacion] = relationship(
+        "ProgramaFormacion",
+        foreign_keys=[programa_id],
+        lazy="selectin",
+    )
 

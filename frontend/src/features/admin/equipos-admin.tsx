@@ -30,6 +30,7 @@ interface Miembro {
   equipo_id: string;
   usuario_id: string;
   activo: boolean;
+  rol_equipo?: string;
   usuario?: UserSummary;
 }
 
@@ -76,6 +77,7 @@ export function EquiposAdmin(): React.JSX.Element {
   // Add member modal state
   const [selectedEquipoForMember, setSelectedEquipoForMember] = useState<EquipoEjecutor | null>(null);
   const [selectedMemberUserId, setSelectedMemberUserId] = useState("");
+  const [selectedMemberRole, setSelectedMemberRole] = useState("COLABORADOR");
   const [memberError, setMemberError] = useState<string | null>(null);
 
   // Load catalogs (coordinaciones, unassigned processes, support users)
@@ -164,7 +166,10 @@ export function EquiposAdmin(): React.JSX.Element {
       const res = await authFetch(`${getApiBaseUrl()}/equipos/${selectedEquipoForMember.id}/miembros`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usuario_id: selectedMemberUserId }),
+        body: JSON.stringify({
+          usuario_id: selectedMemberUserId,
+          rol_equipo: selectedMemberRole,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -173,6 +178,7 @@ export function EquiposAdmin(): React.JSX.Element {
       }
       setSelectedEquipoForMember(null);
       setSelectedMemberUserId("");
+      setSelectedMemberRole("COLABORADOR");
       await loadTeams();
     } catch (err: unknown) {
       setMemberError(err instanceof Error ? err.message : "Error al asociar miembro");
@@ -369,6 +375,10 @@ export function EquiposAdmin(): React.JSX.Element {
         {equipos.map((equipo) => {
           const isActivo = equipo.estado === "ACTIVO";
           const miembros = equipo.miembros || [];
+          const activeMembersCount = miembros.filter((m) => m.activo).length + (equipo.lider_id ? 1 : 0);
+          const maxCapacity = equipo.max_members || 5;
+          const isFull = activeMembersCount >= maxCapacity;
+
           return (
             <div
               key={equipo.id}
@@ -378,6 +388,9 @@ export function EquiposAdmin(): React.JSX.Element {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">{equipo.nombre}</h3>
+                    {equipo.descripcion && (
+                      <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">{equipo.descripcion}</p>
+                    )}
                     <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                       {equipo.coordinacion && (
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -390,8 +403,23 @@ export function EquiposAdmin(): React.JSX.Element {
                         </span>
                       )}
                     </div>
+                    {equipo.programa && (
+                      <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <span className="font-bold">Programa:</span> {equipo.programa.codigo_programa} - {equipo.programa.nombre_programa} (v{equipo.programa.version_programa || "1"})
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isFull
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                      }`}
+                      title={`Capacidad: ${activeMembersCount} de ${maxCapacity} integrantes`}
+                    >
+                      {activeMembersCount}/{maxCapacity}
+                    </span>
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         isActivo
@@ -430,7 +458,7 @@ export function EquiposAdmin(): React.JSX.Element {
                 {/* Support Members */}
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
-                    <span>Miembros de Apoyo ({miembros.length})</span>
+                    <span>Miembros ({miembros.length})</span>
                     <button
                       onClick={() => setSelectedEquipoForMember(equipo)}
                       className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
@@ -440,7 +468,7 @@ export function EquiposAdmin(): React.JSX.Element {
                   </div>
                   <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1">
                     {miembros.length === 0 ? (
-                      <div className="text-[11px] text-slate-400 italic">No hay miembros de apoyo vinculados</div>
+                      <div className="text-[11px] text-slate-400 italic">No hay miembros vinculados</div>
                     ) : (
                       miembros.map((m) => (
                         <div
@@ -448,8 +476,23 @@ export function EquiposAdmin(): React.JSX.Element {
                           className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-800/40"
                         >
                           <div>
-                            <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                              {m.usuario?.nombre} {m.usuario?.apellido}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                {m.usuario?.nombre} {m.usuario?.apellido}
+                              </span>
+                              <span
+                                className={`rounded px-1.5 py-0.2 text-[9px] font-bold ${
+                                  m.rol_equipo === "CO_LIDER"
+                                    ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                                    : m.rol_equipo === "INSTRUCTOR"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                    : m.rol_equipo === "TRANSVERSAL"
+                                    ? "bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300"
+                                    : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                                }`}
+                              >
+                                {m.rol_equipo || "COLABORADOR"}
+                              </span>
                             </div>
                             <div className="text-[10px] text-slate-400">{m.usuario?.email}</div>
                           </div>
@@ -515,72 +558,106 @@ export function EquiposAdmin(): React.JSX.Element {
       />
 
       {/* Modal: Add Member */}
-      {selectedEquipoForMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Vincular Miembro de Apoyo
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSelectedEquipoForMember(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Asigna un <span className="font-semibold text-slate-700 dark:text-slate-300">USUARIO_ADICIONAL</span> al equipo{" "}
-              <span className="font-bold text-emerald-600">{selectedEquipoForMember.nombre}</span>.
-            </p>
+      {selectedEquipoForMember && (() => {
+        const currentActive = (selectedEquipoForMember.miembros?.filter((m) => m.activo).length || 0) + (selectedEquipoForMember.lider_id ? 1 : 0);
+        const max = selectedEquipoForMember.max_members || 5;
+        const isAtCapacity = currentActive >= max;
 
-            {memberError && (
-              <div className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700 dark:bg-rose-950/50">
-                {memberError}
-              </div>
-            )}
-
-            <div className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Usuario de Apoyo Disponible
-                </label>
-                <select
-                  value={selectedMemberUserId}
-                  onChange={(e) => setSelectedMemberUserId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="" disabled>Seleccione usuario adicional...</option>
-                  {usuariosApoyo.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombre} {u.apellido} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Vincular Integrante al Equipo
+                </h3>
                 <button
                   type="button"
                   onClick={() => setSelectedEquipoForMember(null)}
-                  className="rounded-xl px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
                 >
-                  Cancelar
+                  ✕
                 </button>
-                <button
-                  type="button"
-                  disabled={!selectedMemberUserId}
-                  onClick={handleAddMember}
-                  className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Vincular al Equipo
-                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Asigna un integrante al equipo{" "}
+                <span className="font-bold text-emerald-600">{selectedEquipoForMember.nombre}</span>.
+              </p>
+
+              {isAtCapacity ? (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300">
+                  Capacidad máxima alcanzada ({currentActive}/{max} integrantes activos). Para vincular más usuarios, inactive a otro miembro o incremente el límite del equipo.
+                </div>
+              ) : (
+                <div className="mt-2 text-[11px] text-slate-500">
+                  Ocupación del equipo: <span className="font-semibold text-slate-700 dark:text-slate-300">{currentActive} / {max}</span> integrantes.
+                </div>
+              )}
+
+              {memberError && (
+                <div className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs text-rose-700 dark:bg-rose-950/50">
+                  {memberError}
+                </div>
+              )}
+
+              <div className="mt-4 space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Usuario Disponible
+                  </label>
+                  <select
+                    value={selectedMemberUserId}
+                    onChange={(e) => setSelectedMemberUserId(e.target.value)}
+                    disabled={isAtCapacity}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="" disabled>Seleccione usuario...</option>
+                    {usuariosApoyo.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nombre} {u.apellido} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Rol en el Equipo
+                  </label>
+                  <select
+                    value={selectedMemberRole}
+                    onChange={(e) => setSelectedMemberRole(e.target.value)}
+                    disabled={isAtCapacity}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="COLABORADOR">COLABORADOR - Integrante de apoyo curricular</option>
+                    <option value="INSTRUCTOR">INSTRUCTOR - Instructor técnico/específico</option>
+                    <option value="TRANSVERSAL">TRANSVERSAL - Instructor transversal / bilingüismo</option>
+                    <option value="CO_LIDER">CO_LIDER - Co-líder con permisos de edición y gestión</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEquipoForMember(null)}
+                    className="rounded-xl px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedMemberUserId || isAtCapacity}
+                    onClick={handleAddMember}
+                    className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Vincular al Equipo
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

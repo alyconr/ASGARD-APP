@@ -72,3 +72,38 @@ export async function confirmProgramaExcelImport(
 
   return (await response.json()) as ProgramaExcelImportResponse;
 }
+
+export interface ProgramaExcelPrevalidationResponse {
+  authorized: boolean;
+  codigo_programa: string;
+  nombre_programa: string;
+  version_programa: string;
+  mensaje: string;
+  equipo_id?: string | null;
+  programa_id?: string | null;
+}
+
+export async function prevalidateProgramaExcel(
+  referenciaId: string,
+  file: File,
+): Promise<ProgramaExcelPrevalidationResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await authFetch(
+    `${getApiBaseUrl()}/programas/${referenciaId}/documentos/programa-excel/prevalidate`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    throw new ProgramaExcelImportError(
+      response.status,
+      await parseErrorDetail(response),
+    );
+  }
+
+  return (await response.json()) as ProgramaExcelPrevalidationResponse;
+}

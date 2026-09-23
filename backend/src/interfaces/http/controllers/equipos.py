@@ -16,6 +16,7 @@ from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
 from src.interfaces.http.deps import get_current_user, require_roles
+from src.interfaces.http.schemas.auth import ProgramaSimpleResponse
 from src.interfaces.http.schemas.organizacion import (
     CoordinacionCreate,
     CoordinacionResponse,
@@ -206,6 +207,26 @@ async def delete_especialidad(
 # ==========================================
 
 
+@router.get("/equipos/mis-equipos", response_model=list[EquipoEjecutorResponse])
+async def list_mis_equipos(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[EquipoEjecutorResponse]:
+    """List executing teams where the current user is leader, co-leader, or member."""
+    service = TeamAdminService(session)
+    return await service.list_user_teams(current_user)
+
+
+@router.get("/programas/catalogo", response_model=list[ProgramaSimpleResponse])
+async def list_programas_catalogo(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[ProgramaSimpleResponse]:
+    """List available programs for catalog/assignment dropdowns."""
+    service = TeamAdminService(session)
+    return await service.list_programas_catalogo()
+
+
 @router.get("/equipos", response_model=PaginatedEquiposResponse)
 async def list_equipos(
     session: Annotated[AsyncSession, Depends(get_async_session)],
@@ -279,7 +300,7 @@ async def update_equipo(
     "/equipos/{equipo_id}/miembros",
     response_model=MiembroResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value, RolUsuario.LIDER_EQUIPO_EJECUTOR.value))],
 )
 async def add_miembro_equipo(
     equipo_id: uuid.UUID,
@@ -295,7 +316,7 @@ async def add_miembro_equipo(
 @router.patch(
     "/equipos/{equipo_id}/miembros/{usuario_id}",
     response_model=MiembroResponse,
-    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value, RolUsuario.LIDER_EQUIPO_EJECUTOR.value))],
 )
 async def update_miembro_status(
     equipo_id: uuid.UUID,

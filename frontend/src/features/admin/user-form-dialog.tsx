@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { User } from "@/features/auth/types";
+import { ProgramaSimple, User } from "@/features/auth/types";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { SpecialtyFormDialog } from "./specialty-form-dialog";
 
@@ -45,6 +45,9 @@ export function UserFormDialog({
   const [selectedEspId, setSelectedEspId] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [programasCatalogo, setProgramasCatalogo] = useState<ProgramaSimple[]>([]);
+  const [selectedProgramasIds, setSelectedProgramasIds] = useState<string[]>([]);
+  const [programSearch, setProgramSearch] = useState("");
 
   const [coordinaciones, setCoordinaciones] = useState<Coordinacion[]>([]);
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
@@ -66,12 +69,18 @@ export function UserFormDialog({
     return [];
   };
 
-  // Load coordinations on mount
+  // Load coordinations and programs catalog on mount
   useEffect(() => {
     if (!isOpen) return;
     authFetch(`${getApiBaseUrl()}/coordinaciones?solo_activas=true`)
       .then(async (res) => {
         if (res.ok) setCoordinaciones(await res.json());
+      })
+      .catch(console.error);
+
+    authFetch(`${getApiBaseUrl()}/programas/catalogo`)
+      .then(async (res) => {
+        if (res.ok) setProgramasCatalogo(await res.json());
       })
       .catch(console.error);
   }, [isOpen]);
@@ -97,6 +106,7 @@ export function UserFormDialog({
       setSelectedRole(userToEdit.roles[0] || "LIDER_EQUIPO_EJECUTOR");
       setSelectedCoordId(userToEdit.coordinacion?.id || "");
       setSelectedEspId(userToEdit.especialidad?.id || "");
+      setSelectedProgramasIds(userToEdit.programas_autorizados?.map((p) => p.id) || []);
       setPassword("");
       setPasswordConfirmation("");
     } else {
@@ -108,9 +118,11 @@ export function UserFormDialog({
       setSelectedRole("LIDER_EQUIPO_EJECUTOR");
       setSelectedCoordId("");
       setSelectedEspId("");
+      setSelectedProgramasIds([]);
       setPassword("");
       setPasswordConfirmation("");
     }
+    setProgramSearch("");
     setError(null);
   }, [userToEdit, isOpen]);
 
@@ -149,6 +161,7 @@ export function UserFormDialog({
           roles: [selectedRole],
           coordinacion_id: selectedCoordId || null,
           especialidad_id: selectedEspId || null,
+          programas_ids: selectedProgramasIds,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/auth/users/${userToEdit.id}`, {
@@ -173,6 +186,7 @@ export function UserFormDialog({
           roles: [selectedRole],
           coordinacion_id: selectedCoordId || null,
           especialidad_id: selectedEspId || null,
+          programas_ids: selectedProgramasIds,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/auth/users`, {
@@ -405,6 +419,95 @@ export function UserFormDialog({
               </div>
             </div>
           )}
+
+          {/* Programas de Formación Autorizados */}
+          <div className="border-t border-slate-100 pt-3 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                Programas de Formación Autorizados ({selectedProgramasIds.length})
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedProgramasIds(programasCatalogo.map((p) => p.id))}
+                  className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline"
+                >
+                  Seleccionar todos
+                </button>
+                <span className="text-slate-300 dark:text-slate-700">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProgramasIds([])}
+                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 hover:underline"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Define los programas curriculares sobre los cuales el usuario tiene permiso para liderar equipos o cargar matrices.
+            </p>
+            <input
+              type="text"
+              placeholder="Filtrar por código o nombre..."
+              value={programSearch}
+              onChange={(e) => setProgramSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-800 transition focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 mb-2"
+            />
+            <div className="max-h-36 overflow-y-auto space-y-1.5 rounded-lg border border-slate-200 bg-slate-50/50 p-2 dark:border-slate-700 dark:bg-slate-800/30">
+              {programasCatalogo.length === 0 ? (
+                <div className="text-center py-2 text-xs text-slate-400">No hay programas registrados en el catálogo</div>
+              ) : (
+                programasCatalogo
+                  .filter((p) => {
+                    const term = programSearch.toLowerCase();
+                    return (
+                      p.codigo_programa.toLowerCase().includes(term) ||
+                      p.nombre_programa.toLowerCase().includes(term)
+                    );
+                  })
+                  .map((p) => {
+                    const isSelected = selectedProgramasIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer border text-xs transition ${
+                          isSelected
+                            ? "border-emerald-300 bg-emerald-50/70 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100"
+                            : "border-transparent bg-white hover:bg-slate-100/70 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/50 dark:text-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProgramasIds((prev) => [...prev, p.id]);
+                            } else {
+                              setSelectedProgramasIds((prev) => prev.filter((id) => id !== p.id));
+                            }
+                          }}
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-semibold text-[11px] text-slate-900 dark:text-white">
+                              {p.codigo_programa}
+                            </span>
+                            <span className="text-[10px] rounded bg-slate-100 px-1 py-0.2 font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                              v{p.version_programa || "1"}
+                            </span>
+                          </div>
+                          <div className="text-[11px] truncate text-slate-600 dark:text-slate-300 mt-0.5">
+                            {p.nombre_programa}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })
+              )}
+            </div>
+          </div>
 
           <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
             <button

@@ -138,3 +138,13 @@ export interface AuditFilters {
   referencia_id?: string;
   search?: string;
 }
+
+export type RolEquipo = "LIDER" | "CO_LIDER" | "INSTRUCTOR" | "TRANSVERSAL" | "COLABORADOR";
+
+export interface ProgramaSimple {
+  id: string;
+  codigo_programa: string;
+  nombre_programa: string;
+  version_programa?: string | null;
+}
+

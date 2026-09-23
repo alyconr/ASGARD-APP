@@ -123,3 +123,13 @@ class EstadoUsuario(str, Enum):
     BLOQUEADO = "BLOQUEADO"
 
 
+class RolEquipo(str, Enum):
+    """Team membership roles inside an executing team."""
+
+    LIDER = "LIDER"
+    CO_LIDER = "CO_LIDER"
+    INSTRUCTOR = "INSTRUCTOR"
+    TRANSVERSAL = "TRANSVERSAL"
+    COLABORADOR = "COLABORADOR"
+
+

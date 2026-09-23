@@ -148,7 +148,16 @@ class AccessScopeService:
                 return True
             if proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id:
                 return True
-            return False
+            if not proceso.equipo_ejecutor_id:
+                return False
+            member_stmt = select(EquipoEjecutorMiembro).where(
+                EquipoEjecutorMiembro.equipo_id == proceso.equipo_ejecutor_id,
+                EquipoEjecutorMiembro.usuario_id == user.id,
+                EquipoEjecutorMiembro.activo.is_(True),
+            )
+            member_res = await self._session.execute(member_stmt)
+            member = member_res.scalar_one_or_none()
+            return isinstance(member, EquipoEjecutorMiembro) and member.activo
 
         if user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
             if not proceso.equipo_ejecutor_id:
@@ -159,7 +168,8 @@ class AccessScopeService:
                 EquipoEjecutorMiembro.activo.is_(True),
             )
             member_res = await self._session.execute(member_stmt)
-            return member_res.scalar_one_or_none() is not None
+            member = member_res.scalar_one_or_none()
+            return isinstance(member, EquipoEjecutorMiembro) and member.activo
 
         return False
 
@@ -217,6 +227,16 @@ class AccessScopeService:
                 return proceso
             if proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id:
                 return proceso
+            if proceso.equipo_ejecutor_id:
+                member_stmt = select(EquipoEjecutorMiembro).where(
+                    EquipoEjecutorMiembro.equipo_id == proceso.equipo_ejecutor_id,
+                    EquipoEjecutorMiembro.usuario_id == user.id,
+                    EquipoEjecutorMiembro.activo.is_(True),
+                )
+                member_res = await self._session.execute(member_stmt)
+                member = member_res.scalar_one_or_none()
+                if isinstance(member, EquipoEjecutorMiembro) and member.activo:
+                    return proceso
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes autorización sobre el equipo ejecutor de este proceso",
@@ -234,7 +254,8 @@ class AccessScopeService:
                 EquipoEjecutorMiembro.activo.is_(True),
             )
             member_res = await self._session.execute(member_stmt)
-            if member_res.scalar_one_or_none() is not None:
+            member = member_res.scalar_one_or_none()
+            if isinstance(member, EquipoEjecutorMiembro) and member.activo:
                 return proceso
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -243,7 +264,7 @@ class AccessScopeService:
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Rol sin autorización sobre este proceso curricular",
+            detail="Acceso denegado al proceso curricular",
         )
 
     async def require_program_access(

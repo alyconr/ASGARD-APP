@@ -143,3 +143,16 @@ class ProgramaExcelImportResponse(BaseModel):
     pendiente_ids: list[uuid.UUID]
     resumen: ExcelPreviewSummaryResponse
     pendientes_resumen: ExcelPendingSummaryResponse
+
+
+class ProgramaExcelPrevalidationResponse(BaseModel):
+    """Response returned after fast prevalidation of the canonical Excel workbook."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    codigo_programa: str
+    nombre_programa: str
+    version_programa: str | None = None
+    autorizado: bool
+    mensaje: str | None = None
+

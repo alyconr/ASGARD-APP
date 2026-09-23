@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
-from src.interfaces.http.schemas.auth import UserResponse
+from src.interfaces.http.schemas.auth import ProgramaSimpleResponse, UserResponse
 
 
 class CoordinacionCreate(BaseModel):
@@ -58,6 +58,7 @@ class MiembroResponse(BaseModel):
     id: uuid.UUID
     equipo_id: uuid.UUID
     usuario_id: uuid.UUID
+    rol_equipo: str = "INSTRUCTOR"
     activo: bool
     fecha_asignacion: datetime
     usuario: UserResponse | None = None
@@ -65,10 +66,12 @@ class MiembroResponse(BaseModel):
 
 class MiembroCreate(BaseModel):
     usuario_id: uuid.UUID
+    rol_equipo: str = "INSTRUCTOR"
 
 
 class MiembroUpdate(BaseModel):
-    activo: bool
+    activo: bool | None = None
+    rol_equipo: str | None = None
 
 
 class EquipoEjecutorCreate(BaseModel):
@@ -76,6 +79,10 @@ class EquipoEjecutorCreate(BaseModel):
     coordinacion_id: uuid.UUID
     especialidad_id: uuid.UUID
     lider_id: uuid.UUID
+    programa_id: uuid.UUID | None = None
+    max_members: int = 5
+    leaders_can_manage_members: bool = True
+    descripcion: str | None = None
 
 
 class EquipoEjecutorUpdate(BaseModel):
@@ -83,6 +90,10 @@ class EquipoEjecutorUpdate(BaseModel):
     coordinacion_id: uuid.UUID | None = None
     especialidad_id: uuid.UUID | None = None
     lider_id: uuid.UUID | None = None
+    programa_id: uuid.UUID | None = None
+    max_members: int | None = None
+    leaders_can_manage_members: bool | None = None
+    descripcion: str | None = None
     estado: str | None = None
 
 
@@ -94,6 +105,11 @@ class EquipoEjecutorResponse(BaseModel):
     coordinacion_id: uuid.UUID
     especialidad_id: uuid.UUID
     lider_id: uuid.UUID
+    programa_id: uuid.UUID | None = None
+    programa: ProgramaSimpleResponse | None = None
+    max_members: int = 5
+    leaders_can_manage_members: bool = True
+    descripcion: str | None = None
     estado: str
     lider: UserResponse | None = None
     miembros: list[MiembroResponse] = []

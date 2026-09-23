@@ -13,7 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.domain.shared.enums import EstadoEquipo, EstadoUsuario, RolUsuario
-from src.infrastructure.db.models.auth import Rol, UserSession, Usuario, UsuarioRol
+from src.infrastructure.db.models.auth import (
+    Rol,
+    UserSession,
+    Usuario,
+    UsuarioProgramaAutorizado,
+    UsuarioRol,
+)
+from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
     EquipoEjecutor,
@@ -24,6 +31,7 @@ from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.security.password import hash_password
 from src.interfaces.http.schemas.auth import (
     PaginatedUsersResponse,
+    ProgramaSimpleResponse,
     UserCreateRequest,
     UserResetPasswordRequest,
     UserResponse,
@@ -34,6 +42,17 @@ from src.interfaces.http.schemas.auth import (
 
 def _map_user_response(user: Usuario) -> UserResponse:
     estado_val = user.estado.value if hasattr(getattr(user, "estado", None), "value") else str(getattr(user, "estado", None) or "ACTIVO")
+    progs: list[ProgramaSimpleResponse] = []
+    for up in getattr(user, "programas_autorizados", []) or []:
+        if getattr(up, "activo", True) and getattr(up, "programa", None):
+            progs.append(
+                ProgramaSimpleResponse(
+                    id=up.programa.id,
+                    codigo_programa=up.programa.codigo_programa,
+                    nombre_programa=up.programa.nombre_programa,
+                    version_programa=up.programa.version_programa,
+                )
+            )
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -48,6 +67,7 @@ def _map_user_response(user: Usuario) -> UserResponse:
         roles=list(user.role_names),
         coordinacion=user.coordinacion,  # type: ignore
         especialidad=user.especialidad,  # type: ignore
+        programas_autorizados=progs,
     )
 
 
@@ -179,6 +199,29 @@ class UserAdminService:
             roles_res = await self.session.execute(roles_stmt)
             new_user.roles = list(roles_res.scalars().all())
 
+        if payload.programas_ids:
+            for prog_id in payload.programas_ids:
+                prog = await self.session.get(ProgramaFormacion, prog_id)
+                if prog is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"El programa de formación especificado no existe ({prog_id})",
+                    )
+                link = UsuarioProgramaAutorizado(
+                    usuario_id=new_user.id,
+                    programa_id=prog_id,
+                    asignado_por=actor.id,
+                    activo=True,
+                )
+                self.session.add(link)
+
+            await self.audit_repo.add_event(
+                entidad="Usuario",
+                entidad_id=new_user.id,
+                accion="USUARIO_PROGRAMAS_ASIGNADOS",
+                detalle={"asignado_por": str(actor.id), "programas_ids": [str(pid) for pid in payload.programas_ids]},
+            )
+
         await self.audit_repo.add_event(
             entidad="Usuario",
             entidad_id=new_user.id,
@@ -186,7 +229,10 @@ class UserAdminService:
             detalle={"creado_por": str(actor.id), "email": new_user.email, "roles": payload.roles},
         )
         await self.session.commit()
-        await self.session.refresh(new_user, attribute_names=["roles", "coordinacion", "especialidad"])
+        await self.session.refresh(
+            new_user,
+            attribute_names=["roles", "coordinacion", "especialidad", "programas_autorizados"],
+        )
         return _map_user_response(new_user)
 
     async def get_user(self, actor: Usuario, user_id: uuid.UUID) -> UserResponse:
@@ -198,6 +244,7 @@ class UserAdminService:
                 selectinload(Usuario.roles),
                 selectinload(Usuario.coordinacion),
                 selectinload(Usuario.especialidad),
+                selectinload(Usuario.programas_autorizados).selectinload(UsuarioProgramaAutorizado.programa),
             ],
         )
         if user is None:
@@ -266,6 +313,7 @@ class UserAdminService:
                 selectinload(Usuario.roles),
                 selectinload(Usuario.coordinacion),
                 selectinload(Usuario.especialidad),
+                selectinload(Usuario.programas_autorizados).selectinload(UsuarioProgramaAutorizado.programa),
             )
             .order_by(Usuario.nombre, Usuario.apellido)
             .offset((page - 1) * page_size)
@@ -388,6 +436,77 @@ class UserAdminService:
         if payload.area is not None:
             user.area = payload.area.strip() if payload.area else None
 
+        # Update authorized programs
+        programs_changed = False
+        if payload.programas_ids is not None:
+            target_ids = set(payload.programas_ids)
+            for prog_id in target_ids:
+                prog = await self.session.get(ProgramaFormacion, prog_id)
+                if prog is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"El programa de formación especificado no existe ({prog_id})",
+                    )
+
+            # Check if user leads an active team with a program being removed
+            for team in user.equipos_liderados:
+                if team.estado == EstadoEquipo.ACTIVO and team.programa_id and team.programa_id not in target_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"No se puede remover el programa: el usuario es líder del equipo activo '{team.nombre}'",
+                    )
+
+            for membership in user.membresias:
+                if (
+                    membership.activo
+                    and membership.equipo
+                    and membership.equipo.estado == EstadoEquipo.ACTIVO
+                    and membership.equipo.programa_id
+                    and membership.equipo.programa_id not in target_ids
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"No se puede remover el programa: el usuario es miembro activo del equipo '{membership.equipo.nombre}'",
+                    )
+
+            # Existing links
+            existing_links_stmt = select(UsuarioProgramaAutorizado).where(
+                UsuarioProgramaAutorizado.usuario_id == user.id
+            )
+            existing_res = await self.session.execute(existing_links_stmt)
+            existing_map = {link.programa_id: link for link in existing_res.scalars().all()}
+
+            for target_id in target_ids:
+                if target_id in existing_map:
+                    if not existing_map[target_id].activo:
+                        existing_map[target_id].activo = True
+                        programs_changed = True
+                else:
+                    new_link = UsuarioProgramaAutorizado(
+                        usuario_id=user.id,
+                        programa_id=target_id,
+                        asignado_por=actor.id,
+                        activo=True,
+                    )
+                    self.session.add(new_link)
+                    programs_changed = True
+
+            for prog_id, link in existing_map.items():
+                if prog_id not in target_ids and link.activo:
+                    link.activo = False
+                    programs_changed = True
+
+            if programs_changed:
+                await self.audit_repo.add_event(
+                    entidad="Usuario",
+                    entidad_id=user.id,
+                    accion="USUARIO_PROGRAMAS_ASIGNADOS",
+                    detalle={
+                        "actualizado_por": str(actor.id),
+                        "programas_ids": [str(pid) for pid in target_ids],
+                    },
+                )
+
         # Revocation rule: if roles or organizational scope change, revoke active sessions
         if roles_changed or scope_changed:
             await self._revoke_all_sessions(user)
@@ -400,10 +519,14 @@ class UserAdminService:
                 "actualizado_por": str(actor.id),
                 "roles_modificados": roles_changed,
                 "scope_modificado": scope_changed,
+                "programas_modificados": programs_changed,
             },
         )
         await self.session.commit()
-        await self.session.refresh(user, attribute_names=["roles", "coordinacion", "especialidad"])
+        await self.session.refresh(
+            user,
+            attribute_names=["roles", "coordinacion", "especialidad", "programas_autorizados"],
+        )
         return _map_user_response(user)
 
     async def change_user_status(

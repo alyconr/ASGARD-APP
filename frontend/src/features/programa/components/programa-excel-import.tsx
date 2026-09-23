@@ -617,6 +617,11 @@ export function ProgramaExcelImport({
             )}
             <p>{message}</p>
           </div>
+          {message.includes("PROGRAM_NOT_AUTHORIZED") && (
+            <div className="mt-2 rounded-md bg-rose-100/70 p-2.5 text-xs text-rose-800">
+              <span className="font-bold">Restricción de Gobernanza Curricular:</span> La matriz seleccionada no corresponde a un programa de formación que tengas autorizado o no coincide con el programa asignado a tu equipo ejecutor.
+            </div>
+          )}
           {(message.includes("ya tiene un proyecto") || message.includes("ya ha sido importado")) && (
             <div className="mt-3 flex justify-end border-t border-rose-100 pt-2">
               <button

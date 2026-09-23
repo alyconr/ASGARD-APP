@@ -33,6 +33,7 @@ from src.infrastructure.storage.document_storage import MinioDocumentStorageServ
 from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.programa_excel import (
     ProgramaExcelImportResponse,
+    ProgramaExcelPrevalidationResponse,
     ProgramaExcelPreviewResponse,
 )
 
@@ -51,6 +52,40 @@ def get_programa_excel_service(
         curriculum_repository=ProgramaExcelImportRepository(session),
         storage_service=MinioDocumentStorageService(settings),
     )
+
+
+@router.post(
+    "/{referencia_id}/documentos/programa-excel/prevalidate",
+    response_model=ProgramaExcelPrevalidationResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def prevalidate_program_excel(
+    referencia_id: uuid.UUID,
+    file: UploadFile = File(...),
+    service: ProgramaExcelImportService = Depends(get_programa_excel_service),
+    current_user: Usuario = Depends(get_current_user),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
+) -> ProgramaExcelPrevalidationResponse:
+    """Fast prevalidation of the canonical Excel workbook against authorized programs."""
+    await scope_service.require_process_access(current_user, referencia_id)
+
+    filename = file.filename or ""
+    content = await file.read()
+
+    try:
+        result = await service.prevalidate_program_excel(
+            referencia_id=referencia_id,
+            filename=filename,
+            content=content,
+            user=current_user,
+        )
+    except InvalidProgramaExcelUploadError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+
+    return ProgramaExcelPrevalidationResponse.model_validate(result)
 
 
 @router.post(
@@ -78,6 +113,7 @@ async def preview_program_excel(
             filename=filename,
             content_type=content_type,
             content=content,
+            user=current_user,
         )
     except ProgramaExcelDraftMissingError as error:
         raise HTTPException(

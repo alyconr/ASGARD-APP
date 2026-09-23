@@ -10,6 +10,13 @@ export interface EspecialidadSimple {
   nombre: string;
 }
 
+export interface ProgramaSimple {
+  id: string;
+  codigo_programa: string;
+  nombre_programa: string;
+  version_programa?: string | null;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -24,6 +31,7 @@ export interface User {
   roles: string[];
   coordinacion?: CoordinacionSimple | null;
   especialidad?: EspecialidadSimple | null;
+  programas_autorizados?: ProgramaSimple[];
 }
 
 export interface AuthState {

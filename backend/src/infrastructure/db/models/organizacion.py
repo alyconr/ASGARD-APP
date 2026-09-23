@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum as SqlEnum,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.domain.shared.enums import (
     EstadoEquipo,
     EstadoScopeProceso,
+    RolEquipo,
     TipoNecesidadProceso,
 )
 from src.infrastructure.db.base import Base
@@ -40,6 +42,7 @@ if TYPE_CHECKING:
 estado_equipo_enum = build_postgres_enum(EstadoEquipo, "estado_equipo")
 tipo_necesidad_enum = build_postgres_enum(TipoNecesidadProceso, "tipo_necesidad_proceso")
 estado_scope_enum = build_postgres_enum(EstadoScopeProceso, "estado_scope_proceso")
+rol_equipo_enum = build_postgres_enum(RolEquipo, "rol_equipo")
 
 
 class Coordinacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -111,6 +114,7 @@ class EquipoEjecutor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_equipos_ejecutores_coordinacion_id", "coordinacion_id"),
         Index("ix_equipos_ejecutores_especialidad_id", "especialidad_id"),
+        Index("ix_equipos_ejecutores_programa_id", "programa_id"),
         Index("ix_equipos_ejecutores_lider_id", "lider_id"),
         Index("ix_equipos_ejecutores_estado", "estado"),
     )
@@ -126,11 +130,29 @@ class EquipoEjecutor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("especialidades.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    programa_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("programas_formacion.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     lider_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("usuarios.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    max_members: Mapped[int] = mapped_column(
+        Integer,
+        default=5,
+        server_default="5",
+        nullable=False,
+    )
+    leaders_can_manage_members: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default="true",
+        nullable=False,
+    )
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
     estado: Mapped[EstadoEquipo] = mapped_column(
         estado_equipo_enum,
         default=EstadoEquipo.ACTIVO,
@@ -145,6 +167,11 @@ class EquipoEjecutor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     especialidad: Mapped[Especialidad] = relationship(
         "Especialidad",
         back_populates="equipos",
+        lazy="selectin",
+    )
+    programa: Mapped[ProgramaFormacion | None] = relationship(
+        "ProgramaFormacion",
+        foreign_keys=[programa_id],
         lazy="selectin",
     )
     lider: Mapped[Usuario] = relationship(
@@ -174,6 +201,7 @@ class EquipoEjecutorMiembro(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint("equipo_id", "usuario_id", name="uq_equipo_usuario_miembro"),
         Index("ix_equipos_ejecutores_miembros_equipo_id", "equipo_id"),
         Index("ix_equipos_ejecutores_miembros_usuario_id", "usuario_id"),
+        Index("ix_equipos_ejecutores_miembros_rol_equipo", "rol_equipo"),
     )
 
     equipo_id: Mapped[uuid.UUID] = mapped_column(
@@ -184,6 +212,12 @@ class EquipoEjecutorMiembro(UUIDPrimaryKeyMixin, Base):
     usuario_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("usuarios.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rol_equipo: Mapped[RolEquipo] = mapped_column(
+        rol_equipo_enum,
+        default=RolEquipo.INSTRUCTOR,
+        server_default=RolEquipo.INSTRUCTOR.value,
         nullable=False,
     )
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

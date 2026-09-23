@@ -23,6 +23,15 @@ class EspecialidadSimpleResponse(BaseModel):
     nombre: str
 
 
+class ProgramaSimpleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    codigo_programa: str
+    nombre_programa: str
+    version_programa: str | None = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +48,7 @@ class UserResponse(BaseModel):
     roles: list[str] = []
     coordinacion: CoordinacionSimpleResponse | None = None
     especialidad: EspecialidadSimpleResponse | None = None
+    programas_autorizados: list[ProgramaSimpleResponse] = []
 
 
 class LoginRequest(BaseModel):
@@ -69,6 +79,7 @@ class UserCreateRequest(BaseModel):
     coordinacion_id: uuid.UUID | None = None
     especialidad_id: uuid.UUID | None = None
     roles: list[str] = []
+    programas_ids: list[uuid.UUID] = []
 
 
 class UserUpdateRequest(BaseModel):
@@ -79,6 +90,7 @@ class UserUpdateRequest(BaseModel):
     coordinacion_id: uuid.UUID | None = None
     especialidad_id: uuid.UUID | None = None
     roles: list[str] | None = None
+    programas_ids: list[uuid.UUID] | None = None
 
 
 class UserStatusUpdateRequest(BaseModel):

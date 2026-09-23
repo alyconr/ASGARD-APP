@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { ProgramaSimple } from "@/features/auth/types";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { SpecialtyFormDialog } from "./specialty-form-dialog";
 
@@ -33,20 +34,26 @@ export interface MiembroSummary {
   equipo_id: string;
   usuario_id: string;
   activo: boolean;
+  rol_equipo?: string;
   usuario?: UserSummary;
 }
 
 export interface EquipoEjecutor {
   id: string;
   nombre: string;
+  descripcion?: string | null;
   coordinacion_id: string;
   especialidad_id: string;
   lider_id: string;
+  programa_id?: string | null;
+  max_members?: number;
+  leaders_can_manage_members?: boolean;
   estado: string;
   coordinacion?: Coordinacion;
   especialidad?: Especialidad;
   lider?: UserSummary;
   miembros?: MiembroSummary[];
+  programa?: ProgramaSimple | null;
 }
 
 interface TeamFormDialogProps {
@@ -70,7 +77,12 @@ export function TeamFormDialog({
   const [especialidadId, setEspecialidadId] = useState("");
   const [liderId, setLiderId] = useState("");
   const [estado, setEstado] = useState("ACTIVO");
+  const [programaId, setProgramaId] = useState("");
+  const [maxMembers, setMaxMembers] = useState(5);
+  const [leadersCanManageMembers, setLeadersCanManageMembers] = useState(true);
+  const [descripcion, setDescripcion] = useState("");
 
+  const [programas, setProgramas] = useState<ProgramaSimple[]>([]);
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
   const [showNewEspModal, setShowNewEspModal] = useState(false);
   const [lideres, setLideres] = useState<UserSummary[]>([]);
@@ -96,7 +108,7 @@ export function TeamFormDialog({
     return [];
   };
 
-  // Fetch all potential leaders
+  // Fetch all potential leaders and programs catalog
   useEffect(() => {
     if (!open) return;
     setLoadingUsers(true);
@@ -111,6 +123,14 @@ export function TeamFormDialog({
       })
       .catch((err) => console.error("Error loading leaders:", err))
       .finally(() => setLoadingUsers(false));
+
+    authFetch(`${getApiBaseUrl()}/programas/catalogo`)
+      .then(async (res) => {
+        if (res.ok) {
+          setProgramas(await res.json());
+        }
+      })
+      .catch((err) => console.error("Error loading programs:", err));
   }, [open]);
 
   // Sync state with selected team
@@ -121,12 +141,20 @@ export function TeamFormDialog({
       setEspecialidadId(team.especialidad_id);
       setLiderId(team.lider_id);
       setEstado(team.estado || "ACTIVO");
+      setProgramaId(team.programa_id || "");
+      setMaxMembers(team.max_members ?? 5);
+      setLeadersCanManageMembers(team.leaders_can_manage_members ?? true);
+      setDescripcion(team.descripcion || "");
     } else {
       setNombre("");
       setCoordinacionId("");
       setEspecialidadId("");
       setLiderId("");
       setEstado("ACTIVO");
+      setProgramaId("");
+      setMaxMembers(5);
+      setLeadersCanManageMembers(true);
+      setDescripcion("");
       setEspecialidades([]);
     }
     setError(null);
@@ -168,6 +196,10 @@ export function TeamFormDialog({
           nombre: nombre.trim(),
           lider_id: liderId,
           estado,
+          programa_id: programaId || null,
+          max_members: Number(maxMembers) || 5,
+          leaders_can_manage_members: leadersCanManageMembers,
+          descripcion: descripcion.trim() || null,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/equipos/${team.id}`, {
@@ -186,6 +218,10 @@ export function TeamFormDialog({
           coordinacion_id: coordinacionId,
           especialidad_id: especialidadId,
           lider_id: liderId,
+          programa_id: programaId || null,
+          max_members: Number(maxMembers) || 5,
+          leaders_can_manage_members: leadersCanManageMembers,
+          descripcion: descripcion.trim() || null,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/equipos`, {
@@ -346,6 +382,76 @@ export function TeamFormDialog({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300">
+              Programa de Formación Asignado
+            </label>
+            <select
+              value={programaId}
+              onChange={(e) => setProgramaId(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">(Opcional) Sin programa inicial asignado</option>
+              {programas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.codigo_programa} - {p.nombre_programa} (v{p.version_programa || "1"})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Al vincular un programa, las matrices curriculares cargadas por el equipo deberán coincidir con este programa.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Capacidad Máxima de Integrantes
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                required
+                value={maxMembers}
+                onChange={(e) => setMaxMembers(Number(e.target.value))}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Límite de integrantes activos asignables al equipo.
+              </p>
+            </div>
+
+            <div className="flex flex-col justify-center">
+              <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700 dark:text-slate-300 mt-2">
+                <input
+                  type="checkbox"
+                  checked={leadersCanManageMembers}
+                  onChange={(e) => setLeadersCanManageMembers(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span>Líder gestiona miembros</span>
+              </label>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Permite al líder agregar o desvincular integrantes sin requerir rol Administrador.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300">
+              Descripción del Equipo (Opcional)
+            </label>
+            <input
+              type="text"
+              maxLength={255}
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              placeholder="ej. Equipo curricular encargado de articular fichas de tecnología"
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
           </div>
 
           {isEditing && (

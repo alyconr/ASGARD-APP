@@ -11,6 +11,9 @@ from typing import Protocol
 
 from openpyxl import load_workbook
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from src.application.dto.programa_documentos import StoredDocumentDTO
 from src.application.dto.programa_excel import (
     ExcelCompetenciaPreviewDTO,
@@ -29,9 +32,11 @@ from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import (
     EstadoBloque,
     MotivoPendienteAsignacion,
+    RolUsuario,
     TipoConocimiento,
     TipoElementoCurricularPendiente,
 )
+from src.infrastructure.db.models.auth import Usuario, UsuarioProgramaAutorizado
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
@@ -41,6 +46,7 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.organizacion import EquipoEjecutor, ProcesoCurricular
 from src.infrastructure.storage.document_storage import build_programa_storage_prefix
 
 CANONICAL_SHEETS: dict[str, list[str]] = {
@@ -437,6 +443,108 @@ class ProgramaExcelImportService:
                 "y nombre. No se debe iniciar un nuevo wizard para duplicarlo."
             )
 
+    async def _validate_program_authorization(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+        user: Usuario,
+        codigo_programa: str,
+    ) -> None:
+        """Enforce that the workbook program is authorized for the user and matches the team program."""
+        if not hasattr(self._session, "execute"):
+            return
+
+        is_admin = user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value)
+
+        stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .options(
+                selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(EquipoEjecutor.programa)
+            )
+        )
+        res = await self._session.execute(stmt)
+        proceso = res.scalar_one_or_none()
+
+        if proceso and proceso.equipo_ejecutor and proceso.equipo_ejecutor.programa:
+            team_prog = proceso.equipo_ejecutor.programa
+            if team_prog.codigo_programa.strip().lower() != codigo_programa.strip().lower():
+                raise ProgramaExcelValidationError(
+                    f"PROGRAM_NOT_AUTHORIZED: La matriz corresponde al programa con código '{codigo_programa}', "
+                    f"pero el equipo ejecutor '{proceso.equipo_ejecutor.nombre}' está asignado al programa "
+                    f"'{team_prog.nombre_programa}' ({team_prog.codigo_programa})."
+                )
+
+        if is_admin:
+            return
+
+        user_prog_stmt = (
+            select(ProgramaFormacion.codigo_programa)
+            .join(UsuarioProgramaAutorizado, UsuarioProgramaAutorizado.programa_id == ProgramaFormacion.id)
+            .where(UsuarioProgramaAutorizado.usuario_id == user.id)
+        )
+        user_prog_res = await self._session.execute(user_prog_stmt)
+        authorized_codes: set[str] = set()
+        for item in user_prog_res.scalars().all():
+            if isinstance(item, str):
+                authorized_codes.add(item.strip().lower())
+            elif hasattr(item, "programa") and getattr(item, "programa", None):
+                authorized_codes.add(item.programa.codigo_programa.strip().lower())
+            elif hasattr(item, "codigo_programa"):
+                authorized_codes.add(item.codigo_programa.strip().lower())
+            elif hasattr(item, "programa_id"):
+                prog_obj = await self._curriculum_repository.get_programa(item.programa_id)
+                if prog_obj:
+                    authorized_codes.add(prog_obj.codigo_programa.strip().lower())
+
+        if codigo_programa.strip().lower() not in authorized_codes:
+            raise ProgramaExcelValidationError(
+                f"PROGRAM_NOT_AUTHORIZED: El usuario '{user.email}' no tiene autorización para "
+                f"operar el programa con código '{codigo_programa}'. Contacte al administrador para que se lo asigne."
+            )
+
+    async def prevalidate_program_excel(
+        self,
+        *,
+        referencia_id: uuid.UUID,
+        filename: str,
+        content: bytes,
+        user: Usuario,
+    ) -> dict[str, object]:
+        """Fast prevalidation of the program sheet and user authorization."""
+        _validate_excel_upload(filename=filename, content=content)
+        header = extract_program_header(content)
+        if not header:
+            return {
+                "codigo_programa": "",
+                "nombre_programa": "",
+                "version_programa": None,
+                "autorizado": False,
+                "mensaje": "No se pudo extraer la información del programa en la hoja 'Programa'.",
+            }
+        codigo_programa, nombre_programa, version_programa = header
+        try:
+            await self._validate_program_authorization(
+                referencia_id=referencia_id,
+                user=user,
+                codigo_programa=codigo_programa,
+            )
+            return {
+                "codigo_programa": codigo_programa,
+                "nombre_programa": nombre_programa,
+                "version_programa": version_programa,
+                "autorizado": True,
+                "mensaje": "Programa verificado y autorizado para cargue.",
+            }
+        except ProgramaExcelValidationError as err:
+            return {
+                "codigo_programa": codigo_programa,
+                "nombre_programa": nombre_programa,
+                "version_programa": version_programa,
+                "autorizado": False,
+                "mensaje": str(err),
+            }
+
     async def preview_program_excel(
         self,
         *,
@@ -444,6 +552,7 @@ class ProgramaExcelImportService:
         filename: str,
         content_type: str,
         content: bytes,
+        user: Usuario | None = None,
     ) -> ProgramaExcelPreviewDTO:
         """Store and validate a canonical Excel workbook without relational writes."""
         _validate_excel_upload(filename=filename, content=content)
@@ -464,6 +573,12 @@ class ProgramaExcelImportService:
 
         if workbook.is_valid:
             assert workbook.programa is not None
+            if user is not None:
+                await self._validate_program_authorization(
+                    referencia_id=referencia_id,
+                    user=user,
+                    codigo_programa=workbook.programa.codigo_programa,
+                )
             await self._reject_existing_program_load(
                 draft=draft,
                 row=workbook.programa,
@@ -576,6 +691,19 @@ class ProgramaExcelImportService:
                 "pendientes": import_result.pendientes_resumen.total,
             },
         )
+        if hasattr(self._session, "execute"):
+            proceso_stmt = (
+                select(ProcesoCurricular)
+                .where(ProcesoCurricular.referencia_id == referencia_id)
+                .options(selectinload(ProcesoCurricular.equipo_ejecutor))
+            )
+            proceso_res = await self._session.execute(proceso_stmt)
+            proceso = proceso_res.scalar_one_or_none()
+            if proceso is not None:
+                proceso.programa_id = import_result.programa_id
+                if proceso.equipo_ejecutor and not proceso.equipo_ejecutor.programa_id:
+                    proceso.equipo_ejecutor.programa_id = import_result.programa_id
+
         await self._session.commit()
         await self._session.refresh(draft)
         return import_result
@@ -780,6 +908,35 @@ class ProgramaExcelImportService:
         )
         await self._session.refresh(programa)
         return programa
+
+
+def extract_program_header(content: bytes) -> tuple[str, str, str | None] | None:
+    """Extract code, name and version from the Programa sheet quickly without full parse."""
+    try:
+        workbook = load_workbook(
+            filename=io.BytesIO(content),
+            read_only=True,
+            data_only=True,
+        )
+        if "Programa" not in workbook.sheetnames:
+            return None
+        sheet = workbook["Programa"]
+        row_iter = sheet.iter_rows(min_row=1, max_row=2, values_only=True)
+        header_row = next(row_iter, None)
+        data_row = next(row_iter, None)
+        if not header_row or not data_row:
+            return None
+        headers = [_cell_to_string(v) for v in header_row]
+        record = {h: v for h, v in zip(headers, data_row, strict=False)}
+        codigo = _cell_to_string(record.get("codigo_programa")).strip()
+        nombre = _cell_to_string(record.get("nombre_programa")).strip()
+        version_val = record.get("version_programa")
+        version = _cell_to_string(version_val).strip() if version_val is not None else None
+        if not codigo or not nombre:
+            return None
+        return codigo, nombre, version
+    except Exception:
+        return None
 
 
 def parse_canonical_workbook(content: bytes) -> CanonicalWorkbook:
