@@ -1,7 +1,7 @@
 """Add authorized training programs table to executing teams.
 
 Revision ID: b1c2d3e4f5a6
-Revises: a1b2c3d4e5f6
+Revises: d4e5f6a7b8c9
 Create Date: 2026-09-24 08:30:00
 """
 
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b1c2d3e4f5a6"
-down_revision = "a1b2c3d4e5f6"
+down_revision = "d4e5f6a7b8c9"
 branch_labels = None
 depends_on = None
 
