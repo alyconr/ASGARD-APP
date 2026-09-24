@@ -56,6 +56,29 @@ def _map_user_dto(user: Usuario | None) -> UserResponse | None:
     )
 
 
+def _map_proceso_dto(proceso: ProcesoCurricular | None) -> ProcesoCurricularResponse | None:
+    if proceso is None:
+        return None
+    tipo_val = proceso.tipo_necesidad.value if hasattr(proceso.tipo_necesidad, "value") else str(proceso.tipo_necesidad)
+    estado_val = proceso.estado_scope.value if hasattr(proceso.estado_scope, "value") else str(proceso.estado_scope)
+    return ProcesoCurricularResponse(
+        id=proceso.id,
+        referencia_id=proceso.referencia_id,
+        coordinacion_id=proceso.coordinacion_id,
+        especialidad_id=proceso.especialidad_id,
+        equipo_ejecutor_id=proceso.equipo_ejecutor_id,
+        lider_id=proceso.lider_id,
+        tipo_necesidad=tipo_val,
+        estado_scope=estado_val,
+        programa_id=proceso.programa_id,
+        proyecto_id=proceso.proyecto_id,
+        programa_nombre=proceso.programa.nombre_programa if getattr(proceso, "programa", None) else None,
+        programa_codigo=proceso.programa.codigo_programa if getattr(proceso, "programa", None) else None,
+        proyecto_nombre=proceso.proyecto.nombre_proyecto if getattr(proceso, "proyecto", None) else None,
+        proyecto_codigo=proceso.proyecto.codigo_proyecto if getattr(proceso, "proyecto", None) else None,
+    )
+
+
 def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
     miembros_dtos = [
         MiembroResponse(
@@ -66,7 +89,12 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
             fecha_asignacion=m.fecha_asignacion,
             usuario=_map_user_dto(m.usuario),
         )
-        for m in equipo.miembros
+        for m in (getattr(equipo, "miembros", None) or [])
+    ]
+    procesos_dtos = [
+        _map_proceso_dto(p)
+        for p in (getattr(equipo, "procesos", None) or [])
+        if p is not None
     ]
     return EquipoEjecutorResponse(
         id=equipo.id,
@@ -77,6 +105,7 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
         estado=equipo.estado.value if hasattr(equipo.estado, "value") else str(equipo.estado),
         lider=_map_user_dto(equipo.lider),
         miembros=miembros_dtos,
+        procesos=[p for p in procesos_dtos if p is not None],
     )
 
 
@@ -144,18 +173,22 @@ class TeamAdminService:
             options=[
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             ],
         )
         return _map_equipo_dto(reloaded)  # type: ignore
 
     async def get_team(self, equipo_id: uuid.UUID) -> EquipoEjecutorResponse:
-        """Fetch executing team details with leader and members."""
+        """Fetch executing team details with leader, members, and assigned processes."""
         stmt = (
             select(EquipoEjecutor)
             .where(EquipoEjecutor.id == equipo_id)
             .options(
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             )
         )
         res = await self.session.execute(stmt)
@@ -215,6 +248,8 @@ class TeamAdminService:
             stmt.options(
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             )
             .order_by(EquipoEjecutor.nombre)
             .offset((page - 1) * page_size)
@@ -353,6 +388,8 @@ class TeamAdminService:
             options=[
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             ],
         )
         return _map_equipo_dto(reloaded)  # type: ignore
@@ -536,5 +573,147 @@ class TeamAdminService:
             detalle={"referencia_id": str(referencia_id), "equipo_id": str(equipo.id), "lider_id": str(lider_id)},
         )
         await self.session.commit()
+        
+        reloaded_proc = await self.session.get(
+            ProcesoCurricular,
+            proceso.id,
+            options=[
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            ],
+        )
+        dto = _map_proceso_dto(reloaded_proc or proceso)
+        assert dto is not None
+        return dto
+
+    async def delete_team(
+        self,
+        actor: Usuario,
+        equipo_id: uuid.UUID,
+        desasignar_procesos: bool = False,
+    ) -> dict[str, Any]:
+        """Permanently delete executing team, optionally unassigning linked processes."""
+        equipo = await self.session.get(EquipoEjecutor, equipo_id)
+        if equipo is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo ejecutor no encontrado")
+
+        proc_stmt = select(ProcesoCurricular).where(ProcesoCurricular.equipo_ejecutor_id == equipo_id)
+        proc_res = await self.session.execute(proc_stmt)
+        assigned_processes = proc_res.scalars().all()
+
+        if len(assigned_processes) > 0 and not desasignar_procesos:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar el equipo '{equipo.nombre}' porque tiene {len(assigned_processes)} proceso(s) curricular(es) asignado(s). Desasigne o elimine los procesos vinculados primero.",
+            )
+
+        if len(assigned_processes) > 0 and desasignar_procesos:
+            for proc in assigned_processes:
+                proc.equipo_ejecutor_id = None
+                proc.lider_id = None
+                proc.estado_scope = EstadoScopeProceso.SIN_ASIGNAR
+            await self.session.flush()
+
+        nombre_equipo = equipo.nombre
+        await self.session.delete(equipo)
+        await self.audit_repo.add_event(
+            entidad="EquipoEjecutor",
+            entidad_id=equipo_id,
+            accion="TEAM_DELETED",
+            detalle={
+                "eliminado_por": str(actor.id),
+                "nombre": nombre_equipo,
+                "procesos_desasignados": len(assigned_processes),
+            },
+        )
+        await self.session.commit()
+        return {"status": "ok", "message": f"Equipo ejecutor '{nombre_equipo}' eliminado exitosamente"}
+
+    async def unassign_process(
+        self,
+        actor: Usuario,
+        referencia_id: uuid.UUID,
+    ) -> ProcesoCurricularResponse:
+        """Unassign a curricular process from its team and leader, reverting it to SIN_ASIGNAR."""
+        stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .options(
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            )
+        )
+        res = await self.session.execute(stmt)
+        proceso = res.scalar_one_or_none()
+        if proceso is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proceso curricular no encontrado")
+
+        old_team_id = proceso.equipo_ejecutor_id
+        old_lider_id = proceso.lider_id
+
+        proceso.equipo_ejecutor_id = None
+        proceso.lider_id = None
+        proceso.estado_scope = EstadoScopeProceso.SIN_ASIGNAR
+
+        await self.audit_repo.add_event(
+            entidad="ProcesoCurricular",
+            entidad_id=proceso.id,
+            accion="PROCESS_UNASSIGNED",
+            detalle={
+                "referencia_id": str(referencia_id),
+                "antiguo_equipo_id": str(old_team_id) if old_team_id else None,
+                "antiguo_lider_id": str(old_lider_id) if old_lider_id else None,
+                "desasignado_por": str(actor.id),
+            },
+        )
+        await self.session.commit()
         await self.session.refresh(proceso)
-        return ProcesoCurricularResponse.model_validate(proceso)
+        dto = _map_proceso_dto(proceso)
+        assert dto is not None
+        return dto
+
+    async def delete_process(
+        self,
+        actor: Usuario,
+        referencia_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Permanently delete a curricular process, cleaning up its drafts and artifacts."""
+        stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+        res = await self.session.execute(stmt)
+        proceso = res.scalar_one_or_none()
+        if proceso is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proceso curricular no encontrado")
+
+        # Attempt to clean up via ProyectoCargueService if possible
+        try:
+            from src.application.services.proyecto_cargue import ProyectoCargueService
+            from src.core.config import get_settings
+            from src.infrastructure.storage.document_storage import MinioDocumentStorageService
+
+            settings = get_settings()
+            storage_service = MinioDocumentStorageService(settings)
+            cargue_service = ProyectoCargueService(session=self.session, storage_service=storage_service)
+            await cargue_service.eliminar_cargue_completo(referencia_id)
+        except Exception:
+            pass
+
+        # Cleanup drafts directly
+        from src.infrastructure.db.models.drafts import BorradorSesion
+        draft_stmt = select(BorradorSesion).where(BorradorSesion.referencia_id == referencia_id)
+        draft_res = await self.session.execute(draft_stmt)
+        for draft in draft_res.scalars().all():
+            await self.session.delete(draft)
+
+        proc_id = proceso.id
+        await self.session.delete(proceso)
+        await self.audit_repo.add_event(
+            entidad="ProcesoCurricular",
+            entidad_id=proc_id,
+            accion="PROCESS_DELETED",
+            detalle={
+                "referencia_id": str(referencia_id),
+                "eliminado_por": str(actor.id),
+            },
+        )
+        await self.session.commit()
+        return {"status": "ok", "message": f"Proceso curricular '{referencia_id}' eliminado exitosamente"}

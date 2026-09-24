@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { Trash2, AlertTriangle, Unlink, Layers } from "lucide-react";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { TeamFormDialog, EquipoEjecutor } from "./team-form-dialog";
 
@@ -38,10 +39,15 @@ interface ProcesoCurricular {
   referencia_id: string;
   tipo_necesidad: string;
   estado_scope: string;
+  programa_nombre?: string | null;
+  programa_codigo?: string | null;
+  proyecto_nombre?: string | null;
+  proyecto_codigo?: string | null;
 }
 
 export interface FullEquipoEjecutor extends Omit<EquipoEjecutor, "miembros"> {
   miembros?: Miembro[];
+  procesos?: ProcesoCurricular[];
 }
 
 interface PaginatedEquiposResponse {
@@ -72,6 +78,20 @@ export function EquiposAdmin(): React.JSX.Element {
   // Modal states
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<EquipoEjecutor | null>(null);
+
+  // Delete team confirmation state
+  const [teamToDelete, setTeamToDelete] = useState<FullEquipoEjecutor | null>(null);
+  const [deletingTeamLoading, setDeletingTeamLoading] = useState(false);
+  const [teamDeleteError, setTeamDeleteError] = useState<string | null>(null);
+
+  // Process action confirmation state (unassign or delete)
+  const [processAction, setProcessAction] = useState<{
+    type: "unassign" | "delete";
+    referenciaId: string;
+    label?: string;
+  } | null>(null);
+  const [processActionLoading, setProcessActionLoading] = useState(false);
+  const [processActionError, setProcessActionError] = useState<string | null>(null);
 
   // Add member modal state
   const [selectedEquipoForMember, setSelectedEquipoForMember] = useState<EquipoEjecutor | null>(null);
@@ -209,6 +229,60 @@ export function EquiposAdmin(): React.JSX.Element {
     }
   };
 
+  const handleConfirmDeleteTeam = async (forceUnassign: boolean) => {
+    if (!teamToDelete) return;
+    setDeletingTeamLoading(true);
+    setTeamDeleteError(null);
+    try {
+      const url = `${getApiBaseUrl()}/equipos/${teamToDelete.id}${forceUnassign ? "?desasignar_procesos=true" : ""}`;
+      const res = await authFetch(url, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setTeamDeleteError(err.detail || "Error al eliminar el equipo ejecutor");
+        return;
+      }
+      setTeamToDelete(null);
+      await Promise.all([loadCatalogs(), loadTeams()]);
+    } catch (err: unknown) {
+      setTeamDeleteError(err instanceof Error ? err.message : "Error al eliminar el equipo ejecutor");
+    } finally {
+      setDeletingTeamLoading(false);
+    }
+  };
+
+  const handleConfirmProcessAction = async () => {
+    if (!processAction) return;
+    setProcessActionLoading(true);
+    setProcessActionError(null);
+    try {
+      if (processAction.type === "unassign") {
+        const res = await authFetch(`${getApiBaseUrl()}/procesos/${processAction.referenciaId}/desasignar`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setProcessActionError(err.detail || "Error al desasignar el proceso curricular");
+          return;
+        }
+      } else {
+        const res = await authFetch(`${getApiBaseUrl()}/procesos/${processAction.referenciaId}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setProcessActionError(err.detail || "Error al eliminar el proceso curricular");
+          return;
+        }
+      }
+      setProcessAction(null);
+      await Promise.all([loadCatalogs(), loadTeams()]);
+    } catch (err: unknown) {
+      setProcessActionError(err instanceof Error ? err.message : "Error al procesar la acción");
+    } finally {
+      setProcessActionLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -311,40 +385,69 @@ export function EquiposAdmin(): React.JSX.Element {
             </h3>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {procesosSinAsignar.map((proc) => (
-              <div
-                key={proc.id}
-                className="flex flex-col justify-between rounded-xl border border-amber-200 bg-white p-3.5 shadow-sm dark:border-amber-900 dark:bg-slate-900"
-              >
-                <div>
-                  <div className="text-[10px] font-mono text-slate-500">Ref: {proc.referencia_id.slice(0, 8)}...</div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">
-                    {proc.tipo_necesidad}
+            {procesosSinAsignar.map((proc) => {
+              const label = proc.programa_codigo
+                ? `${proc.programa_codigo} - ${proc.programa_nombre || ""}`
+                : `Ref: ${proc.referencia_id.slice(0, 8)}...`;
+              return (
+                <div
+                  key={proc.id}
+                  className="flex flex-col justify-between rounded-xl border border-amber-200 bg-white p-3.5 shadow-sm dark:border-amber-900 dark:bg-slate-900"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="text-[10px] font-mono text-slate-500 truncate" title={label}>
+                        {proc.programa_codigo ? `Prog: ${proc.programa_codigo}` : `Ref: ${proc.referencia_id.slice(0, 8)}...`}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProcessActionError(null);
+                          setProcessAction({
+                            type: "delete",
+                            referenciaId: proc.referencia_id,
+                            label,
+                          });
+                        }}
+                        className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition shrink-0"
+                        title="Eliminar proceso curricular definitivamente"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 truncate" title={proc.programa_nombre || proc.tipo_necesidad}>
+                      {proc.programa_nombre || proc.tipo_necesidad}
+                    </div>
+                    {proc.proyecto_nombre && (
+                      <div className="text-[10px] text-slate-500 truncate mt-0.5" title={proc.proyecto_nombre}>
+                        Proj: {proc.proyecto_codigo ? `[${proc.proyecto_codigo}] ` : ""}{proc.proyecto_nombre}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                    <label className="block text-[10px] font-medium text-slate-500 mb-1">
+                      Asignar a Equipo Activo:
+                    </label>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) handleAssignProcess(proc.referencia_id, e.target.value);
+                      }}
+                      defaultValue=""
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                    >
+                      <option value="" disabled>Seleccionar equipo...</option>
+                      {equipos
+                        .filter((eq) => eq.estado === "ACTIVO")
+                        .map((eq) => (
+                          <option key={eq.id} value={eq.id}>
+                            {eq.nombre} ({eq.lider ? `${eq.lider.nombre} ${eq.lider.apellido}` : "Sin líder"})
+                          </option>
+                        ))}
+                    </select>
                   </div>
                 </div>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-                  <label className="block text-[10px] font-medium text-slate-500 mb-1">
-                    Asignar a Equipo Activo:
-                  </label>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) handleAssignProcess(proc.referencia_id, e.target.value);
-                    }}
-                    defaultValue=""
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                  >
-                    <option value="" disabled>Seleccionar equipo...</option>
-                    {equipos
-                      .filter((eq) => eq.estado === "ACTIVO")
-                      .map((eq) => (
-                        <option key={eq.id} value={eq.id}>
-                          {eq.nombre} ({eq.lider ? `${eq.lider.nombre} ${eq.lider.apellido}` : "Sin líder"})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -408,6 +511,16 @@ export function EquiposAdmin(): React.JSX.Element {
                     >
                       ✏️
                     </button>
+                    <button
+                      onClick={() => {
+                        setTeamDeleteError(null);
+                        setTeamToDelete(equipo);
+                      }}
+                      className="rounded-lg p-1 text-slate-400 transition hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950/60 dark:hover:text-rose-300"
+                      title="Eliminar equipo ejecutor"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -465,6 +578,85 @@ export function EquiposAdmin(): React.JSX.Element {
                           </button>
                         </div>
                       ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Assigned Curricular Processes */}
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
+                    <span className="flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Procesos Curriculares Asignados ({(equipo.procesos || []).length})
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {(equipo.procesos || []).length === 0 ? (
+                      <div className="text-[11px] text-slate-400 italic">
+                        No hay procesos curriculares asignados a este equipo
+                      </div>
+                    ) : (
+                      (equipo.procesos || []).map((proc) => {
+                        const progTitle = proc.programa_codigo
+                          ? `${proc.programa_codigo} - ${proc.programa_nombre || ""}`
+                          : `Ref: ${proc.referencia_id.slice(0, 8)}...`;
+                        return (
+                          <div
+                            key={proc.id}
+                            className="rounded-lg border border-slate-100 bg-slate-50/80 p-2.5 text-xs transition dark:border-slate-800 dark:bg-slate-800/40"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-slate-800 dark:text-slate-200 truncate" title={progTitle}>
+                                  {progTitle}
+                                </div>
+                                {proc.proyecto_nombre && (
+                                  <div className="text-[10px] text-slate-500 truncate mt-0.5" title={proc.proyecto_nombre}>
+                                    Proj: {proc.proyecto_codigo ? `[${proc.proyecto_codigo}] ` : ""}{proc.proyecto_nombre}
+                                  </div>
+                                )}
+                                <div className="mt-1 flex items-center gap-1 text-[9px] text-slate-400 font-mono">
+                                  <span>{proc.tipo_necesidad}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-600 font-semibold dark:text-emerald-400">{proc.estado_scope}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProcessActionError(null);
+                                    setProcessAction({
+                                      type: "unassign",
+                                      referenciaId: proc.referencia_id,
+                                      label: progTitle,
+                                    });
+                                  }}
+                                  className="rounded px-2 py-1 text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60 transition"
+                                  title="Desasignar proceso del equipo (volver a pendientes)"
+                                >
+                                  Desasignar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProcessActionError(null);
+                                    setProcessAction({
+                                      type: "delete",
+                                      referenciaId: proc.referencia_id,
+                                      label: progTitle,
+                                    });
+                                  }}
+                                  className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 transition"
+                                  title="Eliminar proceso curricular definitivamente"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -577,6 +769,152 @@ export function EquiposAdmin(): React.JSX.Element {
                   Vincular al Equipo
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Team Confirmation */}
+      {teamToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="rounded-xl bg-rose-100 p-2.5 dark:bg-rose-950/60">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Eliminar Equipo Ejecutor
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Equipo: <span className="font-semibold text-slate-800 dark:text-slate-200">{teamToDelete.nombre}</span>
+                </p>
+              </div>
+            </div>
+
+            {teamDeleteError && (
+              <div className="mt-4 rounded-xl bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                {teamDeleteError}
+              </div>
+            )}
+
+            <div className="mt-4 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+              {(teamToDelete.procesos || []).length > 0 ? (
+                <div className="rounded-xl bg-amber-50 p-3 border border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200">
+                  <p className="font-semibold">
+                    Advertencia: Este equipo tiene {(teamToDelete.procesos || []).length} proceso(s) curricular(es) asignado(s).
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                    Al confirmar, todos los procesos asignados quedarán liberados en estado &quot;SIN ASIGNAR&quot; para poder ser asignados a otros equipos.
+                  </p>
+                </div>
+              ) : (
+                <p>
+                  ¿Está seguro de que desea eliminar este equipo ejecutor? Esta acción eliminará el equipo y sus vinculaciones de miembros de apoyo. No se puede deshacer.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={deletingTeamLoading}
+                onClick={() => setTeamToDelete(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deletingTeamLoading}
+                onClick={() => handleConfirmDeleteTeam((teamToDelete.procesos || []).length > 0)}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition"
+              >
+                {deletingTeamLoading
+                  ? "Eliminando..."
+                  : (teamToDelete.procesos || []).length > 0
+                  ? "Desasignar procesos y Eliminar Equipo"
+                  : "Eliminar Equipo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Process Action Confirmation (Unassign or Delete) */}
+      {processAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-xl p-2.5 ${
+                  processAction.type === "unassign"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                    : "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400"
+                }`}
+              >
+                {processAction.type === "unassign" ? (
+                  <Unlink className="h-6 w-6" />
+                ) : (
+                  <Trash2 className="h-6 w-6" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {processAction.type === "unassign"
+                    ? "Desasignar Proceso Curricular"
+                    : "Eliminar Proceso Curricular"}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono truncate max-w-xs">
+                  {processAction.label || `Ref: ${processAction.referenciaId.slice(0, 8)}...`}
+                </p>
+              </div>
+            </div>
+
+            {processActionError && (
+              <div className="mt-4 rounded-xl bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900">
+                {processActionError}
+              </div>
+            )}
+
+            <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
+              {processAction.type === "unassign" ? (
+                <p>
+                  ¿Desea desvincular este proceso curricular del equipo ejecutor? El proceso volverá al estado{" "}
+                  <strong className="text-amber-700 dark:text-amber-300">SIN ASIGNAR</strong> y quedará disponible para ser asignado a otro equipo.
+                </p>
+              ) : (
+                <p>
+                  ¿Está seguro de que desea <strong className="text-rose-600">eliminar permanentemente</strong> este proceso curricular? Se eliminarán los registros del programa, proyecto, planeaciones y archivos asociados. Esta acción no se puede deshacer.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={processActionLoading}
+                onClick={() => setProcessAction(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={processActionLoading}
+                onClick={handleConfirmProcessAction}
+                className={`rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-50 ${
+                  processAction.type === "unassign"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                {processActionLoading
+                  ? "Procesando..."
+                  : processAction.type === "unassign"
+                  ? "Desasignar de Equipo"
+                  : "Eliminar Proceso"}
+              </button>
             </div>
           </div>
         </div>

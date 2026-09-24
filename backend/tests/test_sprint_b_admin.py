@@ -254,10 +254,16 @@ class AdminMockDbSession:
             mock_result.scalars.return_value.all.return_value = matched
             return mock_result
 
-        # 9. Procesos curriculares por referencia_id
+        # 9. Procesos curriculares por referencia_id o equipo_ejecutor_id
         if "procesos_curriculares" in text:
             ref_id = next((v for k, v in params.items() if "referencia_id" in k), None)
-            matched = [p for p in self.added if isinstance(p, ProcesoCurricular) and (ref_id is None or p.referencia_id == ref_id)]
+            eq_id = next((v for k, v in params.items() if "equipo_ejecutor" in k), None)
+            matched = [
+                p for p in self.added
+                if isinstance(p, ProcesoCurricular)
+                and (ref_id is None or p.referencia_id == ref_id)
+                and (eq_id is None or p.equipo_ejecutor_id == eq_id)
+            ]
             mock_result.scalar_one_or_none.return_value = matched[0] if matched else None
             mock_result.scalars.return_value.all.return_value = matched
             return mock_result
@@ -965,3 +971,78 @@ async def test_leader_can_only_delete_own_created_specialty():
     res_admin = await service.delete_especialidad(admin, esp2.id)
     assert res_admin["status"] == "ok"
     assert esp2.id not in session.objects
+
+
+async def test_delete_team_rejects_when_processes_assigned():
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="Equipo Beta", coordinacion_id=uuid.uuid4(), especialidad_id=uuid.uuid4(), lider_id=uuid.uuid4(), estado=EstadoEquipo.ACTIVO)
+    proceso = ProcesoCurricular(id=uuid.uuid4(), referencia_id=uuid.uuid4(), equipo_ejecutor_id=team.id, lider_id=team.lider_id, estado_scope=EstadoScopeProceso.ASIGNADO)
+    session.add(team)
+    session.add(proceso)
+
+    # Deleting without desasignar_procesos flag should raise 409
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_team(admin, team.id, desasignar_procesos=False)
+    assert exc.value.status_code == 409
+    assert "proceso(s) curricular(es) asignado(s)" in exc.value.detail
+    assert team.id in session.objects
+
+
+async def test_delete_team_success_with_desasignar_procesos():
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="Equipo Gamma", coordinacion_id=uuid.uuid4(), especialidad_id=uuid.uuid4(), lider_id=uuid.uuid4(), estado=EstadoEquipo.ACTIVO)
+    proceso = ProcesoCurricular(id=uuid.uuid4(), referencia_id=uuid.uuid4(), equipo_ejecutor_id=team.id, lider_id=team.lider_id, estado_scope=EstadoScopeProceso.ASIGNADO)
+    session.add(team)
+    session.add(proceso)
+
+    # Deleting with desasignar_procesos=True unassigns process and deletes team
+    res = await service.delete_team(admin, team.id, desasignar_procesos=True)
+    assert res["status"] == "ok"
+    assert team.id not in session.objects
+    assert proceso.equipo_ejecutor_id is None
+    assert proceso.lider_id is None
+    assert proceso.estado_scope == EstadoScopeProceso.SIN_ASIGNAR
+
+
+async def test_delete_team_success_without_processes():
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="Equipo Delta", coordinacion_id=uuid.uuid4(), especialidad_id=uuid.uuid4(), lider_id=uuid.uuid4(), estado=EstadoEquipo.ACTIVO)
+    session.add(team)
+
+    res = await service.delete_team(admin, team.id, desasignar_procesos=False)
+    assert res["status"] == "ok"
+    assert team.id not in session.objects
+
+
+async def test_unassign_process_success():
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    team_id = uuid.uuid4()
+    lider_id = uuid.uuid4()
+    proceso = ProcesoCurricular(id=uuid.uuid4(), referencia_id=uuid.uuid4(), equipo_ejecutor_id=team_id, lider_id=lider_id, estado_scope=EstadoScopeProceso.ASIGNADO)
+    session.add(proceso)
+
+    updated = await service.unassign_process(admin, proceso.referencia_id)
+    assert updated.equipo_ejecutor_id is None
+    assert updated.lider_id is None
+    assert updated.estado_scope == EstadoScopeProceso.SIN_ASIGNAR.value
+
+
+async def test_delete_process_success():
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    ref_id = uuid.uuid4()
+    proceso = ProcesoCurricular(id=uuid.uuid4(), referencia_id=ref_id, estado_scope=EstadoScopeProceso.SIN_ASIGNAR)
+    session.add(proceso)
+
+    res = await service.delete_process(admin, ref_id)
+    assert res["status"] == "ok"
+    assert proceso.id not in session.objects

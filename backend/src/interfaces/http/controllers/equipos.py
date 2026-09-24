@@ -8,9 +8,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.application.services.organization_admin import OrganizationAdminService
-from src.application.services.team_admin import TeamAdminService
+from src.application.services.team_admin import TeamAdminService, _map_proceso_dto
 from src.domain.shared.enums import EstadoScopeProceso, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.organizacion import ProcesoCurricular
@@ -275,6 +276,21 @@ async def update_equipo(
     return await service.update_team(current_user, equipo_id, payload)
 
 
+@router.delete(
+    "/equipos/{equipo_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def delete_equipo(
+    equipo_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    desasignar_procesos: bool = Query(False),
+) -> dict[str, str]:
+    """Permanently delete executing team, optionally unassigning linked curricular processes."""
+    service = TeamAdminService(session)
+    return await service.delete_team(current_user, equipo_id, desasignar_procesos=desasignar_procesos)
+
+
 @router.post(
     "/equipos/{equipo_id}/miembros",
     response_model=MiembroResponse,
@@ -330,6 +346,35 @@ async def asignar_proceso(
     return await service.assign_process(current_user, referencia_id, payload)
 
 
+@router.post(
+    "/procesos/{referencia_id}/desasignar",
+    response_model=ProcesoCurricularResponse,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def desasignar_proceso(
+    referencia_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> ProcesoCurricularResponse:
+    """Unassign a curricular process from its team and leader, returning it to SIN_ASIGNAR."""
+    service = TeamAdminService(session)
+    return await service.unassign_process(current_user, referencia_id)
+
+
+@router.delete(
+    "/procesos/{referencia_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def delete_proceso(
+    referencia_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Permanently delete a curricular process and clean up its drafts and artifacts."""
+    service = TeamAdminService(session)
+    return await service.delete_process(current_user, referencia_id)
+
+
 @router.get(
     "/procesos/sin-asignar",
     response_model=list[ProcesoCurricularResponse],
@@ -342,7 +387,12 @@ async def list_procesos_sin_asignar(
     stmt = (
         select(ProcesoCurricular)
         .where(ProcesoCurricular.estado_scope == EstadoScopeProceso.SIN_ASIGNAR)
+        .options(
+            selectinload(ProcesoCurricular.programa),
+            selectinload(ProcesoCurricular.proyecto),
+        )
         .order_by(ProcesoCurricular.fecha_creacion.desc())
     )
     res = await session.execute(stmt)
-    return [ProcesoCurricularResponse.model_validate(p) for p in res.scalars().all()]
+    dtos = [_map_proceso_dto(p) for p in res.scalars().all()]
+    return [d for d in dtos if d is not None]

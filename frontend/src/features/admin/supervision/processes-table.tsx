@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { ChevronLeft, ChevronRight, Eye, ExternalLink, Inbox } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronLeft, ChevronRight, Eye, ExternalLink, Inbox, Trash2, Unlink } from "lucide-react";
 import { AdminProcesoItem } from "../types";
 
 interface ProcessesTableProps {
@@ -14,6 +14,8 @@ interface ProcessesTableProps {
   onPageChange: (newPage: number) => void;
   onSelectProceso: (proceso: AdminProcesoItem) => void;
   onActivateProcess: (referenciaId: string) => void;
+  onUnassignProcess?: (referenciaId: string) => void;
+  onDeleteProcess?: (referenciaId: string) => void;
 }
 
 export function ProcessesTable({
@@ -26,7 +28,14 @@ export function ProcessesTable({
   onPageChange,
   onSelectProceso,
   onActivateProcess,
+  onUnassignProcess,
+  onDeleteProcess,
 }: ProcessesTableProps): React.JSX.Element {
+  const [confirmItem, setConfirmItem] = useState<{
+    proceso: AdminProcesoItem;
+    type: "unassign" | "delete";
+  } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -218,6 +227,26 @@ export function ProcessesTable({
                         <ExternalLink className="h-3.5 w-3.5" />
                         Ir
                       </button>
+                      {p.estado_scope === "ASIGNADO" && onUnassignProcess && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmItem({ proceso: p, type: "unassign" })}
+                          className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                          title="Desasignar del equipo ejecutor"
+                        >
+                          <Unlink className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {onDeleteProcess && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmItem({ proceso: p, type: "delete" })}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+                          title="Eliminar proceso curricular definitivamente"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -259,6 +288,90 @@ export function ProcessesTable({
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-xl p-2.5 ${
+                  confirmItem.type === "unassign"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                    : "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400"
+                }`}
+              >
+                {confirmItem.type === "unassign" ? (
+                  <Unlink className="h-6 w-6" />
+                ) : (
+                  <Trash2 className="h-6 w-6" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {confirmItem.type === "unassign"
+                    ? "Desasignar Proceso Curricular"
+                    : "Eliminar Proceso Curricular"}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono truncate max-w-xs">
+                  {confirmItem.proceso.programa ? `${confirmItem.proceso.programa.codigo} - ${confirmItem.proceso.programa.nombre}` : `Ref: ${confirmItem.proceso.referencia_id.slice(0, 8)}...`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
+              {confirmItem.type === "unassign" ? (
+                <p>
+                  ¿Desea desvincular este proceso curricular de su equipo y líder? El proceso volverá al estado <strong className="text-amber-700 dark:text-amber-300">SIN ASIGNAR</strong>.
+                </p>
+              ) : (
+                <p>
+                  ¿Está seguro de que desea <strong className="text-rose-600">eliminar permanentemente</strong> este proceso curricular? Se eliminarán los registros del programa, proyecto, planeaciones y archivos asociados en MinIO. Esta acción no se puede deshacer.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setConfirmItem(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  try {
+                    if (confirmItem.type === "unassign") {
+                      await onUnassignProcess?.(confirmItem.proceso.referencia_id);
+                    } else {
+                      await onDeleteProcess?.(confirmItem.proceso.referencia_id);
+                    }
+                    setConfirmItem(null);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+                className={`rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-50 ${
+                  confirmItem.type === "unassign"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                {actionLoading
+                  ? "Procesando..."
+                  : confirmItem.type === "unassign"
+                  ? "Desasignar de Equipo"
+                  : "Eliminar Proceso"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

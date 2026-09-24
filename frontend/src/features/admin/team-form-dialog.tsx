@@ -36,6 +36,23 @@ export interface MiembroSummary {
   usuario?: UserSummary;
 }
 
+export interface ProcesoCurricularSummary {
+  id: string;
+  referencia_id: string;
+  coordinacion_id?: string | null;
+  especialidad_id?: string | null;
+  equipo_ejecutor_id?: string | null;
+  lider_id?: string | null;
+  tipo_necesidad: string;
+  estado_scope: string;
+  programa_id?: string | null;
+  proyecto_id?: string | null;
+  programa_nombre?: string | null;
+  programa_codigo?: string | null;
+  proyecto_nombre?: string | null;
+  proyecto_codigo?: string | null;
+}
+
 export interface EquipoEjecutor {
   id: string;
   nombre: string;
@@ -47,6 +64,7 @@ export interface EquipoEjecutor {
   especialidad?: Especialidad;
   lider?: UserSummary;
   miembros?: MiembroSummary[];
+  procesos?: ProcesoCurricularSummary[];
 }
 
 interface TeamFormDialogProps {

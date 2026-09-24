@@ -97,6 +97,7 @@ class EquipoEjecutorResponse(BaseModel):
     estado: str
     lider: UserResponse | None = None
     miembros: list[MiembroResponse] = []
+    procesos: list[ProcesoCurricularResponse] = []
 
 
 class PaginatedEquiposResponse(BaseModel):
@@ -127,3 +128,7 @@ class ProcesoCurricularResponse(BaseModel):
     estado_scope: str
     programa_id: uuid.UUID | None = None
     proyecto_id: uuid.UUID | None = None
+    programa_nombre: str | None = None
+    programa_codigo: str | None = None
+    proyecto_nombre: str | None = None
+    proyecto_codigo: str | None = None

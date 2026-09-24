@@ -1,19 +1,23 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, ExternalLink, Copy, Check, Building2, BookOpen, Layers, Clock } from "lucide-react";
+import { X, ExternalLink, Copy, Check, Building2, BookOpen, Layers, Clock, Unlink, Trash2 } from "lucide-react";
 import { AdminProcesoItem } from "../types";
 
 interface ProcessDetailDrawerProps {
   proceso: AdminProcesoItem | null;
   onClose: () => void;
   onActivateProcess: (referenciaId: string) => void;
+  onUnassignProcess?: (referenciaId: string) => void;
+  onDeleteProcess?: (referenciaId: string) => void;
 }
 
 export function ProcessDetailDrawer({
   proceso,
   onClose,
   onActivateProcess,
+  onUnassignProcess,
+  onDeleteProcess,
 }: ProcessDetailDrawerProps): React.JSX.Element | null {
   const [copied, setCopied] = useState(false);
 
@@ -211,7 +215,7 @@ export function ProcessDetailDrawer({
           </div>
 
           {/* Action Footer */}
-          <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
+          <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 space-y-2.5">
             <button
               type="button"
               onClick={() => onActivateProcess(proceso.referencia_id)}
@@ -220,6 +224,41 @@ export function ProcessDetailDrawer({
               <ExternalLink className="h-4 w-4" />
               Abrir en Dashboard Operativo
             </button>
+
+            <div className="flex gap-2">
+              {proceso.estado_scope === "ASIGNADO" && onUnassignProcess && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("¿Desea desvincular este proceso del equipo ejecutor? Volverá al estado SIN ASIGNAR.")) {
+                      await onUnassignProcess(proceso.referencia_id);
+                      onClose();
+                    }
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 transition"
+                  title="Desvincular del equipo ejecutor"
+                >
+                  <Unlink className="h-3.5 w-3.5" />
+                  Desasignar
+                </button>
+              )}
+              {onDeleteProcess && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("¿Está seguro de eliminar permanentemente este proceso curricular? Esta acción eliminará el proceso, borradores y archivos asociados.")) {
+                      await onDeleteProcess(proceso.referencia_id);
+                      onClose();
+                    }
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 transition"
+                  title="Eliminar proceso curricular definitivamente"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Eliminar Proceso
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

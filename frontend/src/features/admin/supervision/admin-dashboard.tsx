@@ -115,6 +115,35 @@ export function AdminDashboard(): React.JSX.Element {
     router.push(`/?ref=${referenciaId}`);
   };
 
+  const handleUnassignProcess = async (referenciaId: string) => {
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/procesos/${referenciaId}/desasignar`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchProcesos(page);
+        await fetchResumen();
+      }
+    } catch (err) {
+      console.error("Error unassigning process:", err);
+    }
+  };
+
+  const handleDeleteProcess = async (referenciaId: string) => {
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/procesos/${referenciaId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSelectedProceso(null);
+        await fetchProcesos(page);
+        await fetchResumen();
+      }
+    } catch (err) {
+      console.error("Error deleting process:", err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. Macro Summary KPI Cards */}
@@ -138,6 +167,8 @@ export function AdminDashboard(): React.JSX.Element {
         onPageChange={(newPage) => setPage(newPage)}
         onSelectProceso={(p) => setSelectedProceso(p)}
         onActivateProcess={handleActivateProcess}
+        onUnassignProcess={handleUnassignProcess}
+        onDeleteProcess={handleDeleteProcess}
       />
 
       {/* 4. Slide-over Drill-down Drawer */}
@@ -145,6 +176,8 @@ export function AdminDashboard(): React.JSX.Element {
         proceso={selectedProceso}
         onClose={() => setSelectedProceso(null)}
         onActivateProcess={handleActivateProcess}
+        onUnassignProcess={handleUnassignProcess}
+        onDeleteProcess={handleDeleteProcess}
       />
     </div>
   );
