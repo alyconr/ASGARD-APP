@@ -131,7 +131,7 @@ async def test_auto_heal_proceso_creates_anchor_for_orphaned_draft() -> None:
 
 
 async def test_auto_heal_proceso_for_admin_user() -> None:
-    """Superadmin accessing orphaned draft auto-heals without requiring team assignment."""
+    """Admin assigned to a team auto-heals with their team and gains process access."""
     session = AutoHealDbSession()
     admin = Usuario(
         id=uuid.uuid4(),
@@ -141,6 +141,15 @@ async def test_auto_heal_proceso_for_admin_user() -> None:
     )
     admin.roles.append(Rol(nombre=RolUsuario.SUPERADMIN.value, descripcion="Superadmin"))
     session.add(admin)
+
+    team = EquipoEjecutor(
+        id=uuid.uuid4(),
+        nombre="Equipo Admin",
+        lider_id=admin.id,
+        estado=EstadoEquipo.ACTIVO,
+    )
+    team.miembros = []
+    session.add(team)
 
     referencia_id = uuid.uuid4()
     draft = BorradorSesion(
@@ -157,6 +166,7 @@ async def test_auto_heal_proceso_for_admin_user() -> None:
     assert proceso is not None
     assert proceso.referencia_id == referencia_id
     assert proceso.creado_por == admin.id
+    assert proceso.equipo_ejecutor_id == team.id
 
     can_access = await scope_service.can_access_process(admin, referencia_id)
     assert can_access is True

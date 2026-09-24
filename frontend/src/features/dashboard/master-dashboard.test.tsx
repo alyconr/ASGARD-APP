@@ -19,6 +19,15 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+  }),
+}));
+
 import type { User } from "@/features/auth/types";
 
 // Match AuthProvider: the user identity stays stable between unrelated renders.
@@ -222,6 +231,7 @@ function buildProgramFlow(
 function mockFetchJson(
   payload: DashboardResponse,
   flows: DashboardProgramFlow[] = [],
+  teams: any[] = [],
 ): void {
   let currentFlows = [...flows];
   vi.stubGlobal(
@@ -237,6 +247,25 @@ function mockFetchJson(
           ok: true,
           status: 204,
           json: async () => ({}),
+        });
+      }
+      if (url.includes("/equipos/mis-equipos")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => teams,
+        });
+      }
+      if (url.includes("/procesos/iniciar")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: "proc-1",
+            referencia_id: "new-ref-1234",
+            equipo_ejecutor_id: "team-1",
+            codigo_programa: "111222",
+          }),
         });
       }
       return Promise.resolve({
@@ -323,19 +352,53 @@ describe("MasterDashboard", () => {
     ).toBeInTheDocument();
   });
 
-  it("allows starting a new program flow from the master panel", async () => {
+  it("allows starting a new program flow from an authorized executor team", async () => {
+    const mockTeams = [
+      {
+        id: "team-1",
+        nombre: "Equipo Alfa",
+        estado: "ACTIVO",
+        rol_en_equipo: "LIDER",
+        programas_autorizados: [
+          {
+            id: "p-2",
+            codigo_programa: "111222",
+            nombre_programa: "Construccion de Software",
+            activo: true,
+          },
+        ],
+      },
+    ];
+    mockFetchJson(buildDashboard(), [buildProgramFlow()], mockTeams);
+
+    render(<MasterDashboard />);
+
+    expect(await screen.findByText("Equipo Alfa")).toBeInTheDocument();
+    expect(screen.getByText("Construccion de Software")).toBeInTheDocument();
+
+    const startButton = await screen.findByRole("button", {
+      name: /iniciar proceso curricular/i,
+    });
+    fireEvent.click(startButton);
+
+    await waitFor(() => {
+      expect(
+        localStorage.getItem("sena.active-programa-draft-reference"),
+      ).toBe("new-ref-1234");
+    });
+  });
+
+  it("renders link to active wizard when reference is active", async () => {
     localStorage.setItem("sena.active-programa-draft-reference", referenciaId);
     mockFetchJson(buildDashboard(), [buildProgramFlow()]);
 
     render(<MasterDashboard />);
 
-    const newProgramLink = await screen.findByRole("link", {
-      name: /nuevo programa/i,
+    const activeLink = await screen.findByRole("link", {
+      name: /ir al wizard activo/i,
     });
-    fireEvent.click(newProgramLink);
-
-    expect(localStorage.getItem("sena.active-programa-draft-reference")).toBeNull();
-    expect(newProgramLink).toHaveAttribute("href", "/programa?nuevo=programa");
+    expect(activeLink).toBeInTheDocument();
+    expect(activeLink).toHaveAttribute("href", "/programa");
   });
 
   it("selects and deletes the selected open program flow", async () => {

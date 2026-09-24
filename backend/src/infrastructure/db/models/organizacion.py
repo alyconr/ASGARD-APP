@@ -164,6 +164,49 @@ class EquipoEjecutor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="equipo_ejecutor",
         lazy="selectin",
     )
+    programas_autorizados: Mapped[list[EquipoEjecutorPrograma]] = relationship(
+        "EquipoEjecutorPrograma",
+        back_populates="equipo",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class EquipoEjecutorPrograma(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Programs authorized for an executing team."""
+
+    __tablename__ = "equipos_ejecutores_programas"
+    __table_args__ = (
+        UniqueConstraint("equipo_id", "codigo_programa", name="uq_equipo_codigo_programa"),
+        Index("ix_equipos_ejecutores_programas_equipo_id", "equipo_id"),
+        Index("ix_equipos_ejecutores_programas_programa_id", "programa_id"),
+        Index("ix_equipos_ejecutores_programas_codigo", "codigo_programa"),
+    )
+
+    equipo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("equipos_ejecutores.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    programa_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("programas_formacion.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    codigo_programa: Mapped[str] = mapped_column(String(100), nullable=False)
+    nombre_programa: Mapped[str] = mapped_column(Text, nullable=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    equipo: Mapped[EquipoEjecutor] = relationship(
+        "EquipoEjecutor",
+        back_populates="programas_autorizados",
+        lazy="selectin",
+    )
+    programa: Mapped[ProgramaFormacion | None] = relationship(
+        "ProgramaFormacion",
+        foreign_keys=[programa_id],
+        lazy="selectin",
+    )
 
 
 class EquipoEjecutorMiembro(UUIDPrimaryKeyMixin, Base):

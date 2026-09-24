@@ -165,6 +165,7 @@ async def test_two_leaders_same_specialty_are_isolated():
         estado=EstadoEquipo.ACTIVO,
     )
     team1.lider = leader1
+    team1.miembros = []
 
     team2_id = uuid.uuid4()
     team2 = EquipoEjecutor(
@@ -176,6 +177,7 @@ async def test_two_leaders_same_specialty_are_isolated():
         estado=EstadoEquipo.ACTIVO,
     )
     team2.lider = leader2
+    team2.miembros = []
 
     ref1 = uuid.uuid4()
     proceso1 = ProcesoCurricular(
@@ -323,9 +325,9 @@ async def test_unassigned_process_only_visible_to_admins():
     proc_res.scalar_one_or_none.return_value = unassigned
     session.execute.return_value = proc_res
 
-    # Admin and Superadmin have global visibility
-    assert await service.can_access_process(admin, ref) is True
-    assert await service.can_access_process(superadmin, ref) is True
+    # Curricular access requires team membership; unassigned process is inaccessible to all without team
+    assert await service.can_access_process(admin, ref) is False
+    assert await service.can_access_process(superadmin, ref) is False
 
     # Leader is blocked from unassigned processes
     assert await service.can_access_process(leader, ref) is False
@@ -402,6 +404,7 @@ async def test_planning_access_idor_protection():
         estado=EstadoEquipo.ACTIVO,
     )
     team_a.lider = leader_a
+    team_a.miembros = []
 
     proj_id = uuid.uuid4()
     plan_a = PlaneacionPedagogica(

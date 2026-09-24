@@ -53,6 +53,15 @@ export interface ProcesoCurricularSummary {
   proyecto_codigo?: string | null;
 }
 
+export interface ProgramaAutorizadoSummary {
+  id?: string;
+  equipo_id?: string;
+  programa_id?: string | null;
+  codigo_programa: string;
+  nombre_programa: string;
+  activo?: boolean;
+}
+
 export interface EquipoEjecutor {
   id: string;
   nombre: string;
@@ -65,6 +74,7 @@ export interface EquipoEjecutor {
   lider?: UserSummary;
   miembros?: MiembroSummary[];
   procesos?: ProcesoCurricularSummary[];
+  programas_autorizados?: ProgramaAutorizadoSummary[];
 }
 
 interface TeamFormDialogProps {
@@ -88,6 +98,12 @@ export function TeamFormDialog({
   const [especialidadId, setEspecialidadId] = useState("");
   const [liderId, setLiderId] = useState("");
   const [estado, setEstado] = useState("ACTIVO");
+
+  const [programasAutorizados, setProgramasAutorizados] = useState<ProgramaAutorizadoSummary[]>([]);
+  const [catalogoProgramas, setCatalogoProgramas] = useState<Array<{ id: string; codigo_programa: string; nombre_programa: string }>>([]);
+  const [selectedCatalogoId, setSelectedCatalogoId] = useState("");
+  const [nuevoCodigo, setNuevoCodigo] = useState("");
+  const [nuevoNombre, setNuevoNombre] = useState("");
 
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
   const [showNewEspModal, setShowNewEspModal] = useState(false);
@@ -114,7 +130,7 @@ export function TeamFormDialog({
     return [];
   };
 
-  // Fetch all potential leaders
+  // Fetch all potential leaders and catalog of programs
   useEffect(() => {
     if (!open) return;
     setLoadingUsers(true);
@@ -122,13 +138,21 @@ export function TeamFormDialog({
       .then(async (res) => {
         if (res.ok) {
           const data = await res.json();
-          // Endpoint might return PaginatedUsersResponse or list
           const users: UserSummary[] = Array.isArray(data) ? data : data.items || [];
           setLideres(users.filter((u) => !u.estado || u.estado === "ACTIVO"));
         }
       })
       .catch((err) => console.error("Error loading leaders:", err))
       .finally(() => setLoadingUsers(false));
+
+    authFetch(`${getApiBaseUrl()}/programas-formacion/catalogo`)
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setCatalogoProgramas(Array.isArray(data) ? data : []);
+        }
+      })
+      .catch((err) => console.error("Error loading programs catalog:", err));
   }, [open]);
 
   // Sync state with selected team
@@ -139,6 +163,7 @@ export function TeamFormDialog({
       setEspecialidadId(team.especialidad_id);
       setLiderId(team.lider_id);
       setEstado(team.estado || "ACTIVO");
+      setProgramasAutorizados(team.programas_autorizados || []);
     } else {
       setNombre("");
       setCoordinacionId("");
@@ -146,9 +171,56 @@ export function TeamFormDialog({
       setLiderId("");
       setEstado("ACTIVO");
       setEspecialidades([]);
+      setProgramasAutorizados([]);
     }
     setError(null);
   }, [team, open]);
+
+  const handleAddFromCatalog = () => {
+    if (!selectedCatalogoId) return;
+    const prog = catalogoProgramas.find((p) => p.id === selectedCatalogoId);
+    if (!prog) return;
+    const exists = programasAutorizados.some(
+      (p) => p.codigo_programa.trim().toUpperCase() === prog.codigo_programa.trim().toUpperCase()
+    );
+    if (exists) return;
+    setProgramasAutorizados((prev) => [
+      ...prev,
+      {
+        programa_id: prog.id,
+        codigo_programa: prog.codigo_programa,
+        nombre_programa: prog.nombre_programa,
+        activo: true,
+      },
+    ]);
+    setSelectedCatalogoId("");
+  };
+
+  const handleAddManual = () => {
+    const c = nuevoCodigo.trim().toUpperCase();
+    const n = nuevoNombre.trim();
+    if (!c || !n) return;
+    const exists = programasAutorizados.some(
+      (p) => p.codigo_programa.trim().toUpperCase() === c
+    );
+    if (exists) return;
+    setProgramasAutorizados((prev) => [
+      ...prev,
+      {
+        codigo_programa: c,
+        nombre_programa: n,
+        activo: true,
+      },
+    ]);
+    setNuevoCodigo("");
+    setNuevoNombre("");
+  };
+
+  const handleRemovePrograma = (codigo: string) => {
+    setProgramasAutorizados((prev) =>
+      prev.filter((p) => p.codigo_programa.trim().toUpperCase() !== codigo.trim().toUpperCase())
+    );
+  };
 
   // Load specialties when coordination changes
   useEffect(() => {
@@ -181,11 +253,19 @@ export function TeamFormDialog({
     setIsSubmitting(true);
 
     try {
+      const mappedProgramas = programasAutorizados.map((p) => ({
+        codigo_programa: p.codigo_programa.trim(),
+        nombre_programa: p.nombre_programa.trim(),
+        programa_id: p.programa_id || undefined,
+        activo: true,
+      }));
+
       if (isEditing && team) {
         const payload: Record<string, unknown> = {
           nombre: nombre.trim(),
           lider_id: liderId,
           estado,
+          programas: mappedProgramas,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/equipos/${team.id}`, {
@@ -204,6 +284,7 @@ export function TeamFormDialog({
           coordinacion_id: coordinacionId,
           especialidad_id: especialidadId,
           lider_id: liderId,
+          programas: mappedProgramas,
         };
 
         const res = await authFetch(`${getApiBaseUrl()}/equipos`, {
@@ -381,6 +462,103 @@ export function TeamFormDialog({
               </select>
             </div>
           )}
+          {/* Programas Autorizados para el Equipo */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-700/60 dark:bg-slate-800/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Programas de Formación Habilitados
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Solo los programas aquí autorizados podrán ser iniciados por los miembros de este equipo.
+                </p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                {programasAutorizados.length} {programasAutorizados.length === 1 ? "programa" : "programas"}
+              </span>
+            </div>
+
+            {/* List of current authorized programs */}
+            {programasAutorizados.length > 0 ? (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {programasAutorizados.map((p) => (
+                  <span
+                    key={p.codigo_programa}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 shadow-sm dark:border-emerald-800/60 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {p.codigo_programa}
+                    </span>
+                    <span className="max-w-[180px] truncate">{p.nombre_programa}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePrograma(p.codigo_programa)}
+                      className="ml-1 rounded text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
+                      title="Quitar programa"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] italic text-amber-700 dark:text-amber-400">
+                Sin programas autorizados específicos (equipo sin restricción curricular o pendiente de asignar).
+              </p>
+            )}
+
+            {/* Selector from catalog */}
+            {catalogoProgramas.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={selectedCatalogoId}
+                  onChange={(e) => setSelectedCatalogoId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="">Seleccionar del catálogo existente...</option>
+                  {catalogoProgramas.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.codigo_programa} - {cat.nombre_programa}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddFromCatalog}
+                  disabled={!selectedCatalogoId}
+                  className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  + Agregar
+                </button>
+              </div>
+            )}
+
+            {/* Manual input */}
+            <div className="mt-2.5 grid grid-cols-[1fr_2fr_auto] gap-2">
+              <input
+                type="text"
+                value={nuevoCodigo}
+                onChange={(e) => setNuevoCodigo(e.target.value)}
+                placeholder="Código (ej. 228118)"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <input
+                type="text"
+                value={nuevoNombre}
+                onChange={(e) => setNuevoNombre(e.target.value)}
+                placeholder="Nombre del programa"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={handleAddManual}
+                disabled={!nuevoCodigo.trim() || !nuevoNombre.trim()}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                Añadir
+              </button>
+            </div>
+          </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
             <button

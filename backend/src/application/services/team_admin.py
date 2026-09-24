@@ -13,10 +13,12 @@ from sqlalchemy.orm import selectinload
 
 from src.domain.shared.enums import EstadoEquipo, EstadoScopeProceso, EstadoUsuario, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
+from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
     EquipoEjecutor,
     EquipoEjecutorMiembro,
+    EquipoEjecutorPrograma,
     Especialidad,
     ProcesoCurricular,
 )
@@ -26,10 +28,14 @@ from src.interfaces.http.schemas.organizacion import (
     EquipoEjecutorCreate,
     EquipoEjecutorResponse,
     EquipoEjecutorUpdate,
+    IniciarProcesoRequest,
+    MiEquipoResponse,
     MiembroCreate,
     MiembroResponse,
     MiembroUpdate,
     PaginatedEquiposResponse,
+    ProgramaAutorizadoCreate,
+    ProgramaAutorizadoResponse,
     ProcesoAsignarRequest,
     ProcesoCurricularResponse,
 )
@@ -79,6 +85,19 @@ def _map_proceso_dto(proceso: ProcesoCurricular | None) -> ProcesoCurricularResp
     )
 
 
+def _map_programa_autorizado_dto(prog: EquipoEjecutorPrograma | None) -> ProgramaAutorizadoResponse | None:
+    if prog is None:
+        return None
+    return ProgramaAutorizadoResponse(
+        id=prog.id,
+        equipo_id=prog.equipo_id,
+        programa_id=prog.programa_id,
+        codigo_programa=prog.codigo_programa,
+        nombre_programa=prog.nombre_programa,
+        activo=prog.activo,
+    )
+
+
 def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
     miembros_dtos = [
         MiembroResponse(
@@ -96,6 +115,11 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
         for p in (getattr(equipo, "procesos", None) or [])
         if p is not None
     ]
+    programas_dtos = [
+        _map_programa_autorizado_dto(pr)
+        for pr in (getattr(equipo, "programas_autorizados", None) or [])
+        if pr is not None
+    ]
     return EquipoEjecutorResponse(
         id=equipo.id,
         nombre=equipo.nombre,
@@ -106,6 +130,7 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
         lider=_map_user_dto(equipo.lider),
         miembros=miembros_dtos,
         procesos=[p for p in procesos_dtos if p is not None],
+        programas_autorizados=[pr for pr in programas_dtos if pr is not None],
     )
 
 
@@ -159,6 +184,27 @@ class TeamAdminService:
         self.session.add(equipo)
         await self.session.flush()
 
+        if payload.programas:
+            for prog_in in payload.programas:
+                p_id = prog_in.programa_id
+                if not p_id:
+                    p_stmt = select(ProgramaFormacion).where(
+                        func.lower(ProgramaFormacion.codigo_programa) == prog_in.codigo_programa.strip().lower()
+                    )
+                    p_res = await self.session.execute(p_stmt)
+                    matched_p = p_res.scalars().first()
+                    if matched_p:
+                        p_id = matched_p.id
+
+                equipo_prog = EquipoEjecutorPrograma(
+                    equipo_id=equipo.id,
+                    programa_id=p_id,
+                    codigo_programa=prog_in.codigo_programa.strip(),
+                    nombre_programa=prog_in.nombre_programa.strip(),
+                    activo=True,
+                )
+                self.session.add(equipo_prog)
+
         await self.audit_repo.add_event(
             entidad="EquipoEjecutor",
             entidad_id=equipo.id,
@@ -173,6 +219,7 @@ class TeamAdminService:
             options=[
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.programas_autorizados),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             ],
@@ -187,6 +234,7 @@ class TeamAdminService:
             .options(
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.programas_autorizados),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             )
@@ -248,6 +296,7 @@ class TeamAdminService:
             stmt.options(
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.programas_autorizados),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             )
@@ -374,6 +423,31 @@ class TeamAdminService:
                 detalle={"actualizado_por": str(actor.id), "nuevo_estado": nuevo_estado.value},
             )
 
+        if payload.programas is not None:
+            del_stmt = select(EquipoEjecutorPrograma).where(EquipoEjecutorPrograma.equipo_id == equipo.id)
+            del_res = await self.session.execute(del_stmt)
+            for old_p in del_res.scalars().all():
+                await self.session.delete(old_p)
+            for prog_in in payload.programas:
+                p_id = prog_in.programa_id
+                if not p_id:
+                    p_stmt = select(ProgramaFormacion).where(
+                        func.lower(ProgramaFormacion.codigo_programa) == prog_in.codigo_programa.strip().lower()
+                    )
+                    p_res = await self.session.execute(p_stmt)
+                    matched_p = p_res.scalars().first()
+                    if matched_p:
+                        p_id = matched_p.id
+
+                equipo_prog = EquipoEjecutorPrograma(
+                    equipo_id=equipo.id,
+                    programa_id=p_id,
+                    codigo_programa=prog_in.codigo_programa.strip(),
+                    nombre_programa=prog_in.nombre_programa.strip(),
+                    activo=True,
+                )
+                self.session.add(equipo_prog)
+
         await self.audit_repo.add_event(
             entidad="EquipoEjecutor",
             entidad_id=equipo.id,
@@ -388,6 +462,7 @@ class TeamAdminService:
             options=[
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.programas_autorizados),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
             ],
@@ -717,3 +792,283 @@ class TeamAdminService:
         )
         await self.session.commit()
         return {"status": "ok", "message": f"Proceso curricular '{referencia_id}' eliminado exitosamente"}
+
+    async def list_authorized_programs(self, equipo_id: uuid.UUID) -> list[ProgramaAutorizadoResponse]:
+        """List programs authorized for the given team."""
+        stmt = (
+            select(EquipoEjecutorPrograma)
+            .where(EquipoEjecutorPrograma.equipo_id == equipo_id)
+            .order_by(EquipoEjecutorPrograma.codigo_programa.asc())
+        )
+        res = await self.session.execute(stmt)
+        return [_map_programa_autorizado_dto(p) for p in res.scalars().all() if p is not None]  # type: ignore
+
+    async def add_authorized_program(
+        self,
+        actor: Usuario,
+        equipo_id: uuid.UUID,
+        payload: ProgramaAutorizadoCreate,
+    ) -> ProgramaAutorizadoResponse:
+        """Add an authorized program to an executing team."""
+        equipo = await self.session.get(EquipoEjecutor, equipo_id)
+        if equipo is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
+
+        clean_code = payload.codigo_programa.strip()
+        clean_name = payload.nombre_programa.strip()
+
+        # Check existing
+        existing_stmt = select(EquipoEjecutorPrograma).where(
+            EquipoEjecutorPrograma.equipo_id == equipo_id,
+            func.lower(EquipoEjecutorPrograma.codigo_programa) == clean_code.lower(),
+        )
+        existing_res = await self.session.execute(existing_stmt)
+        if existing_res.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El programa con código '{clean_code}' ya está asignado a este equipo ejecutor",
+            )
+
+        p_id = payload.programa_id
+        if not p_id:
+            p_stmt = select(ProgramaFormacion).where(
+                func.lower(ProgramaFormacion.codigo_programa) == clean_code.lower()
+            )
+            p_res = await self.session.execute(p_stmt)
+            matched_p = p_res.scalars().first()
+            if matched_p:
+                p_id = matched_p.id
+
+        prog = EquipoEjecutorPrograma(
+            equipo_id=equipo_id,
+            programa_id=p_id,
+            codigo_programa=clean_code,
+            nombre_programa=clean_name,
+            activo=True,
+        )
+        self.session.add(prog)
+        await self.session.flush()
+
+        await self.audit_repo.add_event(
+            entidad="EquipoEjecutorPrograma",
+            entidad_id=prog.id,
+            accion="PROGRAM_AUTHORIZED_FOR_TEAM",
+            detalle={
+                "equipo_id": str(equipo_id),
+                "codigo_programa": clean_code,
+                "nombre_programa": clean_name,
+                "autorizado_por": str(actor.id),
+            },
+        )
+        await self.session.commit()
+        await self.session.refresh(prog)
+        dto = _map_programa_autorizado_dto(prog)
+        assert dto is not None
+        return dto
+
+    async def remove_authorized_program(
+        self,
+        actor: Usuario,
+        equipo_id: uuid.UUID,
+        programa_autorizado_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Remove an authorized program from an executing team."""
+        prog = await self.session.get(EquipoEjecutorPrograma, programa_autorizado_id)
+        if prog is None or prog.equipo_id != equipo_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Programa autorizado no encontrado")
+
+        await self.session.delete(prog)
+        await self.audit_repo.add_event(
+            entidad="EquipoEjecutorPrograma",
+            entidad_id=programa_autorizado_id,
+            accion="PROGRAM_DEAUTHORIZED_FROM_TEAM",
+            detalle={
+                "equipo_id": str(equipo_id),
+                "codigo_programa": prog.codigo_programa,
+                "removido_por": str(actor.id),
+            },
+        )
+        await self.session.commit()
+        return {"status": "ok", "message": "Programa desasociado del equipo ejecutor"}
+
+    async def list_my_teams(self, actor: Usuario) -> list[MiEquipoResponse]:
+        """List active executing teams that the actor belongs to as leader or active member."""
+        # Find team IDs where user is leader
+        leader_stmt = select(EquipoEjecutor.id).where(
+            EquipoEjecutor.lider_id == actor.id,
+            EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+        )
+        leader_res = await self.session.execute(leader_stmt)
+        leader_team_ids = set(leader_res.scalars().all())
+
+        # Find team IDs where user is active member
+        member_stmt = (
+            select(EquipoEjecutorMiembro.equipo_id)
+            .join(EquipoEjecutor, EquipoEjecutorMiembro.equipo_id == EquipoEjecutor.id)
+            .where(
+                EquipoEjecutorMiembro.usuario_id == actor.id,
+                EquipoEjecutorMiembro.activo.is_(True),
+                EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+            )
+        )
+        member_res = await self.session.execute(member_stmt)
+        member_team_ids = set(member_res.scalars().all())
+
+        all_team_ids = leader_team_ids.union(member_team_ids)
+        if not all_team_ids:
+            return []
+
+        stmt = (
+            select(EquipoEjecutor)
+            .where(EquipoEjecutor.id.in_(all_team_ids))
+            .options(
+                selectinload(EquipoEjecutor.coordinacion),
+                selectinload(EquipoEjecutor.especialidad),
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.programas_autorizados),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
+            )
+            .order_by(EquipoEjecutor.nombre.asc())
+        )
+        res = await self.session.execute(stmt)
+        teams = res.scalars().all()
+
+        responses: list[MiEquipoResponse] = []
+        for t in teams:
+            rol = "LIDER" if t.id in leader_team_ids else "MIEMBRO"
+            eq_dto = _map_equipo_dto(t)
+            responses.append(
+                MiEquipoResponse(
+                    equipo=eq_dto,
+                    rol_en_equipo=rol,
+                    programas_autorizados=eq_dto.programas_autorizados,
+                    procesos=eq_dto.procesos,
+                )
+            )
+        return responses
+
+    async def iniciar_proceso_curricular(
+        self,
+        actor: Usuario,
+        payload: IniciarProcesoRequest,
+    ) -> ProcesoCurricularResponse:
+        """Start a new curricular process scoped strictly to an executor team and authorized program."""
+        from src.application.services.access_scope import AccessScopeService
+        from src.domain.drafts.types import TipoBloqueBorrador
+        from src.domain.shared.enums import EstadoBloque
+        from src.infrastructure.db.models.drafts import BorradorSesion
+
+        scope_service = AccessScopeService(self.session)
+        team = await scope_service.require_start_curricular_process(
+            actor,
+            payload.equipo_ejecutor_id,
+            payload.programa_id,
+            payload.codigo_programa,
+        )
+
+        # Check existing process for team and program
+        existing_stmt = (
+            select(ProcesoCurricular)
+            .where(
+                ProcesoCurricular.equipo_ejecutor_id == team.id,
+            )
+            .options(
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            )
+        )
+        if payload.programa_id:
+            existing_stmt = existing_stmt.where(ProcesoCurricular.programa_id == payload.programa_id)
+        existing_res = await self.session.execute(existing_stmt)
+        candidates = existing_res.scalars().all()
+
+        for cand in candidates:
+            if payload.codigo_programa and cand.programa:
+                if cand.programa.codigo_programa.strip().upper() == payload.codigo_programa.strip().upper():
+                    return _map_proceso_dto(cand)  # type: ignore
+            elif payload.programa_id and cand.programa_id == payload.programa_id:
+                return _map_proceso_dto(cand)  # type: ignore
+
+        # Resolve programa_id if codigo_programa was supplied
+        resolved_programa_id = payload.programa_id
+        if not resolved_programa_id and payload.codigo_programa:
+            prog_stmt = select(ProgramaFormacion).where(
+                func.lower(ProgramaFormacion.codigo_programa) == payload.codigo_programa.strip().lower()
+            )
+            prog_res = await self.session.execute(prog_stmt)
+            matched_prog = prog_res.scalars().first()
+            if matched_prog:
+                resolved_programa_id = matched_prog.id
+
+        new_referencia_id = uuid.uuid4()
+        from src.domain.shared.enums import TipoNecesidadProceso
+        try:
+            tipo_nec = TipoNecesidadProceso(payload.tipo_necesidad)
+        except ValueError:
+            tipo_nec = TipoNecesidadProceso.CREAR_PLANEACION
+
+        proceso = ProcesoCurricular(
+            referencia_id=new_referencia_id,
+            coordinacion_id=team.coordinacion_id,
+            especialidad_id=team.especialidad_id,
+            equipo_ejecutor_id=team.id,
+            lider_id=team.lider_id,
+            tipo_necesidad=tipo_nec,
+            estado_scope=EstadoScopeProceso.ASIGNADO,
+            programa_id=resolved_programa_id,
+            creado_por=actor.id,
+        )
+        self.session.add(proceso)
+
+        # Initialize BorradorSesion for PROGRAMA
+        initial_payload = {
+            "meta": {
+                "equipo_ejecutor_id": str(team.id),
+                "programa_id": str(resolved_programa_id) if resolved_programa_id else None,
+                "codigo_programa": payload.codigo_programa,
+                "iniciado_por": str(actor.id),
+            },
+            "documental": {},
+            "curricular": {
+                "programa_formacion_id": str(resolved_programa_id) if resolved_programa_id else None,
+            },
+        }
+        draft = BorradorSesion(
+            tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
+            referencia_id=new_referencia_id,
+            paso_actual="origen-documental",
+            payload_json=initial_payload,
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        self.session.add(draft)
+
+        await self.audit_repo.add_event(
+            entidad="ProcesoCurricular",
+            entidad_id=proceso.id,
+            accion="CURRICULAR_PROCESS_STARTED",
+            detalle={
+                "referencia_id": str(new_referencia_id),
+                "created_by_user_id": str(actor.id),
+                "executor_team_id": str(team.id),
+                "training_program_id": str(resolved_programa_id) if resolved_programa_id else None,
+                "codigo_programa": payload.codigo_programa,
+            },
+            actor_usuario_id=actor.id,
+            referencia_id=new_referencia_id,
+        )
+        await self.session.commit()
+
+        reloaded_stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.id == proceso.id)
+            .options(
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            )
+        )
+        reloaded_res = await self.session.execute(reloaded_stmt)
+        saved_proc = reloaded_res.scalar_one()
+        return _map_proceso_dto(saved_proc)  # type: ignore
+

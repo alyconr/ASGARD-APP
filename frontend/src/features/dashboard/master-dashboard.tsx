@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -19,11 +20,14 @@ import {
   Trash2,
   LogOut,
   Shield,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { ForceChangePasswordDialog } from "@/features/auth/force-change-password-dialog";
 import { AdminWorkspace } from "@/features/admin/admin-workspace";
+import { authFetch, getApiBaseUrl } from "@/lib/api";
+import { notify } from "@/components/feedback/notifications";
 
 import {
   deleteProgramFlow,
@@ -401,7 +405,271 @@ function ProgramFlowsPanel({
   );
 }
 
+export interface MiEquipoPrograma {
+  id: string;
+  codigo_programa: string;
+  nombre_programa: string;
+  programa_id?: string | null;
+  activo: boolean;
+}
+
+export interface MiEquipo {
+  id: string;
+  nombre: string;
+  estado: string;
+  coordinacion_id?: string;
+  coordinacion_nombre?: string;
+  especialidad_id?: string;
+  especialidad_nombre?: string;
+  rol_en_equipo: "LIDER" | "MIEMBRO";
+  programas_autorizados: MiEquipoPrograma[];
+}
+
+function ExecutorTeamWorkspace({
+  misEquipos,
+  loadingEquipos,
+  selectedTeam,
+  onSelectTeam,
+  onGoToAdmin,
+  isAdmin,
+  programFlows,
+  onSelectFlow,
+  onStartProcess,
+  iniciandoCodigo,
+}: Readonly<{
+  misEquipos: MiEquipo[];
+  loadingEquipos: boolean;
+  selectedTeam: MiEquipo | null;
+  onSelectTeam: (teamId: string) => void;
+  onGoToAdmin: () => void;
+  isAdmin: boolean;
+  programFlows: DashboardProgramFlow[];
+  onSelectFlow: (referenceId: string) => void;
+  onStartProcess: (equipoId: string, prog: MiEquipoPrograma) => void;
+  iniciandoCodigo: string | null;
+}>): React.JSX.Element {
+  if (loadingEquipos) {
+    return (
+      <section className="flex min-h-[140px] items-center justify-center rounded-xl border border-[color:var(--card-border)] bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3 text-sm font-semibold text-[var(--muted)]">
+          <RefreshCcw className="h-4 w-4 animate-spin text-[var(--accent)]" />
+          Cargando tus equipos ejecutores y programas autorizados...
+        </div>
+      </section>
+    );
+  }
+
+  if (misEquipos.length === 0) {
+    if (isAdmin) {
+      return (
+        <section className="rounded-xl border border-blue-200 bg-blue-50/70 p-6 text-slate-800 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-blue-100 p-3 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+              <Shield className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                Sin equipos ejecutores asignados
+              </h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Como administrador tienes privilegios de gestión de plataforma, pero los procesos curriculares (wizards, carga de matrices de programa o proyecto, y planeación pedagógica) deben originarse obligatoriamente desde un Equipo Ejecutor ACTIVO donde participes como líder o miembro con programas habilitados.
+              </p>
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={onGoToAdmin}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-strong)]"
+                >
+                  <Shield className="h-4 w-4" />
+                  Ir a Administración Organizacional
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-6 text-slate-800 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex items-start gap-4">
+          <div className="rounded-xl bg-amber-100 p-3 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+            <LockKeyhole className="h-6 w-6" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Sin asignación de equipo ejecutor
+            </h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              No te encuentras registrado en ningún Equipo Ejecutor activo. Para construir o continuar procesos curriculares, comunícate con el Equipo Pedagógico o la Coordinación Académica para que se te asigne a un equipo ejecutor y se habiliten los programas de formación correspondientes.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-[color:var(--card-border)] bg-white p-6 shadow-[0_16px_38px_rgba(24,51,45,0.06)]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 text-[var(--accent-strong)]">
+            <Network className="h-5 w-5" />
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              Espacio de trabajo del Equipo Ejecutor
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Selecciona tu equipo ejecutor para consultar sus programas autorizados e iniciar o continuar procesos curriculares.
+          </p>
+        </div>
+        {misEquipos.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {misEquipos.map((eq) => (
+              <button
+                key={eq.id}
+                type="button"
+                onClick={() => onSelectTeam(eq.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                  eq.id === selectedTeam?.id
+                    ? "bg-[var(--accent)] text-white shadow-sm"
+                    : "border border-slate-200 bg-white text-slate-700 hover:border-[var(--accent)] hover:text-[var(--accent-strong)] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+                )}
+              >
+                {eq.nombre}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedTeam && (
+        <div className="mt-5 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {selectedTeam.nombre}
+                </h3>
+                <span
+                  className={cn(
+                    "rounded px-2 py-0.5 text-xs font-bold",
+                    selectedTeam.rol_en_equipo === "LIDER"
+                      ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300"
+                      : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300",
+                  )}
+                >
+                  {selectedTeam.rol_en_equipo === "LIDER" ? "Líder de Equipo" : "Miembro de Equipo"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {[selectedTeam.coordinacion_nombre, selectedTeam.especialidad_nombre]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              {selectedTeam.programas_autorizados.length}{" "}
+              {selectedTeam.programas_autorizados.length === 1 ? "programa autorizado" : "programas autorizados"}
+            </span>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Programas de Formación Autorizados
+            </h4>
+            {selectedTeam.programas_autorizados.length === 0 ? (
+              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+                Este equipo no tiene programas de formación autorizados. Solicita a un administrador o al Equipo Pedagógico la habilitación de los programas correspondientes.
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {selectedTeam.programas_autorizados.map((prog) => {
+                  const existingFlow = programFlows.find(
+                    (f) =>
+                      f.codigo_programa?.trim().toUpperCase() ===
+                      prog.codigo_programa.trim().toUpperCase(),
+                  );
+                  const isStarting = iniciandoCodigo === prog.codigo_programa;
+
+                  return (
+                    <div
+                      key={prog.codigo_programa}
+                      className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-emerald-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-700"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            {prog.codigo_programa}
+                          </span>
+                          {existingFlow ? (
+                            <span
+                              className={cn(
+                                "rounded px-2 py-0.5 text-[11px] font-semibold",
+                                existingFlow.estado === "COMPLETO"
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+                              )}
+                            >
+                              {existingFlow.estado === "COMPLETO" ? "Completo" : "En construcción"}
+                            </span>
+                          ) : (
+                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              Sin iniciar
+                            </span>
+                          )}
+                        </div>
+                        <h5 className="mt-2 font-semibold text-slate-900 dark:text-white">
+                          {prog.nombre_programa}
+                        </h5>
+                      </div>
+
+                      <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+                        {existingFlow ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectFlow(existingFlow.referencia_id)}
+                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-500 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-slate-800"
+                          >
+                            Continuar proceso
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isStarting}
+                            onClick={() => onStartProcess(selectedTeam.id, prog)}
+                            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {isStarting ? (
+                              <>
+                                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                                Iniciando...
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="h-3.5 w-3.5" />
+                                Iniciar proceso curricular
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function MasterDashboard(): React.JSX.Element {
+  const router = useRouter();
   const confirm = useConfirm();
   const { user, isAuthenticated, logout, hasRole, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState<"dashboard" | "admin">("dashboard");
@@ -415,6 +683,82 @@ export function MasterDashboard(): React.JSX.Element {
   const [isDeletingFlow, setIsDeletingFlow] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [flowsErrorMessage, setFlowsErrorMessage] = useState<string | null>(null);
+
+  // Executing teams state
+  const [misEquipos, setMisEquipos] = useState<MiEquipo[]>([]);
+  const [loadingEquipos, setLoadingEquipos] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [iniciandoProcesoCodigo, setIniciandoProcesoCodigo] = useState<string | null>(null);
+
+  const selectedTeam = useMemo(
+    () => misEquipos.find((e) => e.id === selectedTeamId) ?? misEquipos[0] ?? null,
+    [misEquipos, selectedTeamId],
+  );
+
+  const loadMisEquipos = useCallback(async (): Promise<void> => {
+    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+      return;
+    }
+    setLoadingEquipos(true);
+    try {
+      const res = await authFetch(`${getApiBaseUrl()}/equipos/mis-equipos`);
+      if (res.ok) {
+        const data: MiEquipo[] = await res.json();
+        setMisEquipos(data);
+        if (data.length > 0) {
+          setSelectedTeamId((current) => current ?? data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading my teams:", err);
+    } finally {
+      setLoadingEquipos(false);
+    }
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    void loadMisEquipos();
+  }, [loadMisEquipos]);
+
+  const handleIniciarProceso = async (
+    equipoId: string,
+    prog: { codigo_programa: string; programa_id?: string | null },
+  ) => {
+    setIniciandoProcesoCodigo(prog.codigo_programa);
+    try {
+      const res = await authFetch(
+        `${getApiBaseUrl()}/equipos/${equipoId}/procesos/iniciar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            codigo_programa: prog.codigo_programa,
+            programa_id: prog.programa_id || undefined,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.detail?.message ||
+            errData.detail ||
+            "Error al iniciar el proceso curricular",
+        );
+      }
+      const proceso = await res.json();
+      activateReference(proceso.referencia_id);
+      await loadProgramFlows();
+      router.push("/programa");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error al iniciar el proceso curricular";
+      notify.error("No se pudo iniciar el proceso", { description: msg });
+    } finally {
+      setIniciandoProcesoCodigo(null);
+    }
+  };
 
   useEffect(() => {
     const drafts = listKnownProgramaDrafts();
@@ -640,14 +984,15 @@ export function MasterDashboard(): React.JSX.Element {
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   {selectedDraft?.label ?? dashboard?.estado_global ?? "Inicia o selecciona un borrador"}
                 </p>
-                <Link
-                  href="/programa?nuevo=programa"
-                  onClick={prepareNewProgramFlow}
-                  className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Nuevo programa
-                </Link>
+                {activeReference ? (
+                  <Link
+                    href="/programa"
+                    className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)]"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                    Ir al wizard activo
+                  </Link>
+                ) : null}
               </div>
             </div>
           </div>
@@ -687,6 +1032,19 @@ export function MasterDashboard(): React.JSX.Element {
           <AdminWorkspace />
         ) : (
           <>
+            <ExecutorTeamWorkspace
+              misEquipos={misEquipos}
+              loadingEquipos={loadingEquipos}
+              selectedTeam={selectedTeam}
+              onSelectTeam={(teamId) => setSelectedTeamId(teamId)}
+              onGoToAdmin={() => setActiveTab("admin")}
+              isAdmin={hasRole("SUPERADMIN", "ADMIN")}
+              programFlows={programFlows}
+              onSelectFlow={activateReference}
+              onStartProcess={handleIniciarProceso}
+              iniciandoCodigo={iniciandoProcesoCodigo}
+            />
+
             <ProgramFlowsPanel
               flows={programFlows}
               activeReference={activeReference}
@@ -756,19 +1114,11 @@ export function MasterDashboard(): React.JSX.Element {
         {!dashboard ? (
           <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-6">
             <h2 className="text-xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)]">
-              Sin proceso activo
+              Sin proceso curricular seleccionado
             </h2>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-              Inicia el wizard del programa o carga una referencia existente para ver
-              bloqueos, metricas y mapa navegable.
+              Selecciona o inicia un proceso curricular desde el espacio de tu Equipo Ejecutor más arriba, o busca una referencia existente para consultar bloqueos, métricas y mapa navegable.
             </p>
-            <Link
-              href="/programa"
-              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold !text-white transition hover:bg-[var(--accent-strong)]"
-            >
-              Abrir wizard del programa
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </section>
         ) : (
           <>

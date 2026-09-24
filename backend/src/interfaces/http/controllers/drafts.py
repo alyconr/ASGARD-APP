@@ -75,69 +75,33 @@ async def save_draft(
             if not can_access:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes autorización para modificar este borrador",
+                    detail={
+                        "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
+                        "message": "Debes pertenecer al Equipo Ejecutor para modificar este proceso curricular.",
+                    },
                 )
         else:
-            # Process is new. Resolve team assignment
-            if current_user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-                teams_stmt = select(EquipoEjecutor).where(
-                    EquipoEjecutor.lider_id == current_user.id,
-                    EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
-                )
-                teams_res = await scope_service._session.execute(teams_stmt)
-                active_teams = teams_res.scalars().all()
-
-                if len(active_teams) == 0:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail="El usuario no tiene un equipo ejecutor activo asignado.",
-                    )
-                if len(active_teams) == 1:
-                    target_team = active_teams[0]
-                else:
-                    if not request.equipo_ejecutor_id:
-                        raise HTTPException(
-                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="El usuario lidera múltiples equipos ejecutores. Debe especificar equipo_ejecutor_id.",
-                        )
-                    matching = [t for t in active_teams if t.id == request.equipo_ejecutor_id]
-                    if not matching:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="No tienes autorización sobre el equipo ejecutor especificado",
-                        )
-                    target_team = matching[0]
-
-                equipo_id = target_team.id
-                coordinacion_id = target_team.coordinacion_id
-                especialidad_id = target_team.especialidad_id
-                lider_id = current_user.id
-            elif current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-                equipo_id = request.equipo_ejecutor_id
-                coordinacion_id = current_user.coordinacion_id
-                especialidad_id = current_user.especialidad_id
-                lider_id = None
-                if equipo_id:
-                    team_stmt = select(EquipoEjecutor).where(EquipoEjecutor.id == equipo_id)
-                    team_res = await scope_service._session.execute(team_stmt)
-                    team = team_res.scalar_one_or_none()
-                    if team:
-                        coordinacion_id = team.coordinacion_id
-                        especialidad_id = team.especialidad_id
-                        lider_id = team.lider_id
-            else:
+            if not request.equipo_ejecutor_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="No tienes permisos para crear un nuevo proceso curricular",
+                    detail={
+                        "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
+                        "message": "Debes especificar un Equipo Ejecutor válido para iniciar este proceso curricular.",
+                    },
                 )
+
+            team = await scope_service.require_start_curricular_process(
+                current_user,
+                request.equipo_ejecutor_id,
+            )
 
             await scope_service.ensure_proceso_for_referencia(
                 referencia_id=referencia_id,
                 creado_por=current_user.id,
-                coordinacion_id=coordinacion_id,
-                especialidad_id=especialidad_id,
-                equipo_ejecutor_id=equipo_id,
-                lider_id=lider_id,
+                coordinacion_id=team.coordinacion_id,
+                especialidad_id=team.especialidad_id,
+                equipo_ejecutor_id=team.id,
+                lider_id=team.lider_id,
             )
 
     try:

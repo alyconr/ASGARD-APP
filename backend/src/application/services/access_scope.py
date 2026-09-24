@@ -61,20 +61,20 @@ class AccessScopeService:
                 except (ValueError, TypeError):
                     pass
 
-        if user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-            teams_stmt = select(EquipoEjecutor).where(
-                EquipoEjecutor.lider_id == user.id,
-                EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
-            )
-            teams_res = await self._session.execute(teams_stmt)
-            active_teams = teams_res.scalars().all()
-            if active_teams:
-                target_team = active_teams[0]
-                equipo_id = target_team.id
-                coordinacion_id = target_team.coordinacion_id
-                especialidad_id = target_team.especialidad_id
-                lider_id = user.id
-        elif user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
+        # Find active team where user is leader or active member
+        teams_stmt = select(EquipoEjecutor).where(
+            EquipoEjecutor.lider_id == user.id,
+            EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+        )
+        teams_res = await self._session.execute(teams_stmt)
+        active_teams = teams_res.scalars().all()
+        if active_teams:
+            target_team = active_teams[0]
+            equipo_id = target_team.id
+            coordinacion_id = target_team.coordinacion_id
+            especialidad_id = target_team.especialidad_id
+            lider_id = user.id
+        else:
             members_stmt = (
                 select(EquipoEjecutor)
                 .join(EquipoEjecutorMiembro, EquipoEjecutor.id == EquipoEjecutorMiembro.equipo_id)
@@ -114,6 +114,166 @@ class AccessScopeService:
         reloaded_res = await self._session.execute(stmt)
         return reloaded_res.scalar_one_or_none() or proceso
 
+    async def can_start_curricular_process(
+        self,
+        user: Usuario,
+        equipo_ejecutor_id: uuid.UUID,
+        programa_id: uuid.UUID | None = None,
+        codigo_programa: str | None = None,
+    ) -> tuple[bool, str | None]:
+        """Determine if user can start a curricular process inside the given team and program."""
+        stmt = (
+            select(EquipoEjecutor)
+            .where(EquipoEjecutor.id == equipo_ejecutor_id)
+            .options(
+                selectinload(EquipoEjecutor.miembros),
+                selectinload(EquipoEjecutor.programas_autorizados),
+                selectinload(EquipoEjecutor.procesos),
+            )
+        )
+        res = await self._session.execute(stmt)
+        team = res.scalar_one_or_none()
+
+        if team is None:
+            return False, "Equipo ejecutor no encontrado"
+
+        if team.estado != EstadoEquipo.ACTIVO:
+            return False, "El equipo ejecutor se encuentra inactivo"
+
+        is_leader = team.lider_id == user.id
+        is_member = any(
+            m.usuario_id == user.id and m.activo for m in team.miembros
+        )
+        if not (is_leader or is_member):
+            return False, "Debes pertenecer al Equipo Ejecutor para iniciar este proceso curricular."
+
+        if codigo_programa or programa_id:
+            authorized_codes = {p.codigo_programa.strip().upper() for p in team.programas_autorizados if p.activo}
+            authorized_pids = {p.programa_id for p in team.programas_autorizados if p.programa_id and p.activo}
+            for proc in team.procesos:
+                if proc.programa_id:
+                    authorized_pids.add(proc.programa_id)
+
+            code_match = codigo_programa and codigo_programa.strip().upper() in authorized_codes
+            pid_match = programa_id and programa_id in authorized_pids
+            if team.programas_autorizados and not (code_match or pid_match):
+                return False, "El programa seleccionado no se encuentra habilitado para este Equipo Ejecutor."
+
+        return True, None
+
+    async def require_start_curricular_process(
+        self,
+        user: Usuario | None,
+        equipo_ejecutor_id: uuid.UUID,
+        programa_id: uuid.UUID | None = None,
+        codigo_programa: str | None = None,
+    ) -> EquipoEjecutor:
+        """Enforce requirements to start a curricular process; raise HTTP 401/403/404."""
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Autenticación requerida para iniciar el proceso curricular",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        stmt = (
+            select(EquipoEjecutor)
+            .where(EquipoEjecutor.id == equipo_ejecutor_id)
+            .options(
+                selectinload(EquipoEjecutor.miembros),
+                selectinload(EquipoEjecutor.programas_autorizados),
+                selectinload(EquipoEjecutor.procesos),
+            )
+        )
+        res = await self._session.execute(stmt)
+        team = res.scalar_one_or_none()
+
+        if team is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Equipo ejecutor no encontrado",
+            )
+
+        if team.estado != EstadoEquipo.ACTIVO:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "EXECUTOR_TEAM_INACTIVE",
+                    "message": "El equipo ejecutor se encuentra inactivo",
+                },
+            )
+
+        is_leader = team.lider_id == user.id
+        is_member = any(
+            m.usuario_id == user.id and m.activo for m in team.miembros
+        )
+        if not (is_leader or is_member):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
+                    "message": "Debes pertenecer al Equipo Ejecutor para iniciar este proceso curricular.",
+                },
+            )
+
+        if codigo_programa or programa_id:
+            authorized_codes = {p.codigo_programa.strip().upper() for p in team.programas_autorizados if p.activo}
+            authorized_pids = {p.programa_id for p in team.programas_autorizados if p.programa_id and p.activo}
+            for proc in team.procesos:
+                if proc.programa_id:
+                    authorized_pids.add(proc.programa_id)
+
+            code_match = codigo_programa and codigo_programa.strip().upper() in authorized_codes
+            pid_match = programa_id and programa_id in authorized_pids
+            if team.programas_autorizados and not (code_match or pid_match):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "PROGRAM_NOT_AUTHORIZED_FOR_TEAM",
+                        "message": "El programa seleccionado no se encuentra habilitado para este Equipo Ejecutor.",
+                    },
+                )
+
+        return team
+
+    async def validate_program_authorized_for_process(
+        self,
+        referencia_id: uuid.UUID,
+        codigo_programa: str,
+    ) -> bool:
+        """Validate whether the program code is authorized for the process's executor team."""
+        stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .options(
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(
+                    EquipoEjecutor.programas_autorizados
+                ),
+            )
+        )
+        res = await self._session.execute(stmt)
+        proc = res.scalar_one_or_none()
+        if proc is None:
+            return True
+
+        clean_code = codigo_programa.strip().upper()
+
+        if proc.programa is not None and proc.programa.codigo_programa:
+            if proc.programa.codigo_programa.strip().upper() != clean_code:
+                return False
+
+        if proc.equipo_ejecutor is not None and proc.equipo_ejecutor.programas_autorizados:
+            authorized_codes = {
+                p.codigo_programa.strip().upper()
+                for p in proc.equipo_ejecutor.programas_autorizados
+                if p.activo
+            }
+            if authorized_codes and clean_code not in authorized_codes:
+                return False
+
+        return True
+
     async def can_access_process(self, user: Usuario, referencia_id: uuid.UUID) -> bool:
         """Determine whether the user is authorized to access the given process."""
         stmt = (
@@ -133,33 +293,40 @@ class AccessScopeService:
             if proceso is None:
                 return False
 
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return True
-
         if proceso.estado_scope != EstadoScopeProceso.ASIGNADO:
             return False
 
-        # Inactive executing teams block operational access for leaders and members
         if proceso.equipo_ejecutor and proceso.equipo_ejecutor.estado != EstadoEquipo.ACTIVO:
             return False
 
-        if user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-            if proceso.lider_id == user.id:
-                return True
-            if proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id:
-                return True
-            return False
+        # Check if user is the team leader
+        if proceso.lider_id == user.id:
+            return True
+        if proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id:
+            return True
 
-        if user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
-            if not proceso.equipo_ejecutor_id:
-                return False
+        # Check if user is an active team member
+        if (
+            proceso.equipo_ejecutor
+            and hasattr(proceso.equipo_ejecutor, "miembros")
+            and isinstance(proceso.equipo_ejecutor.miembros, list)
+            and proceso.equipo_ejecutor.miembros
+        ):
+            if any(
+                m.usuario_id == user.id and getattr(m, "activo", False)
+                for m in proceso.equipo_ejecutor.miembros
+            ):
+                return True
+
+        if proceso.equipo_ejecutor_id:
             member_stmt = select(EquipoEjecutorMiembro).where(
                 EquipoEjecutorMiembro.equipo_id == proceso.equipo_ejecutor_id,
                 EquipoEjecutorMiembro.usuario_id == user.id,
                 EquipoEjecutorMiembro.activo.is_(True),
             )
             member_res = await self._session.execute(member_stmt)
-            return member_res.scalar_one_or_none() is not None
+            res_obj = member_res.scalar_one_or_none()
+            return isinstance(res_obj, EquipoEjecutorMiembro) and res_obj.activo
 
         return False
 
@@ -197,54 +364,62 @@ class AccessScopeService:
                 detail="Proceso curricular no encontrado",
             )
 
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return proceso
-
         if proceso.estado_scope != EstadoScopeProceso.ASIGNADO:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="El proceso no está asignado a ningún equipo ejecutor",
+                detail={
+                    "code": "PROCESS_NOT_ASSIGNED",
+                    "message": "El proceso no está asignado a ningún equipo ejecutor",
+                },
             )
 
         if proceso.equipo_ejecutor and proceso.equipo_ejecutor.estado != EstadoEquipo.ACTIVO:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="El equipo ejecutor asignado se encuentra inactivo",
+                detail={
+                    "code": "EXECUTOR_TEAM_INACTIVE",
+                    "message": "El equipo ejecutor asignado se encuentra inactivo",
+                },
             )
 
-        if user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-            if proceso.lider_id == user.id:
-                return proceso
-            if proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id:
-                return proceso
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes autorización sobre el equipo ejecutor de este proceso",
-            )
+        # Leader has operational access
+        if proceso.lider_id == user.id or (
+            proceso.equipo_ejecutor and proceso.equipo_ejecutor.lider_id == user.id
+        ):
+            return proceso
 
-        if user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
-            if not proceso.equipo_ejecutor_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Proceso sin equipo ejecutor asignado",
-                )
+        # Active member has operational access
+        if (
+            proceso.equipo_ejecutor
+            and hasattr(proceso.equipo_ejecutor, "miembros")
+            and isinstance(proceso.equipo_ejecutor.miembros, list)
+            and proceso.equipo_ejecutor.miembros
+        ):
+            if any(m.usuario_id == user.id and getattr(m, "activo", False) for m in proceso.equipo_ejecutor.miembros):
+                return proceso
+
+        if proceso.equipo_ejecutor_id:
             member_stmt = select(EquipoEjecutorMiembro).where(
                 EquipoEjecutorMiembro.equipo_id == proceso.equipo_ejecutor_id,
                 EquipoEjecutorMiembro.usuario_id == user.id,
                 EquipoEjecutorMiembro.activo.is_(True),
             )
             member_res = await self._session.execute(member_stmt)
-            if member_res.scalar_one_or_none() is not None:
+            res_obj = member_res.scalar_one_or_none()
+            if isinstance(res_obj, EquipoEjecutorMiembro) and res_obj.activo:
                 return proceso
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No eres miembro activo del equipo ejecutor asignado",
-            )
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Rol sin autorización sobre este proceso curricular",
+            detail={
+                "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
+                "message": "Debes pertenecer al Equipo Ejecutor para operar en este proceso curricular.",
+            },
         )
+
+    # Aliases for explicit domain semantics
+    can_access_curricular_process = can_access_process
+    require_access_curricular_process = require_process_access
 
     async def require_program_access(
         self,
@@ -329,9 +504,6 @@ class AccessScopeService:
 
     async def can_access_planning(self, user: Usuario, planeacion_id: uuid.UUID) -> bool:
         """Determine access to a planning record via its project and program process."""
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return True
-
         plan = await self._session.get(PlaneacionPedagogica, planeacion_id)
         if plan is None:
             return False
@@ -339,9 +511,6 @@ class AccessScopeService:
 
     async def can_access_project(self, user: Usuario, proyecto_id: uuid.UUID) -> bool:
         """Determine access to a project by matching its registered process."""
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return True
-
         stmt = select(ProcesoCurricular).where(ProcesoCurricular.proyecto_id == proyecto_id)
         res = await self._session.execute(stmt)
         proceso = res.scalar_one_or_none()
@@ -355,9 +524,6 @@ class AccessScopeService:
 
     async def can_access_program(self, user: Usuario, programa_id: uuid.UUID) -> bool:
         """Determine access to a program by matching its registered process."""
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return True
-
         stmt = select(ProcesoCurricular).where(ProcesoCurricular.programa_id == programa_id)
         res = await self._session.execute(stmt)
         proceso = res.scalar_one_or_none()
@@ -370,50 +536,34 @@ class AccessScopeService:
         user: Usuario,
         candidate_referencias: Sequence[uuid.UUID],
     ) -> set[uuid.UUID]:
-        """Filter a collection of referencias returning only those permitted for the user."""
+        """Filter a collection of referencias returning only those permitted for the user's teams."""
         if not candidate_referencias:
             return set()
 
-        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
-            return set(candidate_referencias)
+        allowed: set[uuid.UUID] = set()
 
-        if user.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value):
-            stmt = (
-                select(ProcesoCurricular.referencia_id)
-                .join(EquipoEjecutor, ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutor.id, isouter=True)
-                .where(
-                    ProcesoCurricular.referencia_id.in_(candidate_referencias),
-                    ProcesoCurricular.estado_scope == EstadoScopeProceso.ASIGNADO,
-                    EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
-                    (ProcesoCurricular.lider_id == user.id) | (EquipoEjecutor.lider_id == user.id),
-                )
+        query = (
+            select(ProcesoCurricular.referencia_id)
+            .join(EquipoEjecutor, ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutor.id)
+            .outerjoin(
+                EquipoEjecutorMiembro,
+                (ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutorMiembro.equipo_id)
+                & (EquipoEjecutorMiembro.usuario_id == user.id)
+                & (EquipoEjecutorMiembro.activo.is_(True)),
             )
-            res = await self._session.execute(stmt)
-            return set(res.scalars().all())
-
-        if user.has_role(RolUsuario.USUARIO_ADICIONAL.value):
-            stmt = (
-                select(ProcesoCurricular.referencia_id)
-                .join(
-                    EquipoEjecutor,
-                    ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutor.id,
-                )
-                .join(
-                    EquipoEjecutorMiembro,
-                    ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutorMiembro.equipo_id,
-                )
-                .where(
-                    ProcesoCurricular.referencia_id.in_(candidate_referencias),
-                    ProcesoCurricular.estado_scope == EstadoScopeProceso.ASIGNADO,
-                    EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
-                    EquipoEjecutorMiembro.usuario_id == user.id,
-                    EquipoEjecutorMiembro.activo.is_(True),
-                )
+            .where(
+                ProcesoCurricular.referencia_id.in_(candidate_referencias),
+                ProcesoCurricular.estado_scope == EstadoScopeProceso.ASIGNADO,
+                EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                (ProcesoCurricular.lider_id == user.id)
+                | (EquipoEjecutor.lider_id == user.id)
+                | (EquipoEjecutorMiembro.id.is_not(None)),
             )
-            res = await self._session.execute(stmt)
-            return set(res.scalars().all())
+        )
+        res = await self._session.execute(query)
+        allowed.update(res.scalars().all())
 
-        return set()
+        return allowed
 
     async def ensure_proceso_for_referencia(
         self,
@@ -461,3 +611,7 @@ class AccessScopeService:
                 proceso.lider_id = lider_id
             await self._session.flush()
         return proceso
+
+
+ExecutorTeamAuthorizationService = AccessScopeService
+

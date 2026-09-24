@@ -42,6 +42,7 @@ router = APIRouter(prefix="/api/v1/programas", tags=["programas"])
 def get_programa_excel_service(
     session: AsyncSession = Depends(get_async_session),
     settings: Settings = Depends(get_settings),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> ProgramaExcelImportService:
     """Build the program Excel import service using request-scoped dependencies."""
     return ProgramaExcelImportService(
@@ -50,6 +51,7 @@ def get_programa_excel_service(
         audit_repository=AuditRepository(session),
         curriculum_repository=ProgramaExcelImportRepository(session),
         storage_service=MinioDocumentStorageService(settings),
+        access_scope_service=scope_service,
     )
 
 

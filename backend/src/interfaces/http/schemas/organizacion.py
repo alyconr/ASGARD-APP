@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing_extensions import Self
 
 from src.interfaces.http.schemas.auth import UserResponse
 
@@ -71,11 +72,36 @@ class MiembroUpdate(BaseModel):
     activo: bool
 
 
+class ProgramaAutorizadoCreate(BaseModel):
+    codigo_programa: str
+    nombre_programa: str
+    programa_id: uuid.UUID | None = None
+
+
+class ProgramaAutorizadoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    equipo_id: uuid.UUID
+    programa_id: uuid.UUID | None = None
+    codigo_programa: str
+    nombre_programa: str
+    activo: bool
+
+
 class EquipoEjecutorCreate(BaseModel):
     nombre: str
     coordinacion_id: uuid.UUID
     especialidad_id: uuid.UUID
     lider_id: uuid.UUID
+    programas: list[ProgramaAutorizadoCreate] = Field(default_factory=list)
+    programas_autorizados: list[ProgramaAutorizadoCreate] | None = None
+
+    @model_validator(mode="after")
+    def sync_programas(self) -> Self:
+        if self.programas_autorizados is not None and not self.programas:
+            self.programas = self.programas_autorizados
+        return self
 
 
 class EquipoEjecutorUpdate(BaseModel):
@@ -84,6 +110,14 @@ class EquipoEjecutorUpdate(BaseModel):
     especialidad_id: uuid.UUID | None = None
     lider_id: uuid.UUID | None = None
     estado: str | None = None
+    programas: list[ProgramaAutorizadoCreate] | None = None
+    programas_autorizados: list[ProgramaAutorizadoCreate] | None = None
+
+    @model_validator(mode="after")
+    def sync_programas(self) -> Self:
+        if self.programas_autorizados is not None and self.programas is None:
+            self.programas = self.programas_autorizados
+        return self
 
 
 class EquipoEjecutorResponse(BaseModel):
@@ -98,6 +132,7 @@ class EquipoEjecutorResponse(BaseModel):
     lider: UserResponse | None = None
     miembros: list[MiembroResponse] = []
     procesos: list[ProcesoCurricularResponse] = []
+    programas_autorizados: list[ProgramaAutorizadoResponse] = []
 
 
 class PaginatedEquiposResponse(BaseModel):
@@ -132,3 +167,20 @@ class ProcesoCurricularResponse(BaseModel):
     programa_codigo: str | None = None
     proyecto_nombre: str | None = None
     proyecto_codigo: str | None = None
+
+
+class IniciarProcesoRequest(BaseModel):
+    equipo_ejecutor_id: uuid.UUID
+    programa_id: uuid.UUID | None = None
+    codigo_programa: str | None = None
+    tipo_necesidad: str = "CREAR_PLANEACION"
+
+
+class MiEquipoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    equipo: EquipoEjecutorResponse
+    rol_en_equipo: str  # "LIDER" | "MIEMBRO"
+    programas_autorizados: list[ProgramaAutorizadoResponse] = []
+    procesos: list[ProcesoCurricularResponse] = []
+

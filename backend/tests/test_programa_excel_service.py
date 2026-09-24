@@ -1070,3 +1070,51 @@ async def test_preview_rejects_reimport_for_same_program_reference() -> None:
         )
 
     assert len(repo.competencias) == 1
+
+
+@pytest.mark.anyio
+async def test_preview_program_excel_rejects_unauthorized_program():
+    """Verify preview_program_excel rejects workbook when program code is not authorized."""
+    service, _, drafts, _, _ = build_service()
+
+    class FakeScopeService:
+        async def validate_program_authorized_for_process(
+            self,
+            referencia_id: uuid.UUID,
+            codigo_programa: str,
+        ) -> bool:
+            return False
+
+    service._access_scope_service = FakeScopeService()
+
+    workbook_bytes = build_workbook_bytes(
+        {
+            "Programa": [
+                [
+                    "999999",
+                    "Programa No Autorizado",
+                    "1",
+                    "2026",
+                    "Titulada",
+                    "Tecnologo",
+                    800,
+                    800,
+                    1600,
+                    "matriz.xlsx",
+                    "sin observaciones",
+                ],
+            ]
+        }
+    )
+
+    with pytest.raises(
+        ProgramaExcelValidationError,
+        match="El programa identificado en esta matriz no se encuentra habilitado para tu participación dentro de este Equipo Ejecutor",
+    ):
+        await service.preview_program_excel(
+            referencia_id=drafts.draft.referencia_id,
+            filename="matriz.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content=workbook_bytes,
+        )
+

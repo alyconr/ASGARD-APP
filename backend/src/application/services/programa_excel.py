@@ -362,6 +362,17 @@ class AsyncSessionProtocol(Protocol):
         """Refresh the provided ORM instance."""
 
 
+class AccessScopeProtocol(Protocol):
+    """Protocol for access scope and program authorization checks."""
+
+    async def validate_program_authorized_for_process(
+        self,
+        referencia_id: uuid.UUID,
+        codigo_programa: str,
+    ) -> bool:
+        """Validate whether the program code is authorized for the process."""
+
+
 class ProgramaExcelImportService:
     """Validate, preview and confirm canonical Excel curriculum imports."""
 
@@ -372,6 +383,7 @@ class ProgramaExcelImportService:
         audit_repository: AuditRepositoryProtocol,
         curriculum_repository: ProgramaExcelRepositoryProtocol,
         storage_service: DocumentStorageProtocol,
+        access_scope_service: AccessScopeProtocol | None = None,
     ) -> None:
         """Initialize the service with explicit infrastructure ports."""
         self._session = session
@@ -379,6 +391,7 @@ class ProgramaExcelImportService:
         self._audit_repository = audit_repository
         self._curriculum_repository = curriculum_repository
         self._storage_service = storage_service
+        self._access_scope_service = access_scope_service
 
     async def _reject_existing_program_load(
         self,
@@ -464,6 +477,17 @@ class ProgramaExcelImportService:
 
         if workbook.is_valid:
             assert workbook.programa is not None
+            if self._access_scope_service is not None:
+                is_authorized = await self._access_scope_service.validate_program_authorized_for_process(
+                    referencia_id=referencia_id,
+                    codigo_programa=workbook.programa.codigo_programa,
+                )
+                if not is_authorized:
+                    raise ProgramaExcelValidationError(
+                        "El programa identificado en esta matriz no se encuentra habilitado para tu participación "
+                        "dentro de este Equipo Ejecutor. Comunícate con el Equipo Pedagógico para solicitar la "
+                        "habilitación del programa correspondiente."
+                    )
             await self._reject_existing_program_load(
                 draft=draft,
                 row=workbook.programa,

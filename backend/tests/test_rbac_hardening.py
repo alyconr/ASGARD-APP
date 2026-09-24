@@ -558,7 +558,7 @@ async def test_inactive_team_blocks_operational_access():
     with pytest.raises(HTTPException) as exc_info:
         await service.require_process_access(leader, ref)
     assert exc_info.value.status_code == 403
-    assert "inactivo" in exc_info.value.detail.lower()
+    assert "inactivo" in str(exc_info.value.detail).lower()
 
 
 async def test_role_downgrade_revokes_admin_access_immediately():
@@ -737,10 +737,10 @@ async def test_cross_team_isolation_matrix():
     for item in (team1, team2, team3, membership1, membership2, proc1, proc2, proc3):
         session.add(item)
 
-    # Assertions for Admin
-    assert await service.can_access_process(admin, ref1) is True
-    assert await service.can_access_process(admin, ref2) is True
-    assert await service.can_access_process(admin, ref3) is True
+    # Assertions for Admin (Admin WITHOUT team membership cannot access curricular processes)
+    assert await service.can_access_process(admin, ref1) is False
+    assert await service.can_access_process(admin, ref2) is False
+    assert await service.can_access_process(admin, ref3) is False
 
     # Assertions for Leader 1
     assert await service.can_access_process(leader1, ref1) is True

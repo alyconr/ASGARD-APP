@@ -10,13 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.organization_admin import OrganizationAdminService
 from src.application.services.team_admin import TeamAdminService, _map_proceso_dto
 from src.domain.shared.enums import EstadoScopeProceso, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.session import get_async_session
-from src.interfaces.http.deps import get_current_user, require_roles
+from src.interfaces.http.deps import get_access_scope_service, get_current_user, require_roles
+from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.interfaces.http.schemas.organizacion import (
     CoordinacionCreate,
     CoordinacionResponse,
@@ -27,10 +29,14 @@ from src.interfaces.http.schemas.organizacion import (
     EspecialidadCreate,
     EspecialidadResponse,
     EspecialidadUpdate,
+    IniciarProcesoRequest,
+    MiEquipoResponse,
     MiembroCreate,
     MiembroResponse,
     MiembroUpdate,
     PaginatedEquiposResponse,
+    ProgramaAutorizadoCreate,
+    ProgramaAutorizadoResponse,
     ProcesoAsignarRequest,
     ProcesoCurricularResponse,
 )
@@ -396,3 +402,126 @@ async def list_procesos_sin_asignar(
     res = await session.execute(stmt)
     dtos = [_map_proceso_dto(p) for p in res.scalars().all()]
     return [d for d in dtos if d is not None]
+
+
+# ==========================================
+# MIS EQUIPOS EJECUTORES & PROCESOS
+# ==========================================
+
+
+@router.get("/equipos/mis-equipos", response_model=list[MiEquipoResponse])
+async def list_mis_equipos(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[MiEquipoResponse]:
+    """List all executing teams that the current authenticated user belongs to."""
+    service = TeamAdminService(session)
+    return await service.list_my_teams(current_user)
+
+
+@router.post(
+    "/procesos/iniciar",
+    response_model=ProcesoCurricularResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/equipos/{equipo_id}/procesos/iniciar",
+    response_model=ProcesoCurricularResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def iniciar_proceso(
+    payload: IniciarProcesoRequest,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    equipo_id: uuid.UUID | None = None,
+) -> ProcesoCurricularResponse:
+    """Start a new curricular process strictly scoped to the specified executing team and program."""
+    if equipo_id is not None:
+        payload.equipo_ejecutor_id = equipo_id
+    service = TeamAdminService(session)
+    return await service.iniciar_proceso_curricular(current_user, payload)
+
+
+# ==========================================
+# PROGRAMAS AUTORIZADOS POR EQUIPO
+# ==========================================
+
+
+@router.get("/equipos/{equipo_id}/programas", response_model=list[ProgramaAutorizadoResponse])
+async def list_team_programs(
+    equipo_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[ProgramaAutorizadoResponse]:
+    """List authorized programs for the executing team."""
+    service = TeamAdminService(session)
+    return await service.list_authorized_programs(equipo_id)
+
+
+@router.post(
+    "/equipos/{equipo_id}/programas",
+    response_model=ProgramaAutorizadoResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def add_team_program(
+    equipo_id: uuid.UUID,
+    payload: ProgramaAutorizadoCreate,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> ProgramaAutorizadoResponse:
+    """Authorize a training program for the executing team."""
+    service = TeamAdminService(session)
+    return await service.add_authorized_program(current_user, equipo_id, payload)
+
+
+@router.delete(
+    "/equipos/{equipo_id}/programas/{programa_autorizado_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def remove_team_program(
+    equipo_id: uuid.UUID,
+    programa_autorizado_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Remove program authorization from the executing team."""
+    service = TeamAdminService(session)
+    return await service.remove_authorized_program(current_user, equipo_id, programa_autorizado_id)
+
+
+@router.get("/programas-formacion/catalogo")
+async def list_programas_catalogo(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[dict[str, Any]]:
+    """List unique training programs available in the institutional catalog."""
+    stmt = select(ProgramaFormacion).order_by(ProgramaFormacion.codigo_programa.asc())
+    res = await session.execute(stmt)
+    progs = res.scalars().all()
+    seen = set()
+    result = []
+    for p in progs:
+        key = (p.codigo_programa.strip(), p.nombre_programa.strip())
+        if key not in seen:
+            seen.add(key)
+            result.append({
+                "id": str(p.id),
+                "codigo_programa": p.codigo_programa.strip(),
+                "nombre_programa": p.nombre_programa.strip(),
+                "version_programa": p.version_programa,
+                "modalidad_formacion": p.modalidad_formacion,
+            })
+    return result
+
+
+@router.get("/procesos/{referencia_id}/acceso", response_model=ProcesoCurricularResponse)
+async def check_proceso_access(
+    referencia_id: uuid.UUID,
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    scope_service: Annotated[AccessScopeService, Depends(get_access_scope_service)],
+) -> ProcesoCurricularResponse:
+    """Check that current user has operational access to the process."""
+    proceso = await scope_service.require_process_access(current_user, referencia_id)
+    return _map_proceso_dto(proceso)
+

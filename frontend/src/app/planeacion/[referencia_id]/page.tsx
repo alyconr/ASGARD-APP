@@ -8,6 +8,8 @@ import { fetchPlaneacionContexto, type PlaneacionContextoResponse } from "@/feat
 import { PlaneacionWizardShell } from "@/features/planeacion/components/planeacion-wizard-shell";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildBlockedModuleGuide } from "@/features/guide/wizard-guide-engine";
+import { ProtectedRoute } from "@/features/auth/protected-route";
+import { ExecutorTeamGuard } from "@/features/auth/executor-team-guard";
 
 export default function PlaneacionPage({
   params,
@@ -90,7 +92,9 @@ export default function PlaneacionPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
+    <ProtectedRoute>
+      <ExecutorTeamGuard referenciaId={referencia_id}>
+        <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
       <div className="self-start">
         <Link
           href="/dashboard"
@@ -101,6 +105,8 @@ export default function PlaneacionPage({
         </Link>
       </div>
       <PlaneacionWizardShell contexto={contexto} referenciaId={referencia_id} />
-    </main>
+        </main>
+      </ExecutorTeamGuard>
+    </ProtectedRoute>
   );
 }
