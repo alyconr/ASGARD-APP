@@ -20,7 +20,6 @@ import {
   Trash2,
   LogOut,
   Shield,
-  Users,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/auth-context";
@@ -906,12 +905,6 @@ export function MasterDashboard(): React.JSX.Element {
         );
       })
       .finally(() => setIsDeletingFlow(false));
-  };
-
-  const prepareNewProgramFlow = (): void => {
-    clearActiveProgramaDraftReference();
-    setActiveReference(null);
-    setReferenceInput("");
   };
 
   return (

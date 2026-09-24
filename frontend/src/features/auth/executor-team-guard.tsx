@@ -85,7 +85,7 @@ export function ExecutorTeamGuard({
       .finally(() => {
         setIsVerifying(false);
       });
-  }, [isAuthenticated, isLoading, user, router]);
+  }, [isAuthenticated, isLoading, user, router, referenciaId]);
 
   if (isLoading || isVerifying) {
     return (

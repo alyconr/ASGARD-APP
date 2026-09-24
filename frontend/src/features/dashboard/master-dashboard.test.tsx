@@ -231,7 +231,7 @@ function buildProgramFlow(
 function mockFetchJson(
   payload: DashboardResponse,
   flows: DashboardProgramFlow[] = [],
-  teams: any[] = [],
+  teams: unknown[] = [],
 ): void {
   let currentFlows = [...flows];
   vi.stubGlobal(
