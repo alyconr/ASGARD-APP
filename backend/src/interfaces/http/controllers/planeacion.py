@@ -24,11 +24,15 @@ from src.application.dto.planeacion import (
     PlaneacionSaveDTO,
 )
 from src.application.services.planeacion_formato_excel import EXCEL_CONTENT_TYPE
+from src.domain.shared.enums import RolUsuario
 from src.application.services.planeacion_service import (
     PlaneacionAccessError,
     PlaneacionPedagogicaService,
 )
 from src.application.services.access_scope import AccessScopeService
+from src.application.services.revision_curricular_service import (
+    RevisionCurricularService,
+)
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.organizacion import ProcesoCurricular
@@ -184,8 +188,9 @@ async def obtener_configuracion_formato_oficial(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionDocumentoConfigDTO:
     """Return shared institutional workbook metadata."""
-    if not await scope_service.can_access_project(current_user, proyecto_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
+    if not current_user.has_role(RolUsuario.ADMIN.value, RolUsuario.SUPERADMIN.value):
+        if not await scope_service.can_access_project(current_user, proyecto_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         return await service.obtener_configuracion_documento(proyecto_id)
     except ValueError as error:
@@ -225,6 +230,8 @@ async def guardar_configuracion_formato_oficial(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
+        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+        await rev_service.invalidate_approval_on_mutation(proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
@@ -244,8 +251,9 @@ async def obtener_estado_formato_consolidado(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialEstadoDTO:
     """Return consolidated generation readiness and counts."""
-    if not await scope_service.can_access_project(current_user, proyecto_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
+    if not current_user.has_role(RolUsuario.ADMIN.value, RolUsuario.SUPERADMIN.value):
+        if not await scope_service.can_access_project(current_user, proyecto_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     return await service.obtener_estado_formato_consolidado(proyecto_id)
 
 
@@ -293,12 +301,29 @@ async def generar_formato_consolidado(
 async def descargar_formato_consolidado(
     proyecto_id: uuid.UUID,
     service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
+    session: AsyncSession = Depends(get_async_session),
     current_user: Usuario = Depends(get_current_user),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Stream the latest consolidated workbook stored in MinIO."""
-    if not await scope_service.can_access_project(current_user, proyecto_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
+    # Pedagogical reviewers (ADMIN, SUPERADMIN) have inspection/preview rights during review
+    is_pedagogical_reviewer = current_user.has_role(
+        RolUsuario.ADMIN.value,
+        RolUsuario.SUPERADMIN.value,
+    )
+
+    if not is_pedagogical_reviewer:
+        if not await scope_service.can_access_project(current_user, proyecto_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
+
+        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+        autorizado, motivo = await rev_service.verify_download_authorization(proyecto_id)
+        if not autorizado:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "DOWNLOAD_NOT_AUTHORIZED", "message": motivo},
+            )
+
     try:
         content, filename = await service.descargar_formato_consolidado(proyecto_id)
     except (FileNotFoundError, ValueError) as error:
@@ -318,8 +343,9 @@ async def obtener_detalle(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> PlaneacionResponseDTO:
     """Retrieve detailed properties of a single pedagogical planning record."""
-    if not await scope_service.can_access_planning(current_user, planeacion_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
+    if not current_user.has_role(RolUsuario.ADMIN.value, RolUsuario.SUPERADMIN.value):
+        if not await scope_service.can_access_planning(current_user, planeacion_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     detail = await service.obtener_detalle(planeacion_id)
     if detail is None:
         raise HTTPException(
@@ -340,8 +366,9 @@ async def obtener_estado_formato_individual(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> FormatoOficialEstadoDTO:
     """Return individual generation readiness from backend rules."""
-    if not await scope_service.can_access_planning(current_user, planeacion_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
+    if not current_user.has_role(RolUsuario.ADMIN.value, RolUsuario.SUPERADMIN.value):
+        if not await scope_service.can_access_planning(current_user, planeacion_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         return await service.obtener_estado_formato_individual(planeacion_id)
     except ValueError as error:
@@ -402,8 +429,9 @@ async def descargar_formato_individual(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> StreamingResponse:
     """Stream one official workbook stored in MinIO."""
-    if not await scope_service.can_access_planning(current_user, planeacion_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
+    if not current_user.has_role(RolUsuario.ADMIN.value, RolUsuario.SUPERADMIN.value):
+        if not await scope_service.can_access_planning(current_user, planeacion_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         content, filename = await service.descargar_formato_individual(planeacion_id)
     except (FileNotFoundError, ValueError) as error:
@@ -459,6 +487,8 @@ async def guardar_borrador(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
+        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+        await rev_service.invalidate_approval_on_mutation(dto.proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
@@ -527,6 +557,8 @@ async def confirmar_y_generar(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
+        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+        await rev_service.invalidate_approval_on_mutation(res.proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
@@ -601,6 +633,9 @@ async def eliminar_planeacion(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
+        if proyecto_id:
+            rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+            await rev_service.invalidate_approval_on_mutation(proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
     except Exception as error:

@@ -68,6 +68,9 @@ from src.interfaces.http.controllers.proyecto_gate import (
 from src.interfaces.http.controllers.resultados_aprendizaje import (
     router as resultados_aprendizaje_router,
 )
+from src.interfaces.http.controllers.revision_curricular import (
+    router as revision_curricular_router,
+)
 
 
 
@@ -139,6 +142,7 @@ def create_application() -> FastAPI:
     application.include_router(pendientes_curriculares_router)
     application.include_router(proyecto_cargue_router)
     application.include_router(planeacion_router)
+    application.include_router(revision_curricular_router)
 
     return application
 

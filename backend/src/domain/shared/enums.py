@@ -123,3 +123,34 @@ class EstadoUsuario(str, Enum):
     BLOQUEADO = "BLOQUEADO"
 
 
+class EstadoEntregaRevision(str, Enum):
+    """Lifecycle states for a curricular submission and review cycle."""
+
+    BORRADOR = "BORRADOR"
+    ENVIADO_REVISION = "ENVIADO_REVISION"
+    EN_REVISION = "EN_REVISION"
+    AJUSTES_SOLICITADOS = "AJUSTES_SOLICITADOS"
+    AJUSTES_EN_PROGRESO = "AJUSTES_EN_PROGRESO"
+    REENVIADO = "REENVIADO"
+    APROBADO = "APROBADO"
+
+
+class TipoElementoObservacion(str, Enum):
+    """Target entity or level of a pedagogical review feedback observation."""
+
+    PROCESO_GENERAL = "PROCESO_GENERAL"
+    PROGRAMA = "PROGRAMA"
+    PROYECTO = "PROYECTO"
+    PLANEACION = "PLANEACION"
+    CONFIGURACION_DOCUMENTAL = "CONFIGURACION_DOCUMENTAL"
+    SECCION = "SECCION"
+
+
+class EstadoObservacionRevision(str, Enum):
+    """Lifecycle states for individual feedback observations."""
+
+    PENDIENTE = "PENDIENTE"
+    AJUSTE_REPORTADO = "AJUSTE_REPORTADO"
+    RESUELTO = "RESUELTO"
+
+

@@ -717,6 +717,12 @@ class PlaneacionPedagogicaService:
             or not config.storage_key
             or config.content_type != EXCEL_CONTENT_TYPE
         ):
+            if complete and config and config.fecha_elaboracion and config.regional and config.centro_formacion:
+                await self.generar_formato_consolidado(proyecto_id)
+                config = await self._repository.get_document_config(proyecto_id)
+                if config and config.storage_key:
+                    content = await self._storage_service.read_excel(key=config.storage_key)
+                    return content, config.file_name or OFFICIAL_FILE_NAME
             raise FileNotFoundError(
                 "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes volver a generar el formato consolidado."
             )

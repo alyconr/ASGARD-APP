@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from src.infrastructure.db.models.auth import Usuario
     from src.infrastructure.db.models.curriculum import ProgramaFormacion
     from src.infrastructure.db.models.proyecto import ProyectoFormativo
+    from src.infrastructure.db.models.revision_curricular import EntregaRevisionCurricular
 
 estado_equipo_enum = build_postgres_enum(EstadoEquipo, "estado_equipo")
 tipo_necesidad_enum = build_postgres_enum(TipoNecesidadProceso, "tipo_necesidad_proceso")
@@ -367,5 +368,12 @@ class ProcesoCurricular(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     proyecto: Mapped[ProyectoFormativo | None] = relationship(
         "ProyectoFormativo",
         foreign_keys=[proyecto_id],
+        lazy="selectin",
+    )
+    entregas_revision: Mapped[list[EntregaRevisionCurricular]] = relationship(
+        "EntregaRevisionCurricular",
+        back_populates="proceso_curricular",
+        cascade="all, delete-orphan",
+        order_by="EntregaRevisionCurricular.version.desc()",
         lazy="selectin",
     )

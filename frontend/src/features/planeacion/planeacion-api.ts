@@ -420,8 +420,12 @@ async function readErrorDetail(response: Response): Promise<string> {
     const payload = (await response.json()) as {
       detail?:
         | string
+        | { message?: string; code?: string }
         | Array<string | { msg?: string; loc?: Array<string | number> }>;
     };
+    if (typeof payload.detail === "object" && !Array.isArray(payload.detail) && payload.detail?.message) {
+      return payload.detail.message;
+    }
     if (Array.isArray(payload.detail)) {
       const messages = payload.detail.map((item) => {
         if (typeof item === "string") return item;
@@ -433,8 +437,259 @@ async function readErrorDetail(response: Response): Promise<string> {
       });
       return messages.join("; ");
     }
-    return payload.detail ?? "No fue posible completar la operación.";
+    return typeof payload.detail === "string"
+      ? payload.detail
+      : "No fue posible completar la operación.";
   } catch {
     return "No fue posible completar la operación.";
   }
 }
+
+// ----------------------------------------------------------------------------
+// Revisión Pedagógica y Aprobación de Planeaciones
+// ----------------------------------------------------------------------------
+
+export type EstadoEntregaRevision =
+  | "BORRADOR"
+  | "ENVIADO_REVISION"
+  | "EN_REVISION"
+  | "AJUSTES_SOLICITADOS"
+  | "AJUSTES_EN_PROGRESO"
+  | "REENVIADO"
+  | "APROBADO";
+
+export type TipoElementoObservacion =
+  | "PROCESO_GENERAL"
+  | "PROGRAMA"
+  | "PROYECTO"
+  | "PLANEACION"
+  | "CONFIGURACION_DOCUMENTAL"
+  | "SECCION";
+
+export type EstadoObservacionRevision =
+  | "PENDIENTE"
+  | "AJUSTE_REPORTADO"
+  | "RESUELTO";
+
+export interface ObservacionRevision {
+  id: string;
+  entrega_id: string;
+  target_type: TipoElementoObservacion;
+  target_id?: string | null;
+  section_key?: string | null;
+  comentario: string;
+  estado: EstadoObservacionRevision;
+  creado_por_id: string;
+  creado_por_nombre: string;
+  fecha_creacion: string;
+  ajuste_reportado_por_id?: string | null;
+  ajuste_reportado_por_nombre?: string | null;
+  fecha_ajuste_reportado?: string | null;
+  comentario_ajuste?: string | null;
+  resuelto_por_id?: string | null;
+  resuelto_por_nombre?: string | null;
+  fecha_resolucion?: string | null;
+}
+
+export interface PreflightEnvioRevision {
+  listo: boolean;
+  pendientes: string[];
+  advertencias?: string[];
+  resumen: {
+    total_actividades_proyecto?: number;
+    planeaciones_completas?: number;
+    planeaciones_borrador?: number;
+    actividades_sin_planeacion?: string[];
+    es_entrega_parcial?: boolean;
+    faltantes_count?: number;
+    version_actual?: number;
+    estado_actual?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface EntregaRevisionResumen {
+  id: string;
+  proceso_curricular_id: string;
+  referencia_id: string;
+  equipo_ejecutor_id?: string | null;
+  equipo_ejecutor_nombre: string;
+  programa_id?: string | null;
+  codigo_programa: string;
+  nombre_programa: string;
+  proyecto_id?: string | null;
+  codigo_proyecto: string;
+  nombre_proyecto: string;
+  lider_nombre: string;
+  lider_email: string;
+  version: number;
+  estado: EstadoEntregaRevision;
+  fecha_envio: string;
+  observaciones_pendientes_count: number;
+  observaciones_ajustadas_count: number;
+  observaciones_resueltas_count: number;
+  descarga_habilitada: boolean;
+  fecha_actualizacion?: string | null;
+}
+
+export interface EntregaRevisionDetalle extends EntregaRevisionResumen {
+  notas_entrega?: string | null;
+  notas_aprobacion?: string | null;
+  snapshot_metadatos: Record<string, unknown>;
+  observaciones: ObservacionRevision[];
+  historial_versiones: EntregaRevisionResumen[];
+}
+
+export interface BandejaRevisionPaginada {
+  items: EntregaRevisionResumen[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  metricas: Record<string, number>;
+}
+
+export interface BandejaRevisionFiltros {
+  estado?: EstadoEntregaRevision | null;
+  programa_id?: string | null;
+  equipo_ejecutor_id?: string | null;
+  lider_id?: string | null;
+  page?: number;
+  limit?: number;
+}
+
+export interface ObservacionCreatePayload {
+  target_type: TipoElementoObservacion;
+  target_id?: string | null;
+  section_key?: string | null;
+  comentario: string;
+}
+
+export interface AjusteReportarPayload {
+  comentario_ajuste: string;
+}
+
+export async function fetchPreflightRevision(
+  referencia_id: string,
+): Promise<PreflightEnvioRevision> {
+  return requestJson<PreflightEnvioRevision>(
+    `/revision-curricular/proceso/${referencia_id}/preflight-envio`,
+  );
+}
+
+export async function enviarProcesoARevision(
+  referencia_id: string,
+  notas_entrega?: string,
+): Promise<EntregaRevisionDetalle> {
+  return requestJson<EntregaRevisionDetalle>(
+    `/revision-curricular/proceso/${referencia_id}/enviar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notas_entrega: notas_entrega || null }),
+    },
+  );
+}
+
+export async function fetchEstadoActualRevision(
+  referencia_id: string,
+): Promise<EntregaRevisionDetalle | null> {
+  return requestJson<EntregaRevisionDetalle | null>(
+    `/revision-curricular/proceso/${referencia_id}/estado-actual`,
+  );
+}
+
+export async function fetchDetalleEntrega(
+  entrega_id: string,
+): Promise<EntregaRevisionDetalle> {
+  return requestJson<EntregaRevisionDetalle>(
+    `/revision-curricular/entregas/${entrega_id}`,
+  );
+}
+
+export async function reportarAjusteObservacion(
+  observacion_id: string,
+  comentario_ajuste: string,
+): Promise<ObservacionRevision> {
+  return requestJson<ObservacionRevision>(
+    `/revision-curricular/observaciones/${observacion_id}/reportar-ajuste`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comentario_ajuste }),
+    },
+  );
+}
+
+export async function fetchBandejaRevision(
+  filtros?: BandejaRevisionFiltros,
+): Promise<BandejaRevisionPaginada> {
+  const query = new URLSearchParams();
+  if (filtros?.estado) query.set("estado", filtros.estado);
+  if (filtros?.programa_id) query.set("programa_id", filtros.programa_id);
+  if (filtros?.equipo_ejecutor_id) query.set("equipo_ejecutor_id", filtros.equipo_ejecutor_id);
+  if (filtros?.lider_id) query.set("lider_id", filtros.lider_id);
+  if (filtros?.page) query.set("page", String(filtros.page));
+  if (filtros?.limit) query.set("limit", String(filtros.limit));
+
+  const qs = query.toString();
+  return requestJson<BandejaRevisionPaginada>(
+    `/revision-curricular/bandeja${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function iniciarRevisionEntrega(
+  entrega_id: string,
+): Promise<EntregaRevisionDetalle> {
+  return requestJson<EntregaRevisionDetalle>(
+    `/revision-curricular/entregas/${entrega_id}/iniciar-revision`,
+    { method: "POST" },
+  );
+}
+
+export async function crearObservacionEntrega(
+  entrega_id: string,
+  dto: ObservacionCreatePayload,
+): Promise<ObservacionRevision> {
+  return requestJson<ObservacionRevision>(
+    `/revision-curricular/entregas/${entrega_id}/observaciones`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dto),
+    },
+  );
+}
+
+export async function solicitarAjustesEntrega(
+  entrega_id: string,
+): Promise<EntregaRevisionDetalle> {
+  return requestJson<EntregaRevisionDetalle>(
+    `/revision-curricular/entregas/${entrega_id}/solicitar-ajustes`,
+    { method: "POST" },
+  );
+}
+
+export async function resolverObservacion(
+  observacion_id: string,
+): Promise<ObservacionRevision> {
+  return requestJson<ObservacionRevision>(
+    `/revision-curricular/observaciones/${observacion_id}/resolver`,
+    { method: "POST" },
+  );
+}
+
+export async function aprobarEntregaRevision(
+  entrega_id: string,
+  notas_aprobacion?: string,
+): Promise<EntregaRevisionDetalle> {
+  return requestJson<EntregaRevisionDetalle>(
+    `/revision-curricular/entregas/${entrega_id}/aprobar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notas_aprobacion: notas_aprobacion || null }),
+    },
+  );
+}
+

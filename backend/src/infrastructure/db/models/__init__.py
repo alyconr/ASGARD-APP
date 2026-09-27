@@ -28,6 +28,10 @@ from src.infrastructure.db.models.proyecto import (
     FaseProyecto,
     ProyectoFormativo,
 )
+from src.infrastructure.db.models.revision_curricular import (
+    EntregaRevisionCurricular,
+    ObservacionRevision,
+)
 
 __all__ = [
     "ActividadProyecto",
@@ -38,11 +42,13 @@ __all__ = [
     "Coordinacion",
     "CriterioEvaluacion",
     "ElementoCurricularPendiente",
+    "EntregaRevisionCurricular",
     "EquipoEjecutor",
     "EquipoEjecutorMiembro",
     "Especialidad",
     "EventoAuditoria",
     "FaseProyecto",
+    "ObservacionRevision",
     "PlaneacionDocumentoConfig",
     "PlaneacionPedagogica",
     "ProcesoCurricular",

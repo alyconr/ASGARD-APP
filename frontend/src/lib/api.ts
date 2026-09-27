@@ -1,9 +1,11 @@
+import type { User } from "@/features/auth/types";
+
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
 
 let inMemoryAccessToken: string | null = null;
 export interface SessionRefreshResult {
   accessToken: string;
-  user: any;
+  user: User | null;
 }
 
 let refreshSessionPromise: Promise<SessionRefreshResult | null> | null = null;

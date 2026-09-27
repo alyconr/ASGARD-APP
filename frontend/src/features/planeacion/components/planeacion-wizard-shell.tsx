@@ -21,6 +21,13 @@ import {
   Layers,
   Copy,
   Pencil,
+  ClipboardCheck,
+  Send,
+  MessageSquare,
+  AlertCircle,
+  ShieldCheck,
+  HelpCircle,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +40,8 @@ import {
   type ContextoFase,
   type ClasificacionInformacion,
   type FormatoOficialEstado,
+  type EntregaRevisionDetalle,
+  type PreflightEnvioRevision,
   savePlaneacionBorrador,
   confirmarPlaneacion,
   deletePlaneacion,
@@ -44,6 +53,10 @@ import {
   fetchFormatoOficialEstadoConsolidado,
   generarFormatoOficialConsolidado,
   downloadFormatoOficialConsolidado,
+  fetchEstadoActualRevision,
+  fetchPreflightRevision,
+  enviarProcesoARevision,
+  reportarAjusteObservacion,
 } from "../planeacion-api";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildPlaneacionWizardGuide } from "@/features/guide/wizard-guide-engine";
@@ -438,6 +451,20 @@ export function PlaneacionWizardShell({
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Review & Approval State
+  const [entregaActual, setEntregaActual] = useState<EntregaRevisionDetalle | null>(null);
+  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+  const [preflightData, setPreflightData] = useState<PreflightEnvioRevision | null>(null);
+  const [isPreflightLoading, setIsPreflightLoading] = useState(false);
+  const [notasEntrega, setNotasEntrega] = useState("");
+  const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [decisionEnvio, setDecisionEnvio] = useState<"ENVIAR_ACTUALES" | "SEGUIR_INCLUYENDO">("ENVIAR_ACTUALES");
+  const [showActividadesPendientes, setShowActividadesPendientes] = useState(false);
+  const [isObservacionesModalOpen, setIsObservacionesModalOpen] = useState(false);
+  const [ajusteObservacionId, setAjusteObservacionId] = useState<string | null>(null);
+  const [detalleAjusteTexto, setDetalleAjusteTexto] = useState("");
+  const [isReportingAjuste, setIsReportingAjuste] = useState(false);
+
   // Fases map
   const faseMap = useMemo(() => {
     const map = new Map<string, ContextoFase>();
@@ -742,10 +769,20 @@ export function PlaneacionWizardShell({
     }
   }, [contexto.proyecto_id]);
 
+  const loadEstadoRevision = useCallback(async () => {
+    try {
+      const data = await fetchEstadoActualRevision(referenciaId);
+      setEntregaActual(data);
+    } catch {
+      // Normal when no revision exists yet
+    }
+  }, [referenciaId]);
+
   useEffect(() => {
     void loadPlannings();
     void loadOfficialFormat();
-  }, [loadOfficialFormat, loadPlannings]);
+    void loadEstadoRevision();
+  }, [loadEstadoRevision, loadOfficialFormat, loadPlannings]);
 
   useEffect(() => {
     if (activeStep === "curricular" || activeStep === "complementario") {
@@ -1015,6 +1052,7 @@ export function PlaneacionWizardShell({
       const res = await savePlaneacionBorrador(payload);
       setActivePlanningId(res.id);
       await loadPlannings();
+      void loadEstadoRevision();
       if (!silent) {
         toast.success("Borrador guardado correctamente");
       }
@@ -1061,6 +1099,7 @@ export function PlaneacionWizardShell({
         fetchFormatoOficialEstadoIndividual(planningId),
         loadPlannings(),
         loadOfficialFormat(),
+        loadEstadoRevision(),
       ]);
       setOfficialStatus(status);
       toast.success("Formato oficial generado y almacenado en MinIO");
@@ -1088,6 +1127,7 @@ export function PlaneacionWizardShell({
       toast.success("Planeación eliminada");
       await loadPlannings();
       await loadOfficialFormat();
+      await loadEstadoRevision();
       resetForm();
       setActiveStep("dashboard");
     } catch {
@@ -1134,6 +1174,7 @@ export function PlaneacionWizardShell({
         centro_formacion: centroFormacion.trim(),
       });
       await loadOfficialFormat();
+      await loadEstadoRevision();
       toast.success("Configuración del formato oficial guardada");
     } catch (error) {
       toast.error(
@@ -1153,6 +1194,7 @@ export function PlaneacionWizardShell({
         contexto.proyecto_id,
       );
       await loadOfficialFormat();
+      await loadEstadoRevision();
       toast.success(
         `${result.planeaciones_incluidas} planeaciones incluidas; ${result.borradores_excluidos} borradores excluidos`,
       );
@@ -1168,6 +1210,12 @@ export function PlaneacionWizardShell({
   };
 
   const handleDownloadConsolidated = async () => {
+    if (!entregaActual || entregaActual.estado !== "APROBADO" || !entregaActual.descarga_habilitada) {
+      toast.error(
+        "La descarga del formato consolidado oficial GPFI-F-134 V05 no está autorizada. Requiere la aprobación formal del Equipo Pedagógico.",
+      );
+      return;
+    }
     if (!consolidatedStatus?.storage_key) {
       toast.error(
         "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes volver a generar el formato consolidado.",
@@ -1180,9 +1228,78 @@ export function PlaneacionWizardShell({
       toast.error(
         error instanceof Error
           ? error.message
-          : "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada. Debes volver a generar el formato consolidado.",
+          : "No hay un archivo consolidado disponible para descargar. Debes volver a generar el formato consolidado.",
       );
       await loadOfficialFormat();
+    }
+  };
+
+  const handleOpenPreflight = async () => {
+    setIsPreflightLoading(true);
+    try {
+      const data = await fetchPreflightRevision(referenciaId);
+      setPreflightData(data);
+      setDecisionEnvio("ENVIAR_ACTUALES");
+      setShowActividadesPendientes(false);
+      setNotasEntrega("");
+      setIsPreflightModalOpen(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Error al validar los requisitos para envío a revisión pedagógica.",
+      );
+    } finally {
+      setIsPreflightLoading(false);
+    }
+  };
+
+  const handleSubmitRevision = async () => {
+    if (!preflightData?.listo) {
+      toast.error("Existen requisitos pendientes que impiden enviar a revisión pedagógica.");
+      return;
+    }
+    setIsSubmittingRevision(true);
+    try {
+      const result = await enviarProcesoARevision(
+        referenciaId,
+        notasEntrega.trim() || undefined,
+      );
+      setEntregaActual(result);
+      setIsPreflightModalOpen(false);
+      toast.success("¡Proceso curricular enviado a Revisión Pedagógica exitosamente!");
+      await loadEstadoRevision();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Error al enviar el proceso a revisión pedagógica.",
+      );
+    } finally {
+      setIsSubmittingRevision(false);
+    }
+  };
+
+  const handleReportAjuste = async (observacionId: string) => {
+    if (!detalleAjusteTexto.trim()) {
+      toast.error("Debes describir el ajuste realizado antes de reportarlo.");
+      return;
+    }
+    setIsReportingAjuste(true);
+    try {
+      await reportarAjusteObservacion(observacionId, detalleAjusteTexto.trim());
+      toast.success("Ajuste reportado con éxito al Equipo Pedagógico.");
+      setAjusteObservacionId(null);
+      setDetalleAjusteTexto("");
+      await loadEstadoRevision();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Error al reportar el ajuste realizado.",
+      );
+    } finally {
+      setIsReportingAjuste(false);
     }
   };
 
@@ -1466,6 +1583,192 @@ export function PlaneacionWizardShell({
       {/* DASHBOARD VIEW */}
       {activeStep === "dashboard" && (
         <section className="grid gap-6">
+          {/* BANNER DE ESTADO DE REVISIÓN Y APROBACIÓN PEDAGÓGICA */}
+          {(!entregaActual || entregaActual.estado === "BORRADOR") && (
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-slate-200 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <Info className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                      Estado: Borrador / En Construcción
+                    </span>
+                    {entregaActual?.version ? (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        Versión #{entregaActual.version}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                    Las planeaciones se encuentran en elaboración. Para habilitar la descarga institucional del formato GPFI-F-134 V05, el proceso debe ser enviado a Revisión Pedagógica y aprobado formalmente.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isPreflightLoading}
+                onClick={() => void handleOpenPreflight()}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Enviar a Revisión Pedagógica
+              </button>
+            </div>
+          )}
+
+          {(entregaActual?.estado === "ENVIADO_REVISION" || entregaActual?.estado === "REENVIADO") && (
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50 dark:bg-amber-950/20">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-amber-100 p-2 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                  <Send className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                      {entregaActual.estado === "REENVIADO" ? "Reenviado con Ajustes" : "Enviado a Revisión Pedagógica"}
+                    </span>
+                    <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200">
+                      Versión #{entregaActual.version}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-400">
+                    El proceso curricular fue entregado para revisión y se encuentra en lista de espera del Equipo Pedagógico.
+                    {entregaActual.fecha_envio ? ` Entregado el ${new Date(entregaActual.fecha_envio).toLocaleString("es-CO")}.` : ""}
+                  </p>
+                  {entregaActual.notas_entrega && (
+                    <p className="mt-1 text-xs italic text-amber-700 dark:text-amber-300/80">
+                      &quot;{entregaActual.notas_entrega}&quot;
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white/60 px-3 py-1.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-300">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Esperando asignación
+              </span>
+            </div>
+          )}
+
+          {entregaActual?.estado === "EN_REVISION" && (
+            <div className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50/80 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-sky-900/50 dark:bg-sky-950/20">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-sky-100 p-2 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-sky-900 dark:text-sky-300">
+                      En Revisión Activa
+                    </span>
+                    <span className="rounded-full bg-sky-200 px-2 py-0.5 text-[10px] font-semibold text-sky-900 dark:bg-sky-900/60 dark:text-sky-200">
+                      Versión #{entregaActual.version}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-sky-800 dark:text-sky-400">
+                    El Equipo Pedagógico está evaluando activamente la coherencia curricular, resultados y campos complementarios.
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-white/60 px-3 py-1.5 text-xs font-medium text-sky-800 dark:border-sky-800 dark:bg-slate-900 dark:text-sky-300">
+                <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+                Revisión en curso
+              </span>
+            </div>
+          )}
+
+          {(entregaActual?.estado === "AJUSTES_SOLICITADOS" || entregaActual?.estado === "AJUSTES_EN_PROGRESO") && (
+            <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50/80 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-rose-900/50 dark:bg-rose-950/20">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-rose-100 p-2 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-300">
+                      Ajustes Solicitados por el Equipo Pedagógico
+                    </span>
+                    <span className="rounded-full bg-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-900 dark:bg-rose-900/60 dark:text-rose-200">
+                      Versión #{entregaActual.version}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-rose-800 dark:text-rose-400">
+                    Se han formulado observaciones sobre la planeación. Realiza los ajustes necesarios y repórtalos antes de reenviar la entrega.
+                  </p>
+                  {entregaActual.observaciones && entregaActual.observaciones.length > 0 && (
+                    <div className="mt-1 flex items-center gap-2 text-xs font-medium text-rose-700 dark:text-rose-300">
+                      <span>
+                        {entregaActual.observaciones.filter(o => o.estado === "PENDIENTE").length} observación(es) pendiente(s)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsObservacionesModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3.5 py-2 text-xs font-semibold text-rose-800 shadow-sm hover:bg-rose-50 transition dark:border-rose-800 dark:bg-slate-900 dark:text-rose-300"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Ver Observaciones & Reportar Ajustes
+                </button>
+                <button
+                  type="button"
+                  disabled={isPreflightLoading}
+                  onClick={() => void handleOpenPreflight()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-rose-800 transition disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                  Reenviar a Revisión
+                </button>
+              </div>
+            </div>
+          )}
+
+          {entregaActual?.estado === "APROBADO" && (
+            <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900/50 dark:bg-emerald-950/20">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-emerald-100 p-2 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
+                      Proceso Curricular Aprobado
+                    </span>
+                    <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-200">
+                      Versión #{entregaActual.version}
+                    </span>
+                    <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
+                      Descarga Habilitada
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-emerald-800 dark:text-emerald-400">
+                    Las planeaciones pedagógicas y el formato institucional GPFI-F-134 V05 han sido verificados y aprobados institucionalmente por el Equipo Pedagógico.
+                    {entregaActual.fecha_actualizacion ? ` Aprobado el ${new Date(entregaActual.fecha_actualizacion).toLocaleString("es-CO")}.` : ""}
+                  </p>
+                  {entregaActual.notas_aprobacion && (
+                    <p className="mt-1 text-xs italic text-emerald-700 dark:text-emerald-300/90">
+                      Dictamen: &quot;{entregaActual.notas_aprobacion}&quot;
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById("planeacion-document-config")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 transition"
+              >
+                <Download className="h-4 w-4" />
+                Ir a Descarga Consolidada
+              </button>
+            </div>
+          )}
+
           {/* Action Bar & Plannings List */}
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-sm">
             <div>
@@ -1642,7 +1945,7 @@ export function PlaneacionWizardShell({
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:flex-wrap">
+            <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 disabled={isOfficialBusy}
@@ -1663,13 +1966,54 @@ export function PlaneacionWizardShell({
               </button>
               <button
                 type="button"
-                disabled={!consolidatedStatus?.storage_key}
-                onClick={() => void handleDownloadConsolidated()}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isOfficialBusy || isPreflightLoading}
+                onClick={() => void handleOpenPreflight()}
+                className={cn(
+                  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition shadow-sm",
+                  entregaActual?.estado === "AJUSTES_SOLICITADOS"
+                    ? "bg-rose-600 text-white hover:bg-rose-700"
+                    : "border border-emerald-600 bg-emerald-700 text-white hover:bg-emerald-800"
+                )}
               >
-                <Download className="h-4 w-4" />
-                Descargar consolidado
+                <ClipboardCheck className="h-4 w-4" />
+                {entregaActual?.version && entregaActual.version > 1
+                  ? "Reenviar a Revisión"
+                  : "Enviar a Revisión Pedagógica"}
               </button>
+              {(() => {
+                const isApproved = entregaActual?.estado === "APROBADO" && Boolean(entregaActual?.descarga_habilitada);
+                const hasFile = Boolean(consolidatedStatus?.storage_key);
+                const canDownload = isApproved && hasFile;
+
+                return (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      disabled={!canDownload}
+                      onClick={() => void handleDownloadConsolidated()}
+                      className={cn(
+                        "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
+                        canDownload
+                          ? "border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                          : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-800 dark:bg-slate-800 dark:text-slate-500"
+                      )}
+                    >
+                      {canDownload ? <Download className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                      Descargar consolidado
+                    </button>
+                    {!canDownload && (
+                      <span className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                        <Lock className="h-3 w-3 shrink-0" />
+                        {!hasFile
+                          ? "Genera primero el consolidado."
+                          : !isApproved
+                          ? "Requiere aprobación pedagógica."
+                          : "Descarga no autorizada."}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
               {consolidatedStatus?.fecha_generacion ? (
                 <p className="self-center text-xs text-[var(--muted)]">
                   Última generación:{" "}
@@ -3490,6 +3834,441 @@ export function PlaneacionWizardShell({
               </button>
             </footer>
           </section>
+        </div>
+      )}
+
+      {/* MODAL DE VALIDACIÓN Y ENVÍO A REVISIÓN PEDAGÓGICA */}
+      {isPreflightModalOpen && preflightData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl dark:bg-slate-900 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                <ClipboardCheck className="h-5 w-5" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Envío a Revisión Pedagógica
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPreflightModalOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            {(() => {
+              const planeacionesCompletas = preflightData.resumen.planeaciones_completas ?? 0;
+              const totalActividades = preflightData.resumen.total_actividades_proyecto ?? 0;
+              const actividadesSinPlaneacion = (preflightData.resumen.actividades_sin_planeacion as string[]) ?? [];
+              const isPartial = Boolean(
+                preflightData.resumen.es_entrega_parcial ||
+                (actividadesSinPlaneacion.length > 0 && planeacionesCompletas > 0)
+              );
+
+              return (
+                <>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                    {/* Requirements Checklist */}
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Resumen de Requisitos
+                      </h3>
+                      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-800/50">
+                          {planeacionesCompletas > 0 ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                          )}
+                          <div>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Planeaciones completas: </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {planeacionesCompletas}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-800/50">
+                          <CheckCircle2 className="h-4 w-4 text-sky-600 shrink-0" />
+                          <div>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Actividades de proyecto: </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {totalActividades}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-800/50">
+                          {preflightData.listo ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
+                          )}
+                          <div>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Estado de entrega: </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {preflightData.listo
+                                ? (isPartial ? `Listo para envío parcial (${planeacionesCompletas} de ${totalActividades})` : "Listo para envío completo")
+                                : `${preflightData.pendientes.length} requisito(s) pendiente(s)`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-800/50">
+                          <Info className="h-4 w-4 text-slate-500 shrink-0" />
+                          <div>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Versión a generar: </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              Versión {(preflightData.resumen.version_actual ?? 0) + 1}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pendientes if any */}
+                    {preflightData.pendientes.length > 0 && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs dark:border-rose-900/50 dark:bg-rose-950/20">
+                        <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-300">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          <span>Requisitos pendientes que impiden el envío a revisión:</span>
+                        </div>
+                        <ul className="mt-2 list-disc list-inside space-y-1 text-rose-700 dark:text-rose-400">
+                          {preflightData.pendientes.map((p, i) => (
+                            <li key={i}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* DECISIÓN DE ENVÍO PARCIAL O SEGUIR INCLUYENDO */}
+                    {preflightData.listo && isPartial && (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-4 dark:border-sky-900/50 dark:bg-sky-950/20">
+                        <div className="flex items-start gap-3">
+                          <HelpCircle className="h-5 w-5 text-sky-600 dark:text-sky-400 mt-0.5 shrink-0" />
+                          <div className="space-y-3 flex-1">
+                            <div>
+                              <h3 className="text-sm font-bold text-sky-900 dark:text-sky-200">
+                                ¿Deseas enviar las planeaciones cargadas en este momento?
+                              </h3>
+                              <p className="mt-1 text-xs text-sky-800 dark:text-sky-300 leading-relaxed">
+                                Actualmente cuentas con <strong>{planeacionesCompletas} planeación(es) completada(s)</strong> de un total de <strong>{totalActividades} actividades</strong> del proyecto. Puedes enviar a revisión pedagógica lo que tienes construido hasta ahora, o continuar agregando más planeaciones antes de enviar.
+                              </p>
+                            </div>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <label
+                                className={cn(
+                                  "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition",
+                                  decisionEnvio === "ENVIAR_ACTUALES"
+                                    ? "border-emerald-500 bg-white ring-2 ring-emerald-500/20 shadow-sm dark:border-emerald-600 dark:bg-slate-900"
+                                    : "border-slate-200 bg-white/60 hover:bg-white dark:border-slate-800 dark:bg-slate-900/60"
+                                )}
+                              >
+                                <input
+                                  type="radio"
+                                  name="decisionEnvio"
+                                  checked={decisionEnvio === "ENVIAR_ACTUALES"}
+                                  onChange={() => setDecisionEnvio("ENVIAR_ACTUALES")}
+                                  className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <div>
+                                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                    Enviar las {planeacionesCompletas} planeación(es) actuales
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                                    Enviar a revisión pedagógica las planeaciones listas hasta el momento.
+                                  </span>
+                                </div>
+                              </label>
+
+                              <label
+                                className={cn(
+                                  "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-xs transition",
+                                  decisionEnvio === "SEGUIR_INCLUYENDO"
+                                    ? "border-sky-500 bg-white ring-2 ring-sky-500/20 shadow-sm dark:border-sky-600 dark:bg-slate-900"
+                                    : "border-slate-200 bg-white/60 hover:bg-white dark:border-slate-800 dark:bg-slate-900/60"
+                                )}
+                              >
+                                <input
+                                  type="radio"
+                                  name="decisionEnvio"
+                                  checked={decisionEnvio === "SEGUIR_INCLUYENDO"}
+                                  onChange={() => setDecisionEnvio("SEGUIR_INCLUYENDO")}
+                                  className="mt-0.5 text-sky-600 focus:ring-sky-500"
+                                />
+                                <div>
+                                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                    Seguir incluyendo más planeaciones
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                                    Continuar formulando las actividades restantes en el panel documental.
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
+
+                            {actividadesSinPlaneacion.length > 0 && (
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowActividadesPendientes(!showActividadesPendientes)}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:text-sky-900 dark:text-sky-400"
+                                >
+                                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showActividadesPendientes && "rotate-180")} />
+                                  {showActividadesPendientes
+                                    ? "Ocultar actividades que quedarán pendientes"
+                                    : `Ver las ${actividadesSinPlaneacion.length} actividades que quedarán pendientes para próximas entregas`}
+                                </button>
+                                {showActividadesPendientes && (
+                                  <ul className="mt-2 list-disc list-inside space-y-1 rounded-lg bg-white/80 p-2.5 text-xs text-slate-600 dark:bg-slate-800/80 dark:text-slate-400 max-h-36 overflow-y-auto">
+                                    {actividadesSinPlaneacion.map((act, idx) => (
+                                      <li key={idx}>{act}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notas de entrega */}
+                    {preflightData.listo && decisionEnvio === "ENVIAR_ACTUALES" && (
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                          Notas o comentarios para el Equipo Pedagógico (opcional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={notasEntrega}
+                          onChange={(e) => setNotasEntrega(e.target.value)}
+                          placeholder="Describe aspectos clave, novedades o respuestas a observaciones previas..."
+                          className="w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                        />
+                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          Al enviar, el proceso pasará a estado ENVIADO_REVISION y el Equipo Pedagógico podrá evaluarlo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPreflightModalOpen(false);
+                        document.getElementById("planeacion-document-config")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 w-full sm:w-auto"
+                    >
+                      Seguir incluyendo planeaciones
+                    </button>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setIsPreflightModalOpen(false)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                      >
+                        Cerrar
+                      </button>
+                      {decisionEnvio === "SEGUIR_INCLUYENDO" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPreflightModalOpen(false);
+                            document.getElementById("planeacion-document-config")?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-800 transition"
+                        >
+                          Ir al panel documental
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!preflightData.listo || isSubmittingRevision}
+                          onClick={() => void handleSubmitRevision()}
+                          className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          <Send className="h-4 w-4" />
+                          {isSubmittingRevision
+                            ? "Enviando..."
+                            : (isPartial ? `Confirmar y Enviar ${planeacionesCompletas} Planeación(es)` : "Confirmar y Enviar a Revisión")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE OBSERVACIONES DEL EQUIPO PEDAGÓGICO */}
+      {isObservacionesModalOpen && entregaActual && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl dark:bg-slate-900 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+              <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+                <MessageSquare className="h-5 w-5" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Observaciones del Equipo Pedagógico (Versión #{entregaActual.version})
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsObservacionesModalOpen(false);
+                  setAjusteObservacionId(null);
+                  setDetalleAjusteTexto("");
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {entregaActual.observaciones.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/50">
+                  No hay observaciones registradas en esta entrega.
+                </div>
+              ) : (
+                entregaActual.observaciones.map((obs) => (
+                  <div
+                    key={obs.id}
+                    className={cn(
+                      "rounded-xl border p-4 text-xs transition",
+                      obs.estado === "RESUELTO"
+                        ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/10"
+                        : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-slate-100 px-2 py-0.5 font-bold uppercase text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          {obs.target_type}
+                        </span>
+                        {(obs.section_key || obs.target_id) && (
+                          <span className="font-mono text-slate-500">
+                            {obs.section_key || obs.target_id}
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                          obs.estado === "RESUELTO"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
+                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300"
+                        )}
+                      >
+                        {obs.estado}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      <div>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">Observación: </span>
+                        <p className="mt-0.5 text-slate-600 dark:text-slate-400 whitespace-pre-line">
+                          {obs.comentario}
+                        </p>
+                      </div>
+
+                      {obs.comentario_ajuste && (
+                        <div className="rounded-lg bg-emerald-50 p-2.5 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
+                          <span className="font-semibold">Ajuste reportado por el equipo: </span>
+                          <p className="mt-0.5 whitespace-pre-line">{obs.comentario_ajuste}</p>
+                          {obs.fecha_ajuste_reportado && (
+                            <span className="mt-1 block text-[10px] text-emerald-700 dark:text-emerald-400">
+                              Reportado el {new Date(obs.fecha_ajuste_reportado).toLocaleString("es-CO")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Report action for pending observation */}
+                    {obs.estado === "PENDIENTE" && (
+                      <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                        {ajusteObservacionId === obs.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              rows={2}
+                              value={detalleAjusteTexto}
+                              onChange={(e) => setDetalleAjusteTexto(e.target.value)}
+                              placeholder="Describe las correcciones que realizaste en la planeación..."
+                              className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-800 outline-none focus:border-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAjusteObservacionId(null);
+                                  setDetalleAjusteTexto("");
+                                }}
+                                className="rounded px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isReportingAjuste}
+                                onClick={() => void handleReportAjuste(obs.id)}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                              >
+                                <Check className="h-3 w-3" />
+                                {isReportingAjuste ? "Guardando..." : "Guardar Ajuste"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAjusteObservacionId(obs.id);
+                              setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            {obs.comentario_ajuste ? "Actualizar ajuste reportado" : "Reportar ajuste realizado"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Una vez subsanadas las observaciones, utiliza el botón &quot;Reenviar a Revisión&quot;.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsObservacionesModalOpen(false);
+                  setAjusteObservacionId(null);
+                  setDetalleAjusteTexto("");
+                }}
+                className="rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

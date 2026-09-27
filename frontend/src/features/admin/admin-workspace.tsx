@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { Users, Building2, Shield, Network, BarChart3, History } from "lucide-react";
+import { Users, Building2, Shield, Network, BarChart3, History, ClipboardCheck } from "lucide-react";
 import { AdminDashboard } from "./supervision/admin-dashboard";
 import { UsersAdmin } from "./users-admin";
 import { OrganizationAdmin } from "./organization-admin";
 import { EquiposAdmin } from "./equipos-admin";
 import { AuditViewer } from "./audit/audit-viewer";
+import { RevisionWorkspace } from "./revision/revision-workspace";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "supervision" | "usuarios" | "organizacion" | "equipos" | "auditoria";
+type AdminTab = "supervision" | "usuarios" | "organizacion" | "equipos" | "auditoria" | "revision";
 
 interface AdminWorkspaceProps {
   initialTab?: AdminTab;
@@ -121,6 +122,19 @@ export function AdminWorkspace({ initialTab = "supervision" }: AdminWorkspacePro
             <History className="h-4 w-4" />
             Visor de Auditoría
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("revision")}
+            className={cn(
+              "inline-flex items-center gap-2 pb-3 text-xs sm:text-sm font-semibold border-b-2 -mb-px transition whitespace-nowrap",
+              activeTab === "revision"
+                ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            )}
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            Revisión Pedagógica
+          </button>
         </div>
       </div>
 
@@ -131,6 +145,7 @@ export function AdminWorkspace({ initialTab = "supervision" }: AdminWorkspacePro
         {activeTab === "organizacion" && <OrganizationAdmin />}
         {activeTab === "equipos" && <EquiposAdmin />}
         {activeTab === "auditoria" && <AuditViewer />}
+        {activeTab === "revision" && <RevisionWorkspace />}
       </div>
     </div>
   );

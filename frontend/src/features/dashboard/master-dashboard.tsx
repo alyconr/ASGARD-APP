@@ -859,19 +859,22 @@ export function MasterDashboard(): React.JSX.Element {
       const res = await authFetch(`${getApiBaseUrl()}/equipos/mis-equipos`);
       if (res.ok) {
         const rawData = await res.json();
-        const mapped: MiEquipo[] = (Array.isArray(rawData) ? rawData : []).map((item: any) => {
-          const eq = item.equipo || {};
+        const mapped: MiEquipo[] = (Array.isArray(rawData) ? rawData : []).map((rawItem: unknown) => {
+          const item = (rawItem && typeof rawItem === "object" ? rawItem : {}) as Record<string, unknown>;
+          const eq = (item.equipo && typeof item.equipo === "object" ? item.equipo : {}) as Record<string, unknown>;
+          const coord = (eq.coordinacion && typeof eq.coordinacion === "object" ? eq.coordinacion : {}) as Record<string, unknown>;
+          const esp = (eq.especialidad && typeof eq.especialidad === "object" ? eq.especialidad : {}) as Record<string, unknown>;
           return {
-            id: eq.id || item.id,
-            nombre: eq.nombre || item.nombre || "Equipo sin nombre",
-            estado: eq.estado || item.estado || "ACTIVO",
-            coordinacion_id: eq.coordinacion_id || item.coordinacion_id,
-            coordinacion_nombre: eq.coordinacion?.nombre || eq.coordinacion_nombre || item.coordinacion_nombre,
-            especialidad_id: eq.especialidad_id || item.especialidad_id,
-            especialidad_nombre: eq.especialidad?.nombre || eq.especialidad_nombre || item.especialidad_nombre,
-            rol_en_equipo: item.rol_en_equipo || "MIEMBRO",
-            programas_autorizados: item.programas_autorizados || eq.programas_autorizados || [],
-            procesos: item.procesos || eq.procesos || [],
+            id: String(eq.id || item.id || ""),
+            nombre: String(eq.nombre || item.nombre || "Equipo sin nombre"),
+            estado: String(eq.estado || item.estado || "ACTIVO"),
+            coordinacion_id: (eq.coordinacion_id || item.coordinacion_id || undefined) as string | undefined,
+            coordinacion_nombre: (coord.nombre || eq.coordinacion_nombre || item.coordinacion_nombre || undefined) as string | undefined,
+            especialidad_id: (eq.especialidad_id || item.especialidad_id || undefined) as string | undefined,
+            especialidad_nombre: (esp.nombre || eq.especialidad_nombre || item.especialidad_nombre || undefined) as string | undefined,
+            rol_en_equipo: (item.rol_en_equipo === "LIDER" ? "LIDER" : "MIEMBRO") as "LIDER" | "MIEMBRO",
+            programas_autorizados: (item.programas_autorizados || eq.programas_autorizados || []) as MiEquipoPrograma[],
+            procesos: (item.procesos || eq.procesos || []) as MiEquipoProceso[],
           };
         });
         setMisEquipos(mapped);
