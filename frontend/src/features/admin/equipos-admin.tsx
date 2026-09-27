@@ -24,6 +24,8 @@ interface UserSummary {
   apellido: string;
   email: string;
   roles: string[];
+  coordinacion?: { id: string; codigo: string; nombre: string } | null;
+  especialidad?: { id: string; codigo: string; nombre: string } | null;
 }
 
 interface Miembro {
@@ -723,8 +725,8 @@ export function EquiposAdmin(): React.JSX.Element {
               </button>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Asigna un <span className="font-semibold text-slate-700 dark:text-slate-300">USUARIO_ADICIONAL</span> al equipo{" "}
-              <span className="font-bold text-emerald-600">{selectedEquipoForMember.nombre}</span>.
+              Asigna un <span className="font-semibold text-slate-700 dark:text-slate-300">USUARIO_ADICIONAL</span> técnico
+              o transversal al equipo <span className="font-bold text-emerald-600">{selectedEquipoForMember.nombre}</span>.
             </p>
 
             {memberError && (
@@ -744,11 +746,20 @@ export function EquiposAdmin(): React.JSX.Element {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 >
                   <option value="" disabled>Seleccione usuario adicional...</option>
-                  {usuariosApoyo.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombre} {u.apellido} ({u.email})
-                    </option>
-                  ))}
+                  {usuariosApoyo.map((u) => {
+                    const isTransversal =
+                      u.coordinacion?.codigo?.toUpperCase().includes("TRA") ||
+                      u.coordinacion?.nombre?.toUpperCase().includes("TRANSVERSAL");
+                    const tag = isTransversal
+                      ? "Transversal"
+                      : u.especialidad?.codigo || u.coordinacion?.codigo || "";
+                    const suffix = tag ? ` [${tag}]` : "";
+                    return (
+                      <option key={u.id} value={u.id}>
+                        {u.nombre} {u.apellido} ({u.email}){suffix}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

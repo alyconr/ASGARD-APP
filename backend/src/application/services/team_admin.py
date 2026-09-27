@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -11,8 +12,16 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.domain.shared.enums import EstadoEquipo, EstadoScopeProceso, EstadoUsuario, RolUsuario
+from src.domain.shared.enums import (
+    EstadoBloque,
+    EstadoEquipo,
+    EstadoScopeProceso,
+    EstadoUsuario,
+    RolUsuario,
+    TipoNecesidadProceso,
+)
 from src.infrastructure.db.models.auth import Usuario
+from src.infrastructure.db.models.drafts import BorradorSesion
 from src.infrastructure.db.models.curriculum import ProgramaFormacion
 from src.infrastructure.db.models.organizacion import (
     Coordinacion,
@@ -21,6 +30,7 @@ from src.infrastructure.db.models.organizacion import (
     EquipoEjecutorPrograma,
     Especialidad,
     ProcesoCurricular,
+    is_coordinacion_transversal,
 )
 from src.infrastructure.repositories.audit import AuditRepository
 from src.interfaces.http.schemas.auth import UserResponse
@@ -45,6 +55,9 @@ def _map_user_dto(user: Usuario | None) -> UserResponse | None:
     if user is None:
         return None
     estado_val = user.estado.value if hasattr(getattr(user, "estado", None), "value") else str(getattr(user, "estado", None) or "ACTIVO")
+    roles = list(user.role_names) if "roles" in user.__dict__ else []
+    coord = user.coordinacion if "coordinacion" in user.__dict__ else None
+    esp = user.especialidad if "especialidad" in user.__dict__ else None
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -56,9 +69,9 @@ def _map_user_dto(user: Usuario | None) -> UserResponse | None:
         activo=user.activo,
         debe_cambiar_password=bool(getattr(user, "debe_cambiar_password", False) or False),
         ultimo_acceso=getattr(user, "ultimo_acceso", None),
-        roles=list(user.role_names),
-        coordinacion=user.coordinacion,  # type: ignore
-        especialidad=user.especialidad,  # type: ignore
+        roles=roles,
+        coordinacion=coord,  # type: ignore
+        especialidad=esp,  # type: ignore
     )
 
 
@@ -67,6 +80,23 @@ def _map_proceso_dto(proceso: ProcesoCurricular | None) -> ProcesoCurricularResp
         return None
     tipo_val = proceso.tipo_necesidad.value if hasattr(proceso.tipo_necesidad, "value") else str(proceso.tipo_necesidad)
     estado_val = proceso.estado_scope.value if hasattr(proceso.estado_scope, "value") else str(proceso.estado_scope)
+    prog_obj = proceso.programa if "programa" in proceso.__dict__ else None
+    proy_obj = proceso.proyecto if "proyecto" in proceso.__dict__ else None
+    prog_nom = prog_obj.nombre_programa if prog_obj else None
+    prog_cod = prog_obj.codigo_programa if prog_obj else None
+
+    if not prog_cod and "equipo_ejecutor" in proceso.__dict__ and proceso.equipo_ejecutor:
+        eq = proceso.equipo_ejecutor
+        if "programas_autorizados" in eq.__dict__ and eq.programas_autorizados:
+            for pa in eq.programas_autorizados:
+                if pa.programa_id and pa.programa_id == proceso.programa_id:
+                    prog_cod = pa.codigo_programa
+                    prog_nom = pa.nombre_programa
+                    break
+            if not prog_cod and len(eq.programas_autorizados) == 1:
+                prog_cod = eq.programas_autorizados[0].codigo_programa
+                prog_nom = eq.programas_autorizados[0].nombre_programa
+
     return ProcesoCurricularResponse(
         id=proceso.id,
         referencia_id=proceso.referencia_id,
@@ -78,10 +108,10 @@ def _map_proceso_dto(proceso: ProcesoCurricular | None) -> ProcesoCurricularResp
         estado_scope=estado_val,
         programa_id=proceso.programa_id,
         proyecto_id=proceso.proyecto_id,
-        programa_nombre=proceso.programa.nombre_programa if getattr(proceso, "programa", None) else None,
-        programa_codigo=proceso.programa.codigo_programa if getattr(proceso, "programa", None) else None,
-        proyecto_nombre=proceso.proyecto.nombre_proyecto if getattr(proceso, "proyecto", None) else None,
-        proyecto_codigo=proceso.proyecto.codigo_proyecto if getattr(proceso, "proyecto", None) else None,
+        programa_nombre=prog_nom,
+        programa_codigo=prog_cod,
+        proyecto_nombre=proy_obj.nombre_proyecto if proy_obj else None,
+        proyecto_codigo=proy_obj.codigo_proyecto if proy_obj else None,
     )
 
 
@@ -99,6 +129,11 @@ def _map_programa_autorizado_dto(prog: EquipoEjecutorPrograma | None) -> Program
 
 
 def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
+    miembros_raw = equipo.miembros if "miembros" in equipo.__dict__ else []
+    procesos_raw = equipo.procesos if "procesos" in equipo.__dict__ else []
+    programas_raw = equipo.programas_autorizados if "programas_autorizados" in equipo.__dict__ else []
+    lider_raw = equipo.lider if "lider" in equipo.__dict__ else None
+
     miembros_dtos = [
         MiembroResponse(
             id=m.id,
@@ -106,18 +141,18 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
             usuario_id=m.usuario_id,
             activo=m.activo,
             fecha_asignacion=m.fecha_asignacion,
-            usuario=_map_user_dto(m.usuario),
+            usuario=_map_user_dto(m.usuario if "usuario" in m.__dict__ else None),
         )
-        for m in (getattr(equipo, "miembros", None) or [])
+        for m in (miembros_raw or [])
     ]
     procesos_dtos = [
         _map_proceso_dto(p)
-        for p in (getattr(equipo, "procesos", None) or [])
+        for p in (procesos_raw or [])
         if p is not None
     ]
     programas_dtos = [
         _map_programa_autorizado_dto(pr)
-        for pr in (getattr(equipo, "programas_autorizados", None) or [])
+        for pr in (programas_raw or [])
         if pr is not None
     ]
     return EquipoEjecutorResponse(
@@ -127,7 +162,7 @@ def _map_equipo_dto(equipo: EquipoEjecutor) -> EquipoEjecutorResponse:
         especialidad_id=equipo.especialidad_id,
         lider_id=equipo.lider_id,
         estado=equipo.estado.value if hasattr(equipo.estado, "value") else str(equipo.estado),
-        lider=_map_user_dto(equipo.lider),
+        lider=_map_user_dto(lider_raw),
         miembros=miembros_dtos,
         procesos=[p for p in procesos_dtos if p is not None],
         programas_autorizados=[pr for pr in programas_dtos if pr is not None],
@@ -140,6 +175,202 @@ class TeamAdminService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.audit_repo = AuditRepository(session)
+
+    async def _ensure_process_for_team_program(
+        self,
+        equipo: EquipoEjecutor,
+        codigo_programa: str | None,
+        programa_id: uuid.UUID | None,
+        actor_id: uuid.UUID,
+    ) -> ProcesoCurricular:
+        """Ensure a ProcesoCurricular and corresponding BorradorSesion exist for the team and program."""
+        from src.domain.drafts.types import TipoBloqueBorrador
+
+        clean_code = codigo_programa.strip().upper() if codigo_programa else None
+
+        # 1. Resolve programa_id if not given but codigo_programa is present
+        resolved_pid = programa_id
+        if not resolved_pid and clean_code:
+            prog_stmt = select(ProgramaFormacion).where(
+                func.lower(ProgramaFormacion.codigo_programa) == clean_code.lower()
+            )
+            try:
+                prog_res = await self.session.execute(prog_stmt)
+                matched_prog = prog_res.scalars().first()
+                if matched_prog:
+                    resolved_pid = matched_prog.id
+            except Exception:
+                pass
+
+        # 2. Query all candidates for this team
+        existing_stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.equipo_ejecutor_id == equipo.id)
+            .options(
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            )
+        )
+        try:
+            existing_res = await self.session.execute(existing_stmt)
+            candidates = list(existing_res.scalars().all())
+        except Exception:
+            candidates = []
+
+        # 3. Look for an existing process to reuse
+        matched_candidate: ProcesoCurricular | None = None
+        for cand in candidates:
+            if resolved_pid and cand.programa_id == resolved_pid:
+                matched_candidate = cand
+                break
+            if clean_code and cand.programa and cand.programa.codigo_programa:
+                if cand.programa.codigo_programa.strip().upper() == clean_code:
+                    matched_candidate = cand
+                    break
+            if clean_code:
+                d_stmt = select(BorradorSesion).where(
+                    BorradorSesion.referencia_id == cand.referencia_id,
+                    BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
+                )
+                try:
+                    d_res = await self.session.execute(d_stmt)
+                    d_obj = d_res.scalar_one_or_none()
+                    if d_obj and isinstance(d_obj.payload_json, dict):
+                        meta = d_obj.payload_json.get("meta", {})
+                        d_code = meta.get("codigo_programa")
+                        if d_code and str(d_code).strip().upper() == clean_code:
+                            matched_candidate = cand
+                            break
+                except Exception:
+                    pass
+
+        # If no specific match by code yet, take an unlinked candidate for this team
+        if not matched_candidate:
+            for cand in candidates:
+                if cand.programa_id is None:
+                    matched_candidate = cand
+                    break
+
+        if matched_candidate is not None:
+            # Update the existing process rather than creating a new one
+            if resolved_pid and matched_candidate.programa_id != resolved_pid:
+                matched_candidate.programa_id = resolved_pid
+            # Clean up any leftover orphan candidates for this team with programa_id is None
+            for other_cand in candidates:
+                if other_cand.id != matched_candidate.id and other_cand.programa_id is None:
+                    d_del_stmt = select(BorradorSesion).where(BorradorSesion.referencia_id == other_cand.referencia_id)
+                    try:
+                        d_del_res = await self.session.execute(d_del_stmt)
+                        for d_del in d_del_res.scalars().all():
+                            await self.session.delete(d_del)
+                        await self.session.delete(other_cand)
+                    except Exception:
+                        pass
+            return matched_candidate
+
+        new_ref_id = uuid.uuid4()
+        proceso = ProcesoCurricular(
+            referencia_id=new_ref_id,
+            coordinacion_id=equipo.coordinacion_id,
+            especialidad_id=equipo.especialidad_id,
+            equipo_ejecutor_id=equipo.id,
+            lider_id=equipo.lider_id,
+            tipo_necesidad=TipoNecesidadProceso.CREAR_PLANEACION,
+            estado_scope=EstadoScopeProceso.ASIGNADO,
+            programa_id=resolved_pid,
+            creado_por=actor_id,
+        )
+        self.session.add(proceso)
+
+        draft = BorradorSesion(
+            tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
+            referencia_id=new_ref_id,
+            paso_actual="origen-documental",
+            payload_json={
+                "meta": {
+                    "equipo_ejecutor_id": str(equipo.id),
+                    "programa_id": str(resolved_pid) if resolved_pid else None,
+                    "codigo_programa": clean_code,
+                    "iniciado_por": str(actor_id),
+                },
+                "documental": {},
+                "curricular": {
+                    "programa_formacion_id": str(resolved_pid) if resolved_pid else None,
+                },
+            },
+            estado_borrador=EstadoBloque.BORRADOR,
+        )
+        self.session.add(draft)
+        await self.session.flush()
+
+        try:
+            await self.audit_repo.add_event(
+                entidad="ProcesoCurricular",
+                entidad_id=proceso.id,
+                accion="CURRICULAR_PROCESS_STARTED",
+                detalle={
+                    "referencia_id": str(new_ref_id),
+                    "created_by_user_id": str(actor_id),
+                    "executor_team_id": str(equipo.id),
+                    "training_program_id": str(resolved_pid) if resolved_pid else None,
+                    "codigo_programa": clean_code,
+                },
+                actor_usuario_id=actor_id,
+                referencia_id=new_ref_id,
+            )
+        except Exception:
+            pass
+
+        return proceso
+
+    async def _get_team_dto(self, equipo_id: uuid.UUID, fallback: EquipoEjecutor | None = None) -> EquipoEjecutorResponse:
+        stmt = (
+            select(EquipoEjecutor)
+            .where(EquipoEjecutor.id == equipo_id)
+            .options(
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.coordinacion),
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.especialidad),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.coordinacion),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.especialidad),
+                selectinload(EquipoEjecutor.programas_autorizados),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
+                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
+            )
+            .execution_options(populate_existing=True)
+        )
+        res = await self.session.execute(stmt)
+        equipo = res.scalar_one_or_none()
+        if equipo is None:
+            equipo = await self.session.get(EquipoEjecutor, equipo_id) or fallback
+        if equipo is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo ejecutor no encontrado")
+
+        # Self-heal: If team has authorized programs but no processes assigned, ensure them
+        if hasattr(equipo, "programas_autorizados") and equipo.programas_autorizados:
+            procesos_count = len(getattr(equipo, "procesos", []) or [])
+            if procesos_count == 0:
+                for pa in equipo.programas_autorizados:
+                    await self._ensure_process_for_team_program(
+                        equipo=equipo,
+                        codigo_programa=pa.codigo_programa,
+                        programa_id=pa.programa_id,
+                        actor_id=equipo.lider_id,
+                    )
+                await self.session.commit()
+                p_stmt = (
+                    select(ProcesoCurricular)
+                    .where(ProcesoCurricular.equipo_ejecutor_id == equipo.id)
+                    .options(
+                        selectinload(ProcesoCurricular.programa),
+                        selectinload(ProcesoCurricular.proyecto),
+                    )
+                )
+                p_res = await self.session.execute(p_stmt)
+                equipo.procesos = p_res.scalars().all()
+
+        return _map_equipo_dto(equipo)
 
     async def create_team(self, actor: Usuario, payload: EquipoEjecutorCreate) -> EquipoEjecutorResponse:
         """Create a new executing team enforcing leader role, state, and coordination/specialty integrity."""
@@ -185,11 +416,17 @@ class TeamAdminService:
         await self.session.flush()
 
         if payload.programas:
+            seen_codes: set[str] = set()
             for prog_in in payload.programas:
+                code_norm = prog_in.codigo_programa.strip().upper()
+                if not code_norm or code_norm in seen_codes:
+                    continue
+                seen_codes.add(code_norm)
+
                 p_id = prog_in.programa_id
                 if not p_id:
                     p_stmt = select(ProgramaFormacion).where(
-                        func.lower(ProgramaFormacion.codigo_programa) == prog_in.codigo_programa.strip().lower()
+                        func.lower(ProgramaFormacion.codigo_programa) == code_norm.lower()
                     )
                     p_res = await self.session.execute(p_stmt)
                     matched_p = p_res.scalars().first()
@@ -199,11 +436,27 @@ class TeamAdminService:
                 equipo_prog = EquipoEjecutorPrograma(
                     equipo_id=equipo.id,
                     programa_id=p_id,
-                    codigo_programa=prog_in.codigo_programa.strip(),
+                    codigo_programa=code_norm,
                     nombre_programa=prog_in.nombre_programa.strip(),
                     activo=True,
                 )
                 self.session.add(equipo_prog)
+
+                # Auto-initialize curricular process for authorized program
+                await self._ensure_process_for_team_program(
+                    equipo=equipo,
+                    codigo_programa=code_norm,
+                    programa_id=p_id,
+                    actor_id=actor.id,
+                )
+        else:
+            # Auto-initialize general curricular process for the team
+            await self._ensure_process_for_team_program(
+                equipo=equipo,
+                codigo_programa=None,
+                programa_id=None,
+                actor_id=actor.id,
+            )
 
         await self.audit_repo.add_event(
             entidad="EquipoEjecutor",
@@ -212,38 +465,11 @@ class TeamAdminService:
             detalle={"creado_por": str(actor.id), "nombre": equipo.nombre, "lider_id": str(equipo.lider_id)},
         )
         await self.session.commit()
-
-        reloaded = await self.session.get(
-            EquipoEjecutor,
-            equipo.id,
-            options=[
-                selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.programas_autorizados),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
-            ],
-        )
-        return _map_equipo_dto(reloaded)  # type: ignore
+        return await self._get_team_dto(equipo.id, fallback=equipo)
 
     async def get_team(self, equipo_id: uuid.UUID) -> EquipoEjecutorResponse:
         """Fetch executing team details with leader, members, and assigned processes."""
-        stmt = (
-            select(EquipoEjecutor)
-            .where(EquipoEjecutor.id == equipo_id)
-            .options(
-                selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.programas_autorizados),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
-            )
-        )
-        res = await self.session.execute(stmt)
-        equipo = res.scalar_one_or_none()
-        if equipo is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
-        return _map_equipo_dto(equipo)
+        return await self._get_team_dto(equipo_id)
 
     async def list_teams_paginated(
         self,
@@ -295,7 +521,11 @@ class TeamAdminService:
         items_stmt = (
             stmt.options(
                 selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.coordinacion),
+                selectinload(EquipoEjecutor.lider).selectinload(Usuario.especialidad),
                 selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.coordinacion),
+                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.especialidad),
                 selectinload(EquipoEjecutor.programas_autorizados),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
                 selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
@@ -306,6 +536,34 @@ class TeamAdminService:
         )
         items_res = await self.session.execute(items_stmt)
         equipos = items_res.scalars().unique().all()
+
+        healed_any = False
+        for e in equipos:
+            if hasattr(e, "programas_autorizados") and e.programas_autorizados:
+                procesos_count = len(getattr(e, "procesos", []) or [])
+                if procesos_count == 0:
+                    for pa in e.programas_autorizados:
+                        await self._ensure_process_for_team_program(
+                            equipo=e,
+                            codigo_programa=pa.codigo_programa,
+                            programa_id=pa.programa_id,
+                            actor_id=e.lider_id,
+                        )
+                    healed_any = True
+        if healed_any:
+            await self.session.commit()
+            for e in equipos:
+                p_stmt = (
+                    select(ProcesoCurricular)
+                    .where(ProcesoCurricular.equipo_ejecutor_id == e.id)
+                    .options(
+                        selectinload(ProcesoCurricular.programa),
+                        selectinload(ProcesoCurricular.proyecto),
+                        selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(EquipoEjecutor.programas_autorizados),
+                    )
+                )
+                p_res = await self.session.execute(p_stmt)
+                e.procesos = p_res.scalars().all()
 
         pages = math.ceil(total / page_size) if total > 0 else 1
 
@@ -428,11 +686,19 @@ class TeamAdminService:
             del_res = await self.session.execute(del_stmt)
             for old_p in del_res.scalars().all():
                 await self.session.delete(old_p)
+            await self.session.flush()
+
+            seen_codes: set[str] = set()
             for prog_in in payload.programas:
+                code_norm = prog_in.codigo_programa.strip().upper()
+                if not code_norm or code_norm in seen_codes:
+                    continue
+                seen_codes.add(code_norm)
+
                 p_id = prog_in.programa_id
                 if not p_id:
                     p_stmt = select(ProgramaFormacion).where(
-                        func.lower(ProgramaFormacion.codigo_programa) == prog_in.codigo_programa.strip().lower()
+                        func.lower(ProgramaFormacion.codigo_programa) == code_norm.lower()
                     )
                     p_res = await self.session.execute(p_stmt)
                     matched_p = p_res.scalars().first()
@@ -442,11 +708,20 @@ class TeamAdminService:
                 equipo_prog = EquipoEjecutorPrograma(
                     equipo_id=equipo.id,
                     programa_id=p_id,
-                    codigo_programa=prog_in.codigo_programa.strip(),
+                    codigo_programa=code_norm,
                     nombre_programa=prog_in.nombre_programa.strip(),
                     activo=True,
                 )
                 self.session.add(equipo_prog)
+
+                # Auto-ensure process exists for this program
+                await self._ensure_process_for_team_program(
+                    equipo=equipo,
+                    codigo_programa=code_norm,
+                    programa_id=p_id,
+                    actor_id=actor.id,
+                )
+            await self.session.flush()
 
         await self.audit_repo.add_event(
             entidad="EquipoEjecutor",
@@ -455,19 +730,7 @@ class TeamAdminService:
             detalle={"actualizado_por": str(actor.id), "nombre": equipo.nombre},
         )
         await self.session.commit()
-
-        reloaded = await self.session.get(
-            EquipoEjecutor,
-            equipo.id,
-            options=[
-                selectinload(EquipoEjecutor.lider).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.miembros).selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
-                selectinload(EquipoEjecutor.programas_autorizados),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.programa),
-                selectinload(EquipoEjecutor.procesos).selectinload(ProcesoCurricular.proyecto),
-            ],
-        )
-        return _map_equipo_dto(reloaded)  # type: ignore
+        return await self._get_team_dto(equipo.id, fallback=equipo)
 
     async def add_member(
         self,
@@ -480,7 +743,15 @@ class TeamAdminService:
         if equipo is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado")
 
-        usuario = await self.session.get(Usuario, payload.usuario_id, options=[selectinload(Usuario.roles)])
+        usuario = await self.session.get(
+            Usuario,
+            payload.usuario_id,
+            options=[
+                selectinload(Usuario.roles),
+                selectinload(Usuario.coordinacion),
+                selectinload(Usuario.especialidad),
+            ],
+        )
         if usuario is None or usuario.estado != EstadoUsuario.ACTIVO:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -493,11 +764,22 @@ class TeamAdminService:
                 detail="El miembro debe poseer el rol USUARIO_ADICIONAL",
             )
 
-        if usuario.coordinacion_id != equipo.coordinacion_id or usuario.especialidad_id != equipo.especialidad_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="El usuario de apoyo debe pertenecer a la misma coordinación y especialidad del equipo ejecutor",
-            )
+        # Validar pertenencia de coordinación y especialidad
+        # Regla: Un usuario o instructor de la coordinación de Transversales puede pertenecer
+        # a cualquier equipo ejecutor de cualquier coordinación.
+        # Los instructores técnicos deben pertenecer a la misma coordinación y especialidad del equipo.
+        user_coord = usuario.coordinacion
+        if user_coord is None and usuario.coordinacion_id is not None:
+            user_coord = await self.session.get(Coordinacion, usuario.coordinacion_id)
+
+        es_transversal = is_coordinacion_transversal(user_coord)
+
+        if not es_transversal:
+            if usuario.coordinacion_id != equipo.coordinacion_id or usuario.especialidad_id != equipo.especialidad_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="El usuario de apoyo debe pertenecer a la misma coordinación y especialidad del equipo ejecutor o a la coordinación de Transversales",
+                )
 
         stmt = select(EquipoEjecutorMiembro).where(
             EquipoEjecutorMiembro.equipo_id == equipo_id,
@@ -530,6 +812,7 @@ class TeamAdminService:
             usuario_id=payload.usuario_id,
             activo=True,
             asignado_por=actor.id,
+            fecha_asignacion=datetime.now(UTC),
         )
         self.session.add(miembro)
         await self.session.flush()
@@ -566,7 +849,11 @@ class TeamAdminService:
                 EquipoEjecutorMiembro.equipo_id == equipo_id,
                 EquipoEjecutorMiembro.usuario_id == usuario_id,
             )
-            .options(selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles))
+            .options(
+                selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.roles),
+                selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.coordinacion),
+                selectinload(EquipoEjecutorMiembro.usuario).selectinload(Usuario.especialidad),
+            )
         )
         res = await self.session.execute(stmt)
         miembro = res.scalar_one_or_none()
@@ -639,6 +926,33 @@ class TeamAdminService:
             proceso.equipo_ejecutor_id = equipo.id
             proceso.lider_id = lider_id
             proceso.estado_scope = EstadoScopeProceso.ASIGNADO
+
+        # Ensure initial BorradorSesion for PROGRAMA exists
+        draft_stmt = select(BorradorSesion).where(
+            BorradorSesion.referencia_id == referencia_id,
+            BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
+        )
+        draft_res = await self.session.execute(draft_stmt)
+        if draft_res.scalar_one_or_none() is None:
+            initial_payload = {
+                "meta": {
+                    "equipo_ejecutor_id": str(equipo.id),
+                    "programa_id": str(proceso.programa_id) if proceso.programa_id else None,
+                    "iniciado_por": str(actor.id),
+                },
+                "documental": {},
+                "curricular": {
+                    "programa_formacion_id": str(proceso.programa_id) if proceso.programa_id else None,
+                },
+            }
+            new_draft = BorradorSesion(
+                referencia_id=referencia_id,
+                tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
+                paso_actual="origen-documental",
+                estado_borrador=EstadoBloque.BORRADOR,
+                payload_json=initial_payload,
+            )
+            self.session.add(new_draft)
 
         await self.session.flush()
         await self.audit_repo.add_event(
@@ -935,6 +1249,34 @@ class TeamAdminService:
         res = await self.session.execute(stmt)
         teams = res.scalars().all()
 
+        healed_any = False
+        for t in teams:
+            if hasattr(t, "programas_autorizados") and t.programas_autorizados:
+                procesos_count = len(getattr(t, "procesos", []) or [])
+                if procesos_count == 0:
+                    for pa in t.programas_autorizados:
+                        await self._ensure_process_for_team_program(
+                            equipo=t,
+                            codigo_programa=pa.codigo_programa,
+                            programa_id=pa.programa_id,
+                            actor_id=t.lider_id,
+                        )
+                    healed_any = True
+        if healed_any:
+            await self.session.commit()
+            for t in teams:
+                p_stmt = (
+                    select(ProcesoCurricular)
+                    .where(ProcesoCurricular.equipo_ejecutor_id == t.id)
+                    .options(
+                        selectinload(ProcesoCurricular.programa),
+                        selectinload(ProcesoCurricular.proyecto),
+                        selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(EquipoEjecutor.programas_autorizados),
+                    )
+                )
+                p_res = await self.session.execute(p_stmt)
+                t.procesos = p_res.scalars().all()
+
         responses: list[MiEquipoResponse] = []
         for t in teams:
             rol = "LIDER" if t.id in leader_team_ids else "MIEMBRO"
@@ -956,9 +1298,12 @@ class TeamAdminService:
     ) -> ProcesoCurricularResponse:
         """Start a new curricular process scoped strictly to an executor team and authorized program."""
         from src.application.services.access_scope import AccessScopeService
-        from src.domain.drafts.types import TipoBloqueBorrador
-        from src.domain.shared.enums import EstadoBloque
-        from src.infrastructure.db.models.drafts import BorradorSesion
+
+        if payload.equipo_ejecutor_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="equipo_ejecutor_id es requerido",
+            )
 
         scope_service = AccessScopeService(self.session)
         team = await scope_service.require_start_curricular_process(
@@ -968,95 +1313,11 @@ class TeamAdminService:
             payload.codigo_programa,
         )
 
-        # Check existing process for team and program
-        existing_stmt = (
-            select(ProcesoCurricular)
-            .where(
-                ProcesoCurricular.equipo_ejecutor_id == team.id,
-            )
-            .options(
-                selectinload(ProcesoCurricular.programa),
-                selectinload(ProcesoCurricular.proyecto),
-            )
-        )
-        if payload.programa_id:
-            existing_stmt = existing_stmt.where(ProcesoCurricular.programa_id == payload.programa_id)
-        existing_res = await self.session.execute(existing_stmt)
-        candidates = existing_res.scalars().all()
-
-        for cand in candidates:
-            if payload.codigo_programa and cand.programa:
-                if cand.programa.codigo_programa.strip().upper() == payload.codigo_programa.strip().upper():
-                    return _map_proceso_dto(cand)  # type: ignore
-            elif payload.programa_id and cand.programa_id == payload.programa_id:
-                return _map_proceso_dto(cand)  # type: ignore
-
-        # Resolve programa_id if codigo_programa was supplied
-        resolved_programa_id = payload.programa_id
-        if not resolved_programa_id and payload.codigo_programa:
-            prog_stmt = select(ProgramaFormacion).where(
-                func.lower(ProgramaFormacion.codigo_programa) == payload.codigo_programa.strip().lower()
-            )
-            prog_res = await self.session.execute(prog_stmt)
-            matched_prog = prog_res.scalars().first()
-            if matched_prog:
-                resolved_programa_id = matched_prog.id
-
-        new_referencia_id = uuid.uuid4()
-        from src.domain.shared.enums import TipoNecesidadProceso
-        try:
-            tipo_nec = TipoNecesidadProceso(payload.tipo_necesidad)
-        except ValueError:
-            tipo_nec = TipoNecesidadProceso.CREAR_PLANEACION
-
-        proceso = ProcesoCurricular(
-            referencia_id=new_referencia_id,
-            coordinacion_id=team.coordinacion_id,
-            especialidad_id=team.especialidad_id,
-            equipo_ejecutor_id=team.id,
-            lider_id=team.lider_id,
-            tipo_necesidad=tipo_nec,
-            estado_scope=EstadoScopeProceso.ASIGNADO,
-            programa_id=resolved_programa_id,
-            creado_por=actor.id,
-        )
-        self.session.add(proceso)
-
-        # Initialize BorradorSesion for PROGRAMA
-        initial_payload = {
-            "meta": {
-                "equipo_ejecutor_id": str(team.id),
-                "programa_id": str(resolved_programa_id) if resolved_programa_id else None,
-                "codigo_programa": payload.codigo_programa,
-                "iniciado_por": str(actor.id),
-            },
-            "documental": {},
-            "curricular": {
-                "programa_formacion_id": str(resolved_programa_id) if resolved_programa_id else None,
-            },
-        }
-        draft = BorradorSesion(
-            tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
-            referencia_id=new_referencia_id,
-            paso_actual="origen-documental",
-            payload_json=initial_payload,
-            estado_borrador=EstadoBloque.BORRADOR,
-        )
-        self.session.add(draft)
-
-        await self.audit_repo.add_event(
-            entidad="ProcesoCurricular",
-            entidad_id=proceso.id,
-            accion="CURRICULAR_PROCESS_STARTED",
-            detalle={
-                "referencia_id": str(new_referencia_id),
-                "created_by_user_id": str(actor.id),
-                "executor_team_id": str(team.id),
-                "training_program_id": str(resolved_programa_id) if resolved_programa_id else None,
-                "codigo_programa": payload.codigo_programa,
-            },
-            actor_usuario_id=actor.id,
-            referencia_id=new_referencia_id,
+        proceso = await self._ensure_process_for_team_program(
+            equipo=team,
+            codigo_programa=payload.codigo_programa,
+            programa_id=payload.programa_id,
+            actor_id=actor.id,
         )
         await self.session.commit()
 
@@ -1066,9 +1327,10 @@ class TeamAdminService:
             .options(
                 selectinload(ProcesoCurricular.programa),
                 selectinload(ProcesoCurricular.proyecto),
+                selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(EquipoEjecutor.programas_autorizados),
             )
         )
         reloaded_res = await self.session.execute(reloaded_stmt)
-        saved_proc = reloaded_res.scalar_one()
+        saved_proc = reloaded_res.scalar_one_or_none() or proceso
         return _map_proceso_dto(saved_proc)  # type: ignore
 

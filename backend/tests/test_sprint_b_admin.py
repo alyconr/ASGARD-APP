@@ -731,6 +731,42 @@ async def test_member_must_have_additional_user_role_and_matching_scope():
     assert exc.value.status_code == 422
 
 
+async def test_transversal_member_can_join_any_team():
+    """Rule: Transversal coordination instructors can join any executing team in any coordination."""
+    session = AdminMockDbSession()
+    service = TeamAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+
+    # Technical coordination and specialty
+    coord_tech = Coordinacion(id=uuid.uuid4(), codigo="TEL", nombre="TELEINFORMATICA", activo=True)
+    esp_tech = Especialidad(id=uuid.uuid4(), coordinacion_id=coord_tech.id, codigo="ADSO", nombre="ADSO", activo=True)
+    leader = _build_user("lider@sena.edu.co", RolUsuario.LIDER_EQUIPO_EJECUTOR.value, coord_tech.id, esp_tech.id)
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="ADSO 1", coordinacion_id=coord_tech.id, especialidad_id=esp_tech.id, lider_id=leader.id, estado=EstadoEquipo.ACTIVO)
+    team.miembros = []
+
+    # Transversal coordination and specialty
+    coord_tra = Coordinacion(id=uuid.uuid4(), codigo="TRA", nombre="TRANSVERSALES", activo=True)
+    esp_tra = Especialidad(id=uuid.uuid4(), coordinacion_id=coord_tra.id, codigo="INGLES", nombre="INGLES", activo=True)
+    transversal_member = _build_user("transversal@sena.edu.co", RolUsuario.USUARIO_ADICIONAL.value, coord_tra.id, esp_tra.id)
+    transversal_member.coordinacion = coord_tra
+    transversal_member.especialidad = esp_tra
+
+    session.add(admin)
+    session.add(coord_tech)
+    session.add(esp_tech)
+    session.add(leader)
+    session.add(team)
+    session.add(coord_tra)
+    session.add(esp_tra)
+    session.add(transversal_member)
+
+    res = await service.add_member(admin, team.id, MiembroCreate(usuario_id=transversal_member.id))
+    assert res.usuario_id == transversal_member.id
+    assert res.equipo_id == team.id
+    assert res.activo is True
+
+
+
 async def test_changing_team_leader_revokes_old_leader_process_access():
     """Critical invariant: Changing team leader synchronizes ProcesoCurricular and immediately flips access."""
     session = AdminMockDbSession()

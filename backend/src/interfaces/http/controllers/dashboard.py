@@ -7,17 +7,19 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.access_scope import AccessScopeService
 from src.application.services.dashboard import (
     DashboardAccessForbiddenError,
     DashboardDraftNotFoundError,
     DashboardService,
 )
 from src.application.services.proyecto_cargue import ProyectoCargueService
+from src.domain.shared.enums import RolUsuario
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
-from src.interfaces.http.deps import get_current_user
+from src.interfaces.http.deps import get_access_scope_service, get_current_user
 from src.interfaces.http.schemas.dashboard import (
     DashboardProgramFlowResponse,
     DashboardResponse,
@@ -62,12 +64,18 @@ async def listar_flujos_programa(
 async def eliminar_flujo_programa(
     referencia_id: uuid.UUID,
     service: DashboardService = Depends(get_dashboard_service),
+    scope_service: AccessScopeService = Depends(get_access_scope_service),
     current_user: Usuario = Depends(get_current_user),
 ) -> None:
     """Permanently delete the selected program and all dependent data."""
+    if not current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+        can_access = await scope_service.can_access_process(current_user, referencia_id)
+        if not can_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para acceder a este proceso curricular",
+            )
     try:
-        # Check access before allowing deletion
-        await service.consultar(referencia_id, user=current_user)
         await service.eliminar_flujo_programa(referencia_id)
     except DashboardAccessForbiddenError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error))

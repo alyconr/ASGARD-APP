@@ -58,6 +58,7 @@ from src.infrastructure.db.models.curriculum import (
     ResultadoAprendizaje,
 )
 from src.infrastructure.db.models.drafts import BorradorSesion
+from src.infrastructure.db.models.organizacion import ProcesoCurricular
 from src.infrastructure.db.models.planeacion import (
     PlaneacionDocumentoConfig,
     PlaneacionPedagogica,
@@ -128,18 +129,21 @@ class PlaneacionPedagogicaService:
         """
         programa_id = await self._resolve_programa_id(referencia_id)
 
-        programa = await self._session.get(
-            ProgramaFormacion,
-            programa_id,
-            options=[
+        programa_stmt = (
+            select(ProgramaFormacion)
+            .where(ProgramaFormacion.id == programa_id)
+            .options(
                 selectinload(ProgramaFormacion.competencias).selectinload(
                     Competencia.conocimientos
                 ),
                 selectinload(ProgramaFormacion.competencias).selectinload(
                     Competencia.criterios
                 ),
-            ],
+            )
+            .execution_options(populate_existing=True)
         )
+        programa_res = await self._session.execute(programa_stmt)
+        programa = programa_res.scalar_one_or_none()
         if programa is None:
             raise ValueError(
                 f"No se encontró el ProgramaFormacion {programa_id} en base de datos"
@@ -762,6 +766,14 @@ class PlaneacionPedagogicaService:
     # ------------------------------------------------------------------
 
     async def _resolve_programa_id(self, referencia_id: uuid.UUID) -> uuid.UUID:
+        proc_stmt = select(ProcesoCurricular).where(
+            ProcesoCurricular.referencia_id == referencia_id
+        )
+        proc_res = await self._session.execute(proc_stmt)
+        proc = proc_res.scalar_one_or_none()
+        if proc and proc.programa_id:
+            return proc.programa_id
+
         draft_stmt = select(BorradorSesion).where(
             BorradorSesion.referencia_id == referencia_id,
             BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA,
@@ -796,6 +808,7 @@ class PlaneacionPedagogicaService:
                     FaseProyecto.actividades
                 )
             )
+            .execution_options(populate_existing=True)
         )
         proj_res = await self._session.execute(proj_stmt)
         proyecto = proj_res.scalar_one_or_none()

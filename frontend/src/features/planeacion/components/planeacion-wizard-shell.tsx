@@ -43,7 +43,6 @@ import {
   fetchFormatoOficialEstadoIndividual,
   fetchFormatoOficialEstadoConsolidado,
   generarFormatoOficialConsolidado,
-  downloadFormatoOficialIndividual,
   downloadFormatoOficialConsolidado,
 } from "../planeacion-api";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
@@ -92,7 +91,7 @@ const WIZARD_STEPS: StepDefinition[] = [
   { id: "curricular", label: "Estructura Curricular", description: "Vincular fase, actividad y componentes curriculares del RAP" },
   { id: "complementario", label: "Campos Complementarios", description: "Definir estrategias didácticas y recursos de apoyo" },
   { id: "preview", label: "Vista Previa", description: "Revisar la planeación pedagógica del resultado" },
-  { id: "confirmacion", label: "Finalizado", description: "Descargar planeación aprobada" },
+  { id: "confirmacion", label: "Finalizado", description: "Planeación aprobada y guardada" },
 ];
 
 const COMPLEMENTARY_FIELDS: ComplementaryFieldDefinition[] = [
@@ -1184,19 +1183,6 @@ export function PlaneacionWizardShell({
           : "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada. Debes volver a generar el formato consolidado.",
       );
       await loadOfficialFormat();
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!confirmedPlanning) return;
-    try {
-      await downloadFormatoOficialIndividual(confirmedPlanning.id);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No fue posible descargar el Excel oficial",
-      );
     }
   };
 
@@ -3110,26 +3096,34 @@ export function PlaneacionWizardShell({
                   <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 mb-4">
                     <CheckCircle2 className="h-10 w-10" />
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-800">¡Planeación Pedagógica Completada!</h2>
-                  <p className="mt-2 text-sm text-[var(--muted)] max-w-md">
-                    Los datos fueron validados y diligenciados en el workbook institucional GPFI-F-134 V05. El Excel oficial está almacenado en MinIO.
+                  <h2 className="text-2xl font-bold text-slate-800">¡Planeación Pedagógica Aprobada y Guardada!</h2>
+                  <p className="mt-2 text-sm text-[var(--muted)] max-w-lg">
+                    Los datos de esta actividad han sido aprobados y registrados con éxito. Para garantizar que se descargue el consolidado completo de todas las planeaciones realizadas por el equipo de instructores, la descarga del formato oficial GPFI-F-134 V05 se realiza de forma exclusiva desde la sección de <strong>Configuración Documental</strong> en el panel de planeación.
                   </p>
 
                   <div className="mt-6 w-full max-w-md border rounded-lg bg-slate-50 p-4 text-left text-sm text-slate-700 grid gap-2">
                     <p>
-                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Clave en MinIO:</strong>
-                      <span className="font-mono text-xs break-all block mt-0.5">{confirmedPlanning?.storage_key}</span>
+                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Estado:</strong>
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 mt-0.5">
+                        <CheckCircle2 className="h-4 w-4" /> Aprobada y lista para consolidación
+                      </span>
                     </p>
                     <p>
-                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Nombre del Archivo:</strong>
-                      <span className="mt-0.5 block">{confirmedPlanning?.file_name}</span>
+                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Actividad Asociada:</strong>
+                      <span className="mt-0.5 block font-medium text-slate-800">
+                        {confirmedPlanning?.actividad_id && confirmedPlanning?.fase_id
+                          ? (faseMap.get(confirmedPlanning.fase_id)?.actividades.find(
+                              (a) => a.id === confirmedPlanning.actividad_id,
+                            )?.descripcion ?? selectedActividad?.descripcion ?? "Actividad del proyecto")
+                          : (selectedActividad?.descripcion ?? "Actividad del proyecto")}
+                      </span>
                     </p>
                     <p>
-                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Fecha Generación:</strong>
-                      <span className="mt-0.5 block">
+                      <strong className="text-xs font-semibold text-slate-500 uppercase block">Fecha de Registro:</strong>
+                      <span className="mt-0.5 block text-slate-800">
                         {confirmedPlanning?.fecha_generacion
-                          ? new Date(confirmedPlanning.fecha_generacion).toLocaleString()
-                          : "Desconocida"}
+                          ? new Date(confirmedPlanning.fecha_generacion).toLocaleString("es-CO")
+                          : new Date().toLocaleString("es-CO")}
                       </span>
                     </p>
                   </div>
@@ -3305,17 +3299,26 @@ export function PlaneacionWizardShell({
                   <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full justify-center">
                     <button
                       type="button"
-                      onClick={() => void handleDownload()}
+                      onClick={() => {
+                        resetForm();
+                        setActiveStep("dashboard");
+                        void loadPlannings();
+                        window.setTimeout(() => {
+                          document
+                            .getElementById("planeacion-document-config")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 100);
+                      }}
                       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] transition"
                     >
-                      <Download className="h-4 w-4" />
-                      Descargar Excel oficial
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Ir a Configuración Documental (Consolidado)
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         toast.info(
-                          "Al guardar cambios, la planeación vuelve a borrador y deberás confirmarla de nuevo para regenerar el formato oficial.",
+                          "Al guardar cambios, la planeación vuelve a borrador y deberás confirmarla de nuevo para que sea incluida en el formato consolidado.",
                         );
                         setActiveStep("curricular");
                       }}

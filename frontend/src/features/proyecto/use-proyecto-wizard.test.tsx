@@ -22,8 +22,8 @@ vi.mock("@/features/drafts/api", () => ({
 
 const mockGetDraft = vi.mocked(getDraft);
 const mockSaveDraft = vi.mocked(saveDraft);
-const projectReferenceId = "11111111-1111-4111-9111-111111111111";
-const programReferenceId = "22222222-2222-4222-9222-222222222222";
+const projectReferenceId = "22222222-2222-4222-9222-222222222222";
+const programReferenceId = projectReferenceId;
 const programId = "33333333-3333-4333-9333-333333333333";
 
 function buildDraftResponse(

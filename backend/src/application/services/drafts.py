@@ -84,6 +84,19 @@ class DraftService:
             command.referencia_id,
         )
 
+        if existing_draft is None and command.tipo_bloque == TipoBloqueBorrador.PROYECTO:
+            # Check if there is an existing draft under the process canonical reference
+            meta = command.payload_json.get("meta") if isinstance(command.payload_json, dict) else None
+            if isinstance(meta, dict) and meta.get("programaReferenciaId"):
+                try:
+                    canonical_id = uuid.UUID(str(meta.get("programaReferenciaId")))
+                    existing_draft = await self._draft_repository.get_by_block_reference(
+                        command.tipo_bloque,
+                        canonical_id,
+                    )
+                except (ValueError, TypeError):
+                    pass
+
         if existing_draft is None:
             draft = await self._draft_repository.add(
                 tipo_bloque=command.tipo_bloque,
@@ -127,6 +140,78 @@ class DraftService:
             referencia_id,
         )
         if draft is None:
+            if tipo_bloque == TipoBloqueBorrador.PROGRAMA and hasattr(self._session, "execute"):
+                from sqlalchemy import select
+                from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
+                proc_stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+                proc_res = await self._session.execute(proc_stmt)  # type: ignore[attr-defined]
+                proc = proc_res.scalar_one_or_none()
+                if proc is not None:
+                    draft = await self._draft_repository.add(
+                        tipo_bloque=tipo_bloque,
+                        referencia_id=referencia_id,
+                        paso_actual="origen-documental",
+                        payload_json={
+                            "meta": {
+                                "equipo_ejecutor_id": str(proc.equipo_ejecutor_id) if proc.equipo_ejecutor_id else None,
+                                "programa_id": str(proc.programa_id) if proc.programa_id else None,
+                            },
+                            "documental": {},
+                            "curricular": {
+                                "programa_formacion_id": str(proc.programa_id) if proc.programa_id else None,
+                            },
+                        },
+                        estado_borrador=EstadoBloque.BORRADOR,
+                    )
+                    await self._session.commit()
+                    await self._session.refresh(draft)
+                    return _build_draft_dto(draft)
+
+            if tipo_bloque == TipoBloqueBorrador.PROYECTO and hasattr(self._session, "execute"):
+                from sqlalchemy import select
+                from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
+                proc_stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+                proc_res = await self._session.execute(proc_stmt)  # type: ignore[attr-defined]
+                proc = proc_res.scalar_one_or_none()
+                if proc is not None:
+                    draft = await self._draft_repository.add(
+                        tipo_bloque=tipo_bloque,
+                        referencia_id=referencia_id,
+                        paso_actual="revision-proyecto",
+                        payload_json={
+                            "meta": {
+                                "referenciaId": str(referencia_id),
+                                "programaReferenciaId": str(referencia_id),
+                                "programaId": str(proc.programa_id) if proc.programa_id else None,
+                                "touchedSteps": ["revision-proyecto"],
+                            },
+                            "wizard": {
+                                "notesByStep": {},
+                            },
+                            "proyecto": {
+                                "proyecto_formativo_id": str(proc.proyecto_id) if proc.proyecto_id else None,
+                                "codigo_proyecto": "",
+                                "nombre_proyecto": "",
+                                "version_proyecto": "",
+                            },
+                            "documental": {
+                                "proyecto_pdf": None,
+                                "fuente_estructurada": None,
+                                "cargue_pdf_habilitado": False,
+                            },
+                            "estructura": {
+                                "fases": [],
+                                "actividades": [],
+                            },
+                        },
+                        estado_borrador=EstadoBloque.BORRADOR,
+                    )
+                    await self._session.commit()
+                    await self._session.refresh(draft)
+                    return _build_draft_dto(draft)
+
             raise DraftNotFoundError("No existe un borrador para la referencia dada")
         return _build_draft_dto(draft)
 

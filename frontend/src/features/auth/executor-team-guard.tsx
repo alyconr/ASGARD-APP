@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-context";
-import { getActiveProgramaDraftReference } from "@/features/drafts/storage";
+import {
+  clearActiveProgramaDraftReference,
+  getActiveProgramaDraftReference,
+} from "@/features/drafts/storage";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { notify } from "@/components/feedback/notifications";
 
@@ -64,6 +67,7 @@ export function ExecutorTeamGuard({
                 description:
                   "No tienes autorización para operar en este proceso curricular dentro de tu equipo ejecutor.",
               });
+              clearActiveProgramaDraftReference();
               router.replace("/dashboard");
               return;
             }

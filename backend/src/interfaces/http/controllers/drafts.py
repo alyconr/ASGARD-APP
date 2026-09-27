@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,7 +19,11 @@ from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import EstadoEquipo, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.models.drafts import BorradorSesion
-from src.infrastructure.db.models.organizacion import EquipoEjecutor, ProcesoCurricular
+from src.infrastructure.db.models.organizacion import (
+    EquipoEjecutor,
+    EquipoEjecutorMiembro,
+    ProcesoCurricular,
+)
 from src.infrastructure.db.session import get_async_session
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.drafts import DraftRepository
@@ -57,10 +62,20 @@ async def save_draft(
     scope_service: AccessScopeService = Depends(get_access_scope_service),
 ) -> DraftResponse:
     """Create or update the draft for a program or project reference."""
+    effective_referencia_id = referencia_id
+    if tipo_bloque == TipoBloqueBorrador.PROYECTO and isinstance(request.payload_json, dict):
+        meta_dict = request.payload_json.get("meta") or {}
+        prog_ref_raw = meta_dict.get("programaReferenciaId")
+        if prog_ref_raw:
+            try:
+                effective_referencia_id = uuid.UUID(str(prog_ref_raw))
+            except (ValueError, TypeError):
+                pass
+
     if hasattr(scope_service, "_session") and scope_service._session is not None:
         stmt = (
             select(ProcesoCurricular)
-            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .where(ProcesoCurricular.referencia_id == effective_referencia_id)
             .options(
                 selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(
                     EquipoEjecutor.miembros
@@ -71,7 +86,7 @@ async def save_draft(
         existing_proc = proc_res.scalar_one_or_none()
 
         if existing_proc is not None:
-            can_access = await scope_service.can_access_process(current_user, referencia_id)
+            can_access = await scope_service.can_access_process(current_user, effective_referencia_id)
             if not can_access:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -81,33 +96,86 @@ async def save_draft(
                     },
                 )
         else:
-            if not request.equipo_ejecutor_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={
-                        "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
-                        "message": "Debes especificar un Equipo Ejecutor válido para iniciar este proceso curricular.",
-                    },
+            team_id = request.equipo_ejecutor_id
+            if not team_id and isinstance(request.payload_json, dict):
+                meta = request.payload_json.get("meta") or {}
+                raw_tid = meta.get("equipo_ejecutor_id") or meta.get("equipoId") or meta.get("equipoEjecutorId")
+                if raw_tid:
+                    try:
+                        team_id = uuid.UUID(str(raw_tid))
+                    except (ValueError, TypeError):
+                        pass
+
+            if not team_id:
+                # Find active team where user is leader or active member
+                t_stmt = (
+                    select(EquipoEjecutor)
+                    .where(
+                        EquipoEjecutor.lider_id == current_user.id,
+                        EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                    )
                 )
+                t_res = await scope_service._session.execute(t_stmt)
+                user_team = t_res.scalars().first()
+                if not user_team:
+                    m_stmt = (
+                        select(EquipoEjecutor)
+                        .join(EquipoEjecutorMiembro, EquipoEjecutor.id == EquipoEjecutorMiembro.equipo_id)
+                        .where(
+                            EquipoEjecutorMiembro.usuario_id == current_user.id,
+                            EquipoEjecutorMiembro.activo.is_(True),
+                            EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                        )
+                    )
+                    m_res = await scope_service._session.execute(m_stmt)
+                    user_team = m_res.scalars().first()
+                if user_team:
+                    team_id = user_team.id
 
-            team = await scope_service.require_start_curricular_process(
-                current_user,
-                request.equipo_ejecutor_id,
-            )
+            if not team_id and current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                any_team_stmt = select(EquipoEjecutor).where(EquipoEjecutor.estado == EstadoEquipo.ACTIVO).limit(1)
+                any_team_res = await scope_service._session.execute(any_team_stmt)
+                fallback_team = any_team_res.scalar_one_or_none()
+                if fallback_team:
+                    team_id = fallback_team.id
 
-            await scope_service.ensure_proceso_for_referencia(
-                referencia_id=referencia_id,
-                creado_por=current_user.id,
-                coordinacion_id=team.coordinacion_id,
-                especialidad_id=team.especialidad_id,
-                equipo_ejecutor_id=team.id,
-                lider_id=team.lider_id,
-            )
+            if team_id:
+                if current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                    team = await scope_service._session.get(EquipoEjecutor, team_id)
+                else:
+                    team = await scope_service.require_start_curricular_process(
+                        current_user,
+                        team_id,
+                    )
+
+                if team is not None:
+                    await scope_service.ensure_proceso_for_referencia(
+                        referencia_id=effective_referencia_id,
+                        creado_por=current_user.id,
+                        coordinacion_id=team.coordinacion_id,
+                        especialidad_id=team.especialidad_id,
+                        equipo_ejecutor_id=team.id,
+                        lider_id=team.lider_id,
+                    )
+            else:
+                if not current_user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "code": "EXECUTOR_TEAM_MEMBERSHIP_REQUIRED",
+                            "message": "Debes especificar un Equipo Ejecutor válido para iniciar este proceso curricular.",
+                        },
+                    )
+                else:
+                    await scope_service.ensure_proceso_for_referencia(
+                        referencia_id=effective_referencia_id,
+                        creado_por=current_user.id,
+                    )
 
     try:
         payload = SaveDraftInput(
             tipo_bloque=tipo_bloque,
-            referencia_id=referencia_id,
+            referencia_id=effective_referencia_id,
             paso_actual=request.paso_actual,
             payload_json=request.payload_json,
             estado_borrador=request.estado_borrador,
@@ -171,8 +239,6 @@ async def get_estado_documental(
     proj_pdf_dto = None
     proj_imported = False
     cargue_pdf_habilitado = False
-
-    from typing import Any, cast
 
     if prog_draft is not None:
         payload_dict = cast(dict[str, Any], prog_draft.payload_json)

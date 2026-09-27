@@ -12,12 +12,11 @@ import { buildBlockedModuleGuide } from "@/features/guide/wizard-guide-engine";
 import { ProtectedRoute } from "@/features/auth/protected-route";
 import { ExecutorTeamGuard } from "@/features/auth/executor-team-guard";
 
-export default function ProyectoPage({
-  params,
+function ProyectoContent({
+  referenciaId,
 }: {
-  params: Promise<{ referencia_id: string }>;
+  referenciaId: string;
 }): React.JSX.Element {
-  const { referencia_id } = use(params);
   const [availability, setAvailability] = useState<ProyectoDisponibilidadResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -27,7 +26,7 @@ export default function ProyectoPage({
     setIsLoading(true);
     setErrorMessage(null);
 
-    void consultarDisponibilidadProyecto(referencia_id)
+    void consultarDisponibilidadProyecto(referenciaId)
       .then((result) => {
         if (isActive) {
           setAvailability(result);
@@ -51,7 +50,7 @@ export default function ProyectoPage({
     return () => {
       isActive = false;
     };
-  }, [referencia_id]);
+  }, [referenciaId]);
 
   if (isLoading) {
     return (
@@ -98,9 +97,7 @@ export default function ProyectoPage({
   }
 
   return (
-    <ProtectedRoute>
-      <ExecutorTeamGuard referenciaId={referencia_id}>
-        <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-5 py-6 lg:px-8">
       <div className="self-start">
         <Link
           href="/dashboard"
@@ -111,7 +108,21 @@ export default function ProyectoPage({
         </Link>
       </div>
       <ProyectoWizardShell availability={availability} />
-        </main>
+    </main>
+  );
+}
+
+export default function ProyectoPage({
+  params,
+}: {
+  params: Promise<{ referencia_id: string }>;
+}): React.JSX.Element {
+  const { referencia_id } = use(params);
+
+  return (
+    <ProtectedRoute>
+      <ExecutorTeamGuard referenciaId={referencia_id}>
+        <ProyectoContent referenciaId={referencia_id} />
       </ExecutorTeamGuard>
     </ProtectedRoute>
   );

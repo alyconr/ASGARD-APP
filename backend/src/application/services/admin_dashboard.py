@@ -272,6 +272,38 @@ class AdminDashboardQueryService:
         stmt = stmt.order_by(ProcesoCurricular.fecha_actualizacion.desc()).offset(offset).limit(page_size)
         procesos = (await self._session.execute(stmt)).scalars().all()
 
+        # Self-heal unlinked programs and projects from drafts and relations
+        from src.infrastructure.db.models.drafts import BorradorSesion
+        from src.domain.drafts.types import TipoBloqueBorrador
+        for p in procesos:
+            if p.programa is None and p.referencia_id:
+                d_stmt = select(BorradorSesion).where(
+                    BorradorSesion.referencia_id == p.referencia_id,
+                    BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
+                )
+                d_res = await self._session.execute(d_stmt)
+                prog_draft = d_res.scalar_one_or_none()
+                if prog_draft and isinstance(prog_draft.payload_json, dict):
+                    curr = prog_draft.payload_json.get("curricular") or {}
+                    pid_str = curr.get("programa_formacion_id")
+                    if pid_str:
+                        try:
+                            resolved_pid = uuid.UUID(str(pid_str))
+                            prog_obj = await self._session.get(ProgramaFormacion, resolved_pid)
+                            if prog_obj:
+                                p.programa = prog_obj
+                                p.programa_id = resolved_pid
+                        except (ValueError, TypeError):
+                            pass
+
+            if p.proyecto is None and p.programa_id:
+                proy_stmt = select(ProyectoFormativo).where(ProyectoFormativo.programa_id == p.programa_id).limit(1)
+                proy_res = await self._session.execute(proy_stmt)
+                proy_obj = proy_res.scalar_one_or_none()
+                if proy_obj:
+                    p.proyecto = proy_obj
+                    p.proyecto_id = proy_obj.id
+
         # Batch load plannings metrics for fetched processes
         proyecto_ids = [p.proyecto_id for p in procesos if p.proyecto_id is not None]
         planning_stats: dict[uuid.UUID, dict[str, int]] = {}

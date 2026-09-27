@@ -19,6 +19,7 @@ from src.infrastructure.db.models.organizacion import (
     EquipoEjecutor,
     EquipoEjecutorMiembro,
     Especialidad,
+    is_coordinacion_transversal,
 )
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.security.password import hash_password
@@ -83,6 +84,23 @@ class UserAdminService:
         res = await self.session.execute(stmt)
         for s in res.scalars().all():
             s.revoked_at = now
+
+    async def _get_user_response(self, user_id: uuid.UUID, fallback: Usuario | None = None) -> UserResponse:
+        """Reload user with relationships eagerly loaded to safely build UserResponse."""
+        user = await self.session.get(
+            Usuario,
+            user_id,
+            options=[
+                selectinload(Usuario.roles),
+                selectinload(Usuario.coordinacion),
+                selectinload(Usuario.especialidad),
+            ],
+        )
+        if user is None:
+            if fallback is not None:
+                return _map_user_response(fallback)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+        return _map_user_response(user)
 
     async def create_user(self, actor: Usuario, payload: UserCreateRequest) -> UserResponse:
         """Create a user with role and scope validations."""
@@ -158,6 +176,12 @@ class UserAdminService:
                     detail="La especialidad no existe, no pertenece a la coordinación o está inactiva",
                 )
 
+        roles_list: list[Rol] = []
+        if payload.roles:
+            roles_stmt = select(Rol).where(Rol.nombre.in_(payload.roles))
+            roles_res = await self.session.execute(roles_stmt)
+            roles_list = list(roles_res.scalars().all())
+
         new_user = Usuario(
             email=email_clean,
             hashed_password=hash_password(payload.password),
@@ -170,14 +194,10 @@ class UserAdminService:
             estado=EstadoUsuario.ACTIVO,
             debe_cambiar_password=True,
             token_version=1,
+            roles=roles_list,
         )
         self.session.add(new_user)
         await self.session.flush()
-
-        if payload.roles:
-            roles_stmt = select(Rol).where(Rol.nombre.in_(payload.roles))
-            roles_res = await self.session.execute(roles_stmt)
-            new_user.roles = list(roles_res.scalars().all())
 
         await self.audit_repo.add_event(
             entidad="Usuario",
@@ -186,8 +206,7 @@ class UserAdminService:
             detalle={"creado_por": str(actor.id), "email": new_user.email, "roles": payload.roles},
         )
         await self.session.commit()
-        await self.session.refresh(new_user, attribute_names=["roles", "coordinacion", "especialidad"])
-        return _map_user_response(new_user)
+        return await self._get_user_response(new_user.id, fallback=new_user)
 
     async def get_user(self, actor: Usuario, user_id: uuid.UUID) -> UserResponse:
         """Fetch single user detail preventing unauthorized inspection of SUPERADMIN."""
@@ -366,14 +385,16 @@ class UserAdminService:
                             )
 
                 # Check inconsistencies with active memberships
-                for membership in user.membresias:
-                    if membership.activo and membership.equipo:
-                        team = membership.equipo
-                        if team.coordinacion_id != new_coord_id or team.especialidad_id != new_esp_id:
-                            raise HTTPException(
-                                status_code=status.HTTP_409_CONFLICT,
-                                detail=f"No se puede cambiar el ámbito organizacional: el usuario es miembro activo del equipo '{team.nombre}' asignado a otra coordinación/especialidad",
-                            )
+                new_coord_obj = await self.session.get(Coordinacion, new_coord_id) if new_coord_id else None
+                if not is_coordinacion_transversal(new_coord_obj):
+                    for membership in user.membresias:
+                        if membership.activo and membership.equipo:
+                            team = membership.equipo
+                            if team.coordinacion_id != new_coord_id or team.especialidad_id != new_esp_id:
+                                raise HTTPException(
+                                    status_code=status.HTTP_409_CONFLICT,
+                                    detail=f"No se puede cambiar el ámbito organizacional: el usuario es miembro activo del equipo '{team.nombre}' asignado a otra coordinación/especialidad",
+                                )
 
                 user.coordinacion_id = new_coord_id
                 user.especialidad_id = new_esp_id
@@ -403,8 +424,7 @@ class UserAdminService:
             },
         )
         await self.session.commit()
-        await self.session.refresh(user, attribute_names=["roles", "coordinacion", "especialidad"])
-        return _map_user_response(user)
+        return await self._get_user_response(user.id, fallback=user)
 
     async def change_user_status(
         self,
@@ -413,7 +433,15 @@ class UserAdminService:
         payload: UserStatusUpdateRequest,
     ) -> UserResponse:
         """Change user status between ACTIVO, INACTIVO, and BLOQUEADO."""
-        user = await self.session.get(Usuario, user_id, options=[selectinload(Usuario.roles)])
+        user = await self.session.get(
+            Usuario,
+            user_id,
+            options=[
+                selectinload(Usuario.roles),
+                selectinload(Usuario.coordinacion),
+                selectinload(Usuario.especialidad),
+            ],
+        )
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
@@ -470,8 +498,7 @@ class UserAdminService:
             },
         )
         await self.session.commit()
-        await self.session.refresh(user, attribute_names=["roles", "coordinacion", "especialidad"])
-        return _map_user_response(user)
+        return await self._get_user_response(user.id, fallback=user)
 
     async def reset_password(
         self,

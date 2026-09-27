@@ -9,6 +9,8 @@ import {
   BarChart3,
   BookOpenCheck,
   CalendarClock,
+  Check,
+  Copy,
   GitBranch,
   ListChecks,
   LockKeyhole,
@@ -20,11 +22,13 @@ import {
   Trash2,
   LogOut,
   Shield,
+  History,
 } from "lucide-react";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { ForceChangePasswordDialog } from "@/features/auth/force-change-password-dialog";
 import { AdminWorkspace } from "@/features/admin/admin-workspace";
+import { ProcesoHistorialDialog } from "@/features/dashboard/components/proceso-historial-dialog";
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { notify } from "@/components/feedback/notifications";
 
@@ -38,7 +42,9 @@ import {
 } from "@/features/dashboard/dashboard-api";
 import {
   clearActiveProgramaDraftReference,
+  clearActiveProyectoDraftReference,
   forgetProgramaDraft,
+  forgetProyectoDraft,
   getActiveProgramaDraftReference,
   listKnownProgramaDrafts,
   setActiveProgramaDraftReference,
@@ -77,7 +83,12 @@ function ModuleCard({
 }>): React.JSX.Element {
   const Icon = moduleIcon(module.id);
   const canOpen = module.disponible && (module.id === "programa" || referenceId);
-  const href = module.id === "programa" ? "/programa" : module.href;
+  const href =
+    module.id === "programa"
+      ? referenceId
+        ? `/programa?referencia_id=${referenceId}`
+        : "/programa"
+      : module.href;
 
   return (
     <article
@@ -288,7 +299,8 @@ function ProgramFlowsPanel({
   onSelect: (referenceId: string) => void;
   onDelete: (referenceId: string) => void;
 }>): React.JSX.Element {
-  const selectedFlow = flows.find((flow) => flow.referencia_id === activeReference);
+  const selectedFlow =
+    flows.find((flow) => flow.referencia_id === activeReference) ?? flows[0];
 
   return (
     <section className="rounded-lg border border-[color:var(--card-border)] bg-white p-5 shadow-[0_16px_38px_rgba(24,51,45,0.06)]">
@@ -412,6 +424,19 @@ export interface MiEquipoPrograma {
   activo: boolean;
 }
 
+export interface MiEquipoProceso {
+  id: string;
+  referencia_id: string;
+  tipo_necesidad: string;
+  estado_scope: string;
+  programa_id?: string | null;
+  proyecto_id?: string | null;
+  programa_nombre?: string | null;
+  programa_codigo?: string | null;
+  proyecto_nombre?: string | null;
+  proyecto_codigo?: string | null;
+}
+
 export interface MiEquipo {
   id: string;
   nombre: string;
@@ -422,6 +447,27 @@ export interface MiEquipo {
   especialidad_nombre?: string;
   rol_en_equipo: "LIDER" | "MIEMBRO";
   programas_autorizados: MiEquipoPrograma[];
+  procesos: MiEquipoProceso[];
+}
+
+function CopyButton({ text, label }: { text: string; label?: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={label || "Copiar referencia"}
+      className="inline-flex items-center gap-1 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
 }
 
 function ExecutorTeamWorkspace({
@@ -435,6 +481,7 @@ function ExecutorTeamWorkspace({
   onSelectFlow,
   onStartProcess,
   iniciandoCodigo,
+  onOpenHistorial,
 }: Readonly<{
   misEquipos: MiEquipo[];
   loadingEquipos: boolean;
@@ -446,6 +493,7 @@ function ExecutorTeamWorkspace({
   onSelectFlow: (referenceId: string) => void;
   onStartProcess: (equipoId: string, prog: MiEquipoPrograma) => void;
   iniciandoCodigo: string | null;
+  onOpenHistorial?: (referenceId: string) => void;
 }>): React.JSX.Element {
   if (loadingEquipos) {
     return (
@@ -568,10 +616,103 @@ function ExecutorTeamWorkspace({
                   .join(" • ")}
               </p>
             </div>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-              {selectedTeam.programas_autorizados.length}{" "}
-              {selectedTeam.programas_autorizados.length === 1 ? "programa autorizado" : "programas autorizados"}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                {selectedTeam.programas_autorizados.length}{" "}
+                {selectedTeam.programas_autorizados.length === 1 ? "programa autorizado" : "programas autorizados"}
+              </span>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                {selectedTeam.procesos?.length || 0}{" "}
+                {(selectedTeam.procesos?.length || 0) === 1 ? "proceso asignado" : "procesos asignados"}
+              </span>
+            </div>
+          </div>
+
+          {/* Procesos Curriculares Asignados al Equipo */}
+          <div>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Procesos Curriculares Asignados al Equipo
+              </h4>
+              <span className="text-xs text-slate-400">
+                {selectedTeam.procesos?.length || 0} asignados
+              </span>
+            </div>
+
+            {(!selectedTeam.procesos || selectedTeam.procesos.length === 0) ? (
+              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-5 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+                No hay procesos curriculares preasignados a este equipo. Puedes iniciar uno nuevo desde los programas autorizados abajo.
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {selectedTeam.procesos.map((proc) => {
+                  const matchingFlow = programFlows.find((f) => f.referencia_id === proc.referencia_id);
+                  const isCompleted = matchingFlow?.estado === "COMPLETO";
+
+                  return (
+                    <div
+                      key={proc.referencia_id}
+                      className="flex flex-col justify-between rounded-xl border border-blue-200 bg-blue-50/20 p-4 shadow-sm transition hover:border-blue-400 dark:border-blue-900/50 dark:bg-blue-950/10"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                            {proc.tipo_necesidad.replace("_", " ")}
+                          </span>
+                          <span
+                            className={cn(
+                              "rounded px-2 py-0.5 text-[11px] font-semibold",
+                              isCompleted
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+                            )}
+                          >
+                            {isCompleted ? "Completo" : (proc.estado_scope === "ASIGNADO" ? "Asignado" : proc.estado_scope)}
+                          </span>
+                        </div>
+
+                        <h5 className="mt-2.5 font-semibold text-slate-900 dark:text-white text-sm">
+                          {proc.programa_codigo
+                            ? `${proc.programa_codigo} - ${proc.programa_nombre || ""}`
+                            : matchingFlow?.nombre_programa
+                              ? `${matchingFlow.codigo_programa || ""} - ${matchingFlow.nombre_programa}`
+                              : "Programa de Formación"}
+                        </h5>
+
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-100/80 px-2 py-1 text-[11px] font-mono text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
+                          <span className="truncate" title={proc.referencia_id}>
+                            {proc.referencia_id}
+                          </span>
+                          <CopyButton text={proc.referencia_id} label="Copiar ID del proceso" />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-blue-100 pt-3 dark:border-blue-900/40 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSelectFlow(proc.referencia_id)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--accent-strong)]"
+                        >
+                          Cargar / Continuar
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                        {onOpenHistorial && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenHistorial(proc.referencia_id)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            title="Ver historial de cambios de este proceso"
+                          >
+                            <History className="h-3.5 w-3.5 text-slate-500" />
+                            Historial
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>
@@ -585,11 +726,25 @@ function ExecutorTeamWorkspace({
             ) : (
               <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {selectedTeam.programas_autorizados.map((prog) => {
+                  const existingProcess = selectedTeam.procesos?.find(
+                    (p) =>
+                      (p.programa_codigo &&
+                        p.programa_codigo.trim().toUpperCase() ===
+                          prog.codigo_programa.trim().toUpperCase()) ||
+                      (p.programa_id &&
+                        prog.programa_id &&
+                        p.programa_id === prog.programa_id),
+                  );
                   const existingFlow = programFlows.find(
                     (f) =>
                       f.codigo_programa?.trim().toUpperCase() ===
-                      prog.codigo_programa.trim().toUpperCase(),
+                        prog.codigo_programa.trim().toUpperCase() ||
+                      (existingProcess &&
+                        f.referencia_id === existingProcess.referencia_id),
                   );
+                  const activeRef =
+                    existingProcess?.referencia_id || existingFlow?.referencia_id;
+                  const isCompleted = existingFlow?.estado === "COMPLETO";
                   const isStarting = iniciandoCodigo === prog.codigo_programa;
 
                   return (
@@ -602,16 +757,16 @@ function ExecutorTeamWorkspace({
                           <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                             {prog.codigo_programa}
                           </span>
-                          {existingFlow ? (
+                          {activeRef ? (
                             <span
                               className={cn(
                                 "rounded px-2 py-0.5 text-[11px] font-semibold",
-                                existingFlow.estado === "COMPLETO"
+                                isCompleted
                                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                                   : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
                               )}
                             >
-                              {existingFlow.estado === "COMPLETO" ? "Completo" : "En construcción"}
+                              {isCompleted ? "Completo" : "En construcción"}
                             </span>
                           ) : (
                             <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -625,10 +780,10 @@ function ExecutorTeamWorkspace({
                       </div>
 
                       <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-                        {existingFlow ? (
+                        {activeRef ? (
                           <button
                             type="button"
-                            onClick={() => onSelectFlow(existingFlow.referencia_id)}
+                            onClick={() => onSelectFlow(activeRef)}
                             className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-600 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-500 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-slate-800"
                           >
                             Continuar proceso
@@ -671,7 +826,7 @@ export function MasterDashboard(): React.JSX.Element {
   const router = useRouter();
   const confirm = useConfirm();
   const { user, isAuthenticated, logout, hasRole, refreshUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"dashboard" | "admin">("dashboard");
+  const isAdmin = hasRole("SUPERADMIN", "ADMIN");
   const [knownDrafts, setKnownDrafts] = useState<KnownDraftSummary[]>([]);
   const [programFlows, setProgramFlows] = useState<DashboardProgramFlow[]>([]);
   const [referenceInput, setReferenceInput] = useState("");
@@ -688,6 +843,7 @@ export function MasterDashboard(): React.JSX.Element {
   const [loadingEquipos, setLoadingEquipos] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [iniciandoProcesoCodigo, setIniciandoProcesoCodigo] = useState<string | null>(null);
+  const [selectedHistorialRef, setSelectedHistorialRef] = useState<string | null>(null);
 
   const selectedTeam = useMemo(
     () => misEquipos.find((e) => e.id === selectedTeamId) ?? misEquipos[0] ?? null,
@@ -695,17 +851,32 @@ export function MasterDashboard(): React.JSX.Element {
   );
 
   const loadMisEquipos = useCallback(async (): Promise<void> => {
-    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+    if (!isAuthenticated || !user || user.debe_cambiar_password || isAdmin) {
       return;
     }
     setLoadingEquipos(true);
     try {
       const res = await authFetch(`${getApiBaseUrl()}/equipos/mis-equipos`);
       if (res.ok) {
-        const data: MiEquipo[] = await res.json();
-        setMisEquipos(data);
-        if (data.length > 0) {
-          setSelectedTeamId((current) => current ?? data[0].id);
+        const rawData = await res.json();
+        const mapped: MiEquipo[] = (Array.isArray(rawData) ? rawData : []).map((item: any) => {
+          const eq = item.equipo || {};
+          return {
+            id: eq.id || item.id,
+            nombre: eq.nombre || item.nombre || "Equipo sin nombre",
+            estado: eq.estado || item.estado || "ACTIVO",
+            coordinacion_id: eq.coordinacion_id || item.coordinacion_id,
+            coordinacion_nombre: eq.coordinacion?.nombre || eq.coordinacion_nombre || item.coordinacion_nombre,
+            especialidad_id: eq.especialidad_id || item.especialidad_id,
+            especialidad_nombre: eq.especialidad?.nombre || eq.especialidad_nombre || item.especialidad_nombre,
+            rol_en_equipo: item.rol_en_equipo || "MIEMBRO",
+            programas_autorizados: item.programas_autorizados || eq.programas_autorizados || [],
+            procesos: item.procesos || eq.procesos || [],
+          };
+        });
+        setMisEquipos(mapped);
+        if (mapped.length > 0) {
+          setSelectedTeamId((current) => current ?? mapped[0].id);
         }
       }
     } catch (err) {
@@ -713,7 +884,7 @@ export function MasterDashboard(): React.JSX.Element {
     } finally {
       setLoadingEquipos(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, isAdmin]);
 
   useEffect(() => {
     void loadMisEquipos();
@@ -761,14 +932,14 @@ export function MasterDashboard(): React.JSX.Element {
 
   useEffect(() => {
     const drafts = listKnownProgramaDrafts();
-    const active = getActiveProgramaDraftReference() ?? drafts[0]?.referenciaId ?? null;
+    const active = getActiveProgramaDraftReference();
     setKnownDrafts(drafts);
     setActiveReference(active);
     setReferenceInput(active ?? "");
   }, []);
 
   const loadProgramFlows = useCallback(async (): Promise<DashboardProgramFlow[]> => {
-    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+    if (!isAuthenticated || !user || user.debe_cambiar_password || isAdmin || misEquipos.length === 0) {
       return [];
     }
 
@@ -778,7 +949,16 @@ export function MasterDashboard(): React.JSX.Element {
       const flows = await fetchProgramFlows();
       setProgramFlows(flows);
       setActiveReference((current) => {
-        if (current || flows.length === 0) return current;
+        if (flows.length === 0) {
+          clearActiveProgramaDraftReference();
+          setReferenceInput("");
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem("sena.known-programa-drafts");
+          }
+          setKnownDrafts([]);
+          return null;
+        }
+        if (current) return current;
         const nextReference = flows[0].referencia_id;
         setReferenceInput(nextReference);
         setActiveProgramaDraftReference(nextReference);
@@ -795,17 +975,17 @@ export function MasterDashboard(): React.JSX.Element {
     } finally {
       setIsLoadingFlows(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, isAdmin, misEquipos.length]);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+    if (!isAuthenticated || !user || user.debe_cambiar_password || isAdmin || misEquipos.length === 0) {
       return;
     }
     void loadProgramFlows();
-  }, [loadProgramFlows, isAuthenticated, user]);
+  }, [loadProgramFlows, isAuthenticated, user, isAdmin, misEquipos.length]);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || user.debe_cambiar_password) {
+    if (!isAuthenticated || !user || user.debe_cambiar_password || isAdmin || misEquipos.length === 0) {
       setDashboard(null);
       return;
     }
@@ -830,6 +1010,21 @@ export function MasterDashboard(): React.JSX.Element {
             ? error.message
             : "No fue posible cargar el dashboard maestro.",
         );
+        if (
+          error instanceof Error &&
+          (error.message.includes("403") ||
+            error.message.includes("autorización") ||
+            error.message.includes("404") ||
+            error.message.includes("No existe"))
+        ) {
+          clearActiveProgramaDraftReference();
+          if (activeReference) {
+            setKnownDrafts(forgetProgramaDraft(activeReference));
+          }
+          setActiveReference(null);
+          setReferenceInput("");
+          setErrorMessage(null);
+        }
       })
       .finally(() => {
         if (isActive) setIsLoading(false);
@@ -838,7 +1033,7 @@ export function MasterDashboard(): React.JSX.Element {
     return () => {
       isActive = false;
     };
-  }, [activeReference, isAuthenticated, user]);
+  }, [activeReference, isAuthenticated, user, isAdmin, misEquipos.length]);
 
   const selectedDraft = useMemo(
     () => knownDrafts.find((draft) => draft.referenciaId === activeReference),
@@ -858,10 +1053,7 @@ export function MasterDashboard(): React.JSX.Element {
       (flow) => flow.referencia_id === referenceId,
     );
     const flowLabel = selectedFlow?.titulo ?? formatReferenceId(referenceId);
-    const confirmationValue =
-      selectedFlow?.codigo_programa ??
-      selectedFlow?.nombre_programa ??
-      referenceId;
+    const confirmationValue = selectedFlow?.codigo_programa ?? undefined;
     const confirmed = await confirm({
       title: "Eliminar programa definitivamente",
       message: `Vas a eliminar "${flowLabel}" junto con su estructura curricular, proyecto, planeaciones, borradores y archivos. Esta acción no se puede deshacer.`,
@@ -886,15 +1078,18 @@ export function MasterDashboard(): React.JSX.Element {
     void deleteProgramFlow(referenceId)
       .then(async () => {
         setKnownDrafts(forgetProgramaDraft(referenceId));
+        forgetProyectoDraft(referenceId);
         setProgramFlows((current) =>
           current.filter((flow) => flow.referencia_id !== referenceId),
         );
         if (activeReference === referenceId) {
           clearActiveProgramaDraftReference();
+          clearActiveProyectoDraftReference();
           setActiveReference(null);
           setReferenceInput("");
           setDashboard(null);
         }
+        notify.success("El flujo curricular y sus borradores fueron eliminados correctamente.");
         await loadProgramFlows();
       })
       .catch((error: unknown) => {
@@ -906,6 +1101,202 @@ export function MasterDashboard(): React.JSX.Element {
       })
       .finally(() => setIsDeletingFlow(false));
   };
+
+  if (user?.debe_cambiar_password) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] px-5 py-6 lg:px-8">
+        <ForceChangePasswordDialog
+          isOpen={true}
+          onPasswordChanged={() => {
+            void refreshUser();
+          }}
+        />
+      </main>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] px-5 py-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-7xl gap-6">
+          <header className="rounded-lg border border-[color:var(--card-border)] bg-white p-6 shadow-[0_18px_42px_rgba(24,51,45,0.07)]">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div className="max-w-3xl">
+                <div className="flex items-center gap-2 text-[var(--accent-strong)]">
+                  <span className="inline-flex h-14 w-14 items-center justify-center">
+                    <Image
+                      src="/logo-sena.svg"
+                      alt="Logo SENA"
+                      width={48}
+                      height={48}
+                      className="h-12 w-12 object-contain"
+                      priority
+                    />
+                  </span>
+                  <Sparkles className="h-5 w-5" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                    ASGARD / Módulo Institucional
+                  </p>
+                </div>
+                <h1 className="mt-3 text-3xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)] lg:text-5xl">
+                  Administración y Supervisión Central ASGARD
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                  Supervisión institucional de procesos curriculares, gestión de usuarios, catálogo organizacional, control de equipos ejecutores y visor institucional de auditoría.
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-3">
+                {user ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-right">
+                    <div>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs font-bold text-slate-800">
+                          {user.nombre} {user.apellido}
+                        </span>
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          {user.roles.join(", ")}
+                        </span>
+                      </div>
+                      {(user.coordinacion || user.especialidad) && (
+                        <p className="text-[10px] text-slate-500">
+                          {[user.coordinacion?.nombre, user.especialidad?.nombre].filter(Boolean).join(" • ")}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      title="Cerrar sesión"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </header>
+
+          <AdminWorkspace />
+        </div>
+      </main>
+    );
+  }
+
+  if (loadingEquipos) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] px-5 py-6 lg:px-8">
+        <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <RefreshCcw className="h-8 w-8 animate-spin text-[var(--accent)]" />
+            <p className="text-sm font-semibold text-slate-600">
+              Verificando asignación de Equipo Ejecutor...
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (misEquipos.length === 0) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] px-5 py-6 lg:px-8">
+        <div className="mx-auto grid w-full max-w-7xl gap-6">
+          <header className="rounded-lg border border-[color:var(--card-border)] bg-white p-6 shadow-[0_18px_42px_rgba(24,51,45,0.07)]">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div className="max-w-3xl">
+                <div className="flex items-center gap-2 text-[var(--accent-strong)]">
+                  <span className="inline-flex h-14 w-14 items-center justify-center">
+                    <Image
+                      src="/logo-sena.svg"
+                      alt="Logo SENA"
+                      width={48}
+                      height={48}
+                      className="h-12 w-12 object-contain"
+                      priority
+                    />
+                  </span>
+                  <Sparkles className="h-5 w-5" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em]">
+                    ASGARD / Panel Operativo
+                  </p>
+                </div>
+                <h1 className="mt-3 text-3xl font-[family:var(--font-display)] font-semibold text-[var(--foreground)] lg:text-5xl">
+                  Panel de gestion de programa, proyecto y planeacion
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+                  Entrada central para abrir wizards, ver bloqueos reales, medir avance
+                  y navegar la estructura construida por el equipo.
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-3">
+                {user ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-right">
+                    <div>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs font-bold text-slate-800">
+                          {user.nombre} {user.apellido}
+                        </span>
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          {user.roles.join(", ")}
+                        </span>
+                      </div>
+                      {(user.coordinacion || user.especialidad) && (
+                        <p className="text-[10px] text-slate-500">
+                          {[user.coordinacion?.nombre, user.especialidad?.nombre].filter(Boolean).join(" • ")}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      title="Cerrar sesión"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </header>
+
+          <div className="rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
+              <LockKeyhole className="h-7 w-7" />
+            </div>
+            <h2 className="mt-4 text-xl font-bold text-slate-900">
+              Acceso Restringido: Sin Equipo Ejecutor Asignado
+            </h2>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
+              El panel de gestión y construcción curricular está habilitado exclusivamente para instructores y líderes adheridos a un <strong>Equipo Ejecutor activo</strong>.
+            </p>
+            <p className="mx-auto mt-1 max-w-lg text-xs text-slate-500">
+              Actualmente no estás vinculado a ningún Equipo Ejecutor. Comunícate con un Administrador Pedagógico o con tu Coordinación Académica para que te asigne a tu equipo correspondiente.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => void loadMisEquipos()}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Verificar asignación
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-800 shadow-sm transition hover:bg-rose-100"
+              >
+                <LogOut className="h-4 w-4" />
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--paper)] px-5 py-6 lg:px-8">
@@ -989,54 +1380,21 @@ export function MasterDashboard(): React.JSX.Element {
               </div>
             </div>
           </div>
-
-          {hasRole("SUPERADMIN", "ADMIN") && (
-            <div className="mt-6 flex border-b border-slate-200 gap-6">
-              <button
-                type="button"
-                onClick={() => setActiveTab("dashboard")}
-                className={cn(
-                  "pb-2.5 text-sm font-semibold border-b-2 -mb-px transition",
-                  activeTab === "dashboard"
-                    ? "border-[var(--accent)] text-[var(--accent-strong)]"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                )}
-              >
-                Procesos y Planeaciones
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("admin")}
-                className={cn(
-                  "pb-2.5 text-sm font-semibold border-b-2 -mb-px transition flex items-center gap-2",
-                  activeTab === "admin"
-                    ? "border-[var(--accent)] text-[var(--accent-strong)]"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                )}
-              >
-                <Shield className="h-4 w-4" />
-                Administración Organizacional
-              </button>
-            </div>
-          )}
         </header>
 
-        {activeTab === "admin" ? (
-          <AdminWorkspace />
-        ) : (
-          <>
-            <ExecutorTeamWorkspace
-              misEquipos={misEquipos}
-              loadingEquipos={loadingEquipos}
-              selectedTeam={selectedTeam}
-              onSelectTeam={(teamId) => setSelectedTeamId(teamId)}
-              onGoToAdmin={() => setActiveTab("admin")}
-              isAdmin={hasRole("SUPERADMIN", "ADMIN")}
-              programFlows={programFlows}
-              onSelectFlow={activateReference}
-              onStartProcess={handleIniciarProceso}
-              iniciandoCodigo={iniciandoProcesoCodigo}
-            />
+        <ExecutorTeamWorkspace
+          misEquipos={misEquipos}
+          loadingEquipos={loadingEquipos}
+          selectedTeam={selectedTeam}
+          onSelectTeam={(teamId) => setSelectedTeamId(teamId)}
+          onGoToAdmin={() => {}}
+          isAdmin={false}
+          programFlows={programFlows}
+          onSelectFlow={activateReference}
+          onStartProcess={handleIniciarProceso}
+          iniciandoCodigo={iniciandoProcesoCodigo}
+          onOpenHistorial={setSelectedHistorialRef}
+        />
 
             <ProgramFlowsPanel
               flows={programFlows}
@@ -1146,13 +1504,16 @@ export function MasterDashboard(): React.JSX.Element {
             <NavigationMap dashboard={dashboard} referenceId={activeReference ?? ""} />
           </>
         )}
-        </>
-      )}
-      <ForceChangePasswordDialog
+        <ForceChangePasswordDialog
         isOpen={Boolean(isAuthenticated && user?.debe_cambiar_password)}
         onPasswordChanged={() => {
           void refreshUser();
         }}
+      />
+      <ProcesoHistorialDialog
+        referenciaId={selectedHistorialRef}
+        isOpen={Boolean(selectedHistorialRef)}
+        onClose={() => setSelectedHistorialRef(null)}
       />
     </div>
   </main>

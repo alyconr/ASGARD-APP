@@ -67,6 +67,25 @@ class Coordinacion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         lazy="selectin",
     )
 
+    @property
+    def es_transversal(self) -> bool:
+        """Indica si esta coordinación corresponde al área de competencias transversales."""
+        code = (self.codigo or "").strip().upper()
+        name = (self.nombre or "").strip().upper()
+        return "TRANSVERSAL" in name or code in {"TRA", "TRANS", "TRANSVERSAL", "TRANSVERSALES"}
+
+
+def is_coordinacion_transversal(coordinacion: Coordinacion | None) -> bool:
+    """Verifica si una coordinación dada es de tipo transversal."""
+    if coordinacion is None:
+        return False
+    if hasattr(coordinacion, "es_transversal"):
+        return bool(coordinacion.es_transversal)
+    code = (getattr(coordinacion, "codigo", None) or "").strip().upper()
+    name = (getattr(coordinacion, "nombre", None) or "").strip().upper()
+    return "TRANSVERSAL" in name or code in {"TRA", "TRANS", "TRANSVERSAL", "TRANSVERSALES"}
+
+
 
 class Especialidad(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Academic specialty under a coordination."""

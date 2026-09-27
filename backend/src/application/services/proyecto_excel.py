@@ -457,6 +457,31 @@ class ProyectoExcelImportService:
             programa_id=programa_id,
             workbook=workbook,
         )
+
+        if hasattr(self._session, "execute"):
+            import inspect
+            from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
+            try:
+                proc_stmt = select(ProcesoCurricular).where(
+                    (ProcesoCurricular.referencia_id == referencia_id)
+                    | (ProcesoCurricular.programa_id == programa_id)
+                )
+                proc_exec = self._session.execute(proc_stmt)
+                if inspect.isawaitable(proc_exec):
+                    proc_exec = await proc_exec
+                proc = proc_exec.scalar_one_or_none()
+                if isinstance(proc, ProcesoCurricular):
+                    proc.proyecto_id = import_result.proyecto_id
+                    if not proc.programa_id:
+                        proc.programa_id = programa_id
+                elif proc is not None and hasattr(proc, "proyecto_id"):
+                    setattr(proc, "proyecto_id", import_result.proyecto_id)
+                    if hasattr(proc, "programa_id") and not getattr(proc, "programa_id"):
+                        setattr(proc, "programa_id", programa_id)
+            except Exception:
+                pass
+
         draft.paso_actual = "fuente-proyecto"
         draft.payload_json = _merge_excel_import_into_payload(
             payload=draft.payload_json,

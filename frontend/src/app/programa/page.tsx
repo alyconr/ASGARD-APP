@@ -5,10 +5,17 @@ import { ProtectedRoute } from "@/features/auth/protected-route";
 import { ExecutorTeamGuard } from "@/features/auth/executor-team-guard";
 import { ProgramaWizardShell } from "@/features/programa/components/programa-wizard-shell";
 
-export default function ProgramaPage(): React.JSX.Element {
+export default async function ProgramaPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ referencia_id?: string }>;
+}): Promise<React.JSX.Element> {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const referenciaId = resolvedParams?.referencia_id;
+
   return (
     <ProtectedRoute>
-      <ExecutorTeamGuard>
+      <ExecutorTeamGuard referenciaId={referenciaId}>
         <div className="mx-auto w-full max-w-7xl px-5 pt-6 lg:px-8">
           <Link
             href="/dashboard"
@@ -18,7 +25,7 @@ export default function ProgramaPage(): React.JSX.Element {
             Volver al dashboard
           </Link>
         </div>
-        <ProgramaWizardShell />
+        <ProgramaWizardShell referenciaId={referenciaId} />
       </ExecutorTeamGuard>
     </ProtectedRoute>
   );

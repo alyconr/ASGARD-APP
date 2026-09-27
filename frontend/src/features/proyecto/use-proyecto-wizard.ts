@@ -389,15 +389,15 @@ export function useProyectoWizard({
 
   useEffect(() => {
     setKnownDrafts(listKnownProyectoDrafts());
-    const activeReference = getActiveProyectoDraftReference();
+    const targetReference = programaReferenciaId || getActiveProyectoDraftReference();
 
-    if (activeReference !== null) {
-      void recoverDraftByReference(activeReference, true);
+    if (targetReference !== null && targetReference !== "") {
+      void recoverDraftByReference(targetReference, true);
       return;
     }
 
     setIsBootstrapping(false);
-  }, [recoverDraftByReference]);
+  }, [programaReferenciaId, recoverDraftByReference]);
 
   useEffect(() => {
     if (snapshot === null || isRecovering || isBootstrapping) {
@@ -419,7 +419,7 @@ export function useProyectoWizard({
   }, [isBootstrapping, isRecovering, persistSnapshot, snapshot]);
 
   const startNewFlow = useCallback(async (): Promise<void> => {
-    const nextReferenceId = crypto.randomUUID();
+    const nextReferenceId = programaReferenciaId;
     const nextPayload = createEmptyProyectoPayload(
       nextReferenceId,
       programaReferenciaId,
@@ -454,7 +454,7 @@ export function useProyectoWizard({
       ),
     );
     notify.success("Wizard del proyecto iniciado", {
-      description: "Se creo un borrador independiente para el proyecto.",
+      description: "Se inicio el borrador del proyecto para el proceso curricular.",
     });
   }, [persistSnapshot, programaId, programaReferenciaId]);
 

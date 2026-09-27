@@ -30,31 +30,60 @@ vi.mock("next/navigation", () => ({
 
 import type { User } from "@/features/auth/types";
 
+const referenciaId = "11111111-1111-4111-9111-111111111111";
+
 // Match AuthProvider: the user identity stays stable between unrelated renders.
 const authUser: User = {
-  id: "admin-1",
-  email: "admin@sena.edu.co",
-  nombre: "Admin",
+  id: "lider-1",
+  email: "lider@sena.edu.co",
+  nombre: "Lider",
   apellido: "SENA",
-  roles: ["SUPERADMIN"],
+  roles: ["LIDER_EQUIPO_EJECUTOR"],
   activo: true,
   estado: "ACTIVO",
   debe_cambiar_password: false,
 };
 
+const defaultTeams = [
+  {
+    id: "team-1",
+    nombre: "Equipo Alfa",
+    estado: "ACTIVO",
+    rol_en_equipo: "LIDER",
+    programas_autorizados: [
+      {
+        id: "p-2",
+        codigo_programa: "228118",
+        nombre_programa: "Analisis de software",
+        activo: true,
+      },
+    ],
+    procesos: [
+      {
+        id: "proc-1",
+        referencia_id: referenciaId,
+        tipo_necesidad: "NUEVO_PROGRAMA",
+        estado_scope: "ASIGNADO",
+        programa_codigo: "228118",
+        programa_nombre: "Analisis de software",
+      },
+    ],
+  },
+];
+
 const authState = vi.hoisted(() => ({
   current: {
     user: {
-      id: "admin-1",
-      email: "admin@sena.edu.co",
-      nombre: "Admin",
+      id: "lider-1",
+      email: "lider@sena.edu.co",
+      nombre: "Lider",
       apellido: "SENA",
-      roles: ["SUPERADMIN"],
+      roles: ["LIDER_EQUIPO_EJECUTOR"],
       activo: true,
       estado: "ACTIVO",
       debe_cambiar_password: false,
     } as User | null,
-    hasRole: (() => true) as (...args: string[]) => boolean,
+    hasRole: ((...roles: string[]) => roles.includes("LIDER_EQUIPO_EJECUTOR")) as (...args: string[]) => boolean,
     isAuthenticated: true as boolean,
     isLoading: false as boolean,
     login: vi.fn(),
@@ -67,13 +96,11 @@ vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => authState.current,
 }));
 
-const referenciaId = "11111111-1111-4111-9111-111111111111";
-
 afterEach(() => {
   localStorage.clear();
   authState.current = {
     user: { ...authUser },
-    hasRole: () => true,
+    hasRole: (...roles: string[]) => roles.includes("LIDER_EQUIPO_EJECUTOR"),
     isAuthenticated: true,
     isLoading: false,
     login: vi.fn(),
@@ -231,7 +258,7 @@ function buildProgramFlow(
 function mockFetchJson(
   payload: DashboardResponse,
   flows: DashboardProgramFlow[] = [],
-  teams: unknown[] = [],
+  teams: unknown[] = defaultTeams,
 ): void {
   let currentFlows = [...flows];
   vi.stubGlobal(
@@ -480,5 +507,51 @@ describe("MasterDashboard", () => {
 
     expect(globalFetch).not.toHaveBeenCalled();
     expect(screen.queryByText("Analisis de software / 228118")).toBeNull();
+  });
+
+  it("renders AdminWorkspace directly and does not load operational panel when user is SUPERADMIN or ADMIN", async () => {
+    authState.current = {
+      user: {
+        id: "admin-1",
+        email: "admin@sena.edu.co",
+        nombre: "Admin",
+        apellido: "SENA",
+        roles: ["SUPERADMIN"],
+        activo: true,
+        estado: "ACTIVO",
+        debe_cambiar_password: false,
+      },
+      hasRole: (...roles: string[]) => roles.includes("SUPERADMIN") || roles.includes("ADMIN"),
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    };
+
+    render(<MasterDashboard />);
+
+    expect(
+      await screen.findByText(/Administración y Supervisión Central ASGARD/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Módulo de Administración & Supervisión Institucional/i)).toBeInTheDocument();
+    expect(screen.queryByText("Flujos abiertos de programa")).toBeNull();
+    expect(screen.queryByText("Ir al wizard activo")).toBeNull();
+    expect(screen.queryByText("Buscar referencia de programa")).toBeNull();
+  });
+
+  it("renders restricted state when user has no executor teams assigned", async () => {
+    mockFetchJson(buildDashboard(), [buildProgramFlow()], []);
+
+    render(<MasterDashboard />);
+
+    expect(
+      await screen.findByText(/Acceso Restringido: Sin Equipo Ejecutor Asignado/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/El panel de gestión y construcción curricular está habilitado exclusivamente para instructores y líderes adheridos a un/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Flujos abiertos de programa")).toBeNull();
+    expect(screen.queryByText("Ir al wizard activo")).toBeNull();
   });
 });

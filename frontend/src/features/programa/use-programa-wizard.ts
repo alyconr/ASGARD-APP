@@ -178,7 +178,9 @@ export interface ProgramaWizardController {
   fetchDocState: () => Promise<void>;
 }
 
-export function useProgramaWizard(): ProgramaWizardController {
+export function useProgramaWizard(
+  initialReferenceId?: string | null,
+): ProgramaWizardController {
   const [activeReferenceId, setActiveReferenceId] = useState<string | null>(
     null,
   );
@@ -384,15 +386,15 @@ export function useProgramaWizard(): ProgramaWizardController {
 
   useEffect(() => {
     setKnownDrafts(listKnownProgramaDrafts());
-    const activeReference = getActiveProgramaDraftReference();
+    const activeReference = initialReferenceId || getActiveProgramaDraftReference();
 
-    if (activeReference !== null) {
+    if (activeReference !== null && activeReference !== "") {
       void recoverDraftByReference(activeReference, true);
       return;
     }
 
     setIsBootstrapping(false);
-  }, [recoverDraftByReference]);
+  }, [initialReferenceId, recoverDraftByReference]);
 
   useEffect(() => {
     if (snapshot === null || isRecovering || isBootstrapping) {
@@ -415,7 +417,11 @@ export function useProgramaWizard(): ProgramaWizardController {
 
   const startNewFlow = useCallback(
     async (entryMode: ProgramaEntryMode): Promise<void> => {
-      const nextReferenceId = crypto.randomUUID();
+      const nextReferenceId =
+        initialReferenceId ||
+        activeReferenceId ||
+        getActiveProgramaDraftReference() ||
+        crypto.randomUUID();
       const nextPayload = createEmptyProgramaPayload(nextReferenceId);
       const targetStepId = DEFAULT_PROGRAMA_STEP_ID;
       const now = new Date().toISOString();

@@ -234,7 +234,11 @@ async def test_concurrent_refresh_rotation_real_postgresql() -> None:
                     {"uid": test_user_id},
                 )
                 await cleanup_session.execute(
-                    text("DELETE FROM usuarios_roles WHERE usuario_id = :uid"),
+                    text("DELETE FROM usuario_roles WHERE usuario_id = :uid"),
+                    {"uid": test_user_id},
+                )
+                await cleanup_session.execute(
+                    text("UPDATE eventos_auditoria SET actor_usuario_id = NULL WHERE actor_usuario_id = :uid"),
                     {"uid": test_user_id},
                 )
                 await cleanup_session.execute(
@@ -242,6 +246,7 @@ async def test_concurrent_refresh_rotation_real_postgresql() -> None:
                     {"uid": test_user_id},
                 )
                 await cleanup_session.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Teardown error in test_refresh_concurrency: %s", exc)
         await real_engine.dispose()

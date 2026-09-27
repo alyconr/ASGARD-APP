@@ -246,6 +246,7 @@ async def test_dashboard_elimina_flujo_abierto_de_programa() -> None:
     session = AsyncMock()
     session.execute.side_effect = [
         _scalar_result(program_draft),
+        _scalar_result(None),
         _scalars_result([program_draft, project_draft]),
     ]
     cleanup_service = AsyncMock()
@@ -260,3 +261,39 @@ async def test_dashboard_elimina_flujo_abierto_de_programa() -> None:
     session.delete.assert_any_await(program_draft)
     session.delete.assert_any_await(project_draft)
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_dashboard_elimina_flujo_con_proceso_curricular() -> None:
+    from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
+    referencia_id = uuid.uuid4()
+    proceso = ProcesoCurricular(
+        id=uuid.uuid4(),
+        referencia_id=referencia_id,
+    )
+    program_draft = _program_draft(
+        referencia_id,
+        None,
+        EstadoBloque.BORRADOR,
+    )
+
+    session = AsyncMock()
+    session.execute.side_effect = [
+        _scalar_result(program_draft),
+        _scalar_result(proceso),
+        _scalars_result([program_draft]),
+    ]
+    cleanup_service = AsyncMock()
+
+    await DashboardService(
+        session,
+        cleanup_service=cleanup_service,
+    ).eliminar_flujo_programa(referencia_id)
+
+    cleanup_service.eliminar_cargue_completo.assert_awaited_once_with(referencia_id)
+    assert session.delete.await_count == 2
+    session.delete.assert_any_await(program_draft)
+    session.delete.assert_any_await(proceso)
+    session.commit.assert_awaited_once()
+

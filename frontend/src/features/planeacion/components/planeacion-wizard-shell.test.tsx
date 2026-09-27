@@ -443,5 +443,28 @@ describe("PlaneacionWizardShell", () => {
     expect(compCheckboxes[0]).toBeChecked();
     expect(screen.getByText("Resultado 1: Identificar requisitos técnicos")).toBeInTheDocument();
   });
+
+  it("only provides consolidated download in configuracion documental and never shows individual download button", async () => {
+    vi.spyOn(api, "fetchFormatoOficialEstadoConsolidado").mockResolvedValue({
+      listo: true,
+      storage_key: "planeacion/consolidado.xlsx",
+      file_name: "GPFI-F-134V05-planeacion-pedagogica.xlsx",
+      content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      checksum_sha256: "hash123",
+      fecha_generacion: "2026-09-27T10:00:00Z",
+      faltantes: [],
+      planeaciones_completas: 2,
+      borradores_excluidos: 0,
+    });
+
+    render(<PlaneacionWizardShell contexto={mockContexto} referenciaId="ref-uuid" />);
+
+    // Consolidated download button must be present in the document configuration block
+    const downloadConsolidadoBtn = await screen.findByRole("button", { name: /Descargar consolidado/i });
+    expect(downloadConsolidadoBtn).toBeInTheDocument();
+
+    // Individual download button must NOT exist anywhere
+    expect(screen.queryByRole("button", { name: /Descargar Excel oficial/i })).not.toBeInTheDocument();
+  });
 });
 

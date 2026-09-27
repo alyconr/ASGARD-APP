@@ -47,6 +47,7 @@ class AccessScopeService:
         programa_id = None
         proyecto_id = None
 
+        meta_dict: dict[str, Any] = {}
         if isinstance(draft.payload_json, dict):
             curr = draft.payload_json.get("curricular")
             if isinstance(curr, dict) and curr.get("programa_formacion_id"):
@@ -55,42 +56,92 @@ class AccessScopeService:
                 except (ValueError, TypeError):
                     pass
             meta = draft.payload_json.get("meta")
-            if isinstance(meta, dict) and meta.get("programaId"):
-                try:
-                    programa_id = uuid.UUID(str(meta.get("programaId")))
-                except (ValueError, TypeError):
-                    pass
+            if isinstance(meta, dict):
+                meta_dict = meta
+                if meta.get("programaId"):
+                    try:
+                        programa_id = uuid.UUID(str(meta.get("programaId")))
+                    except (ValueError, TypeError):
+                        pass
+                if meta.get("proyectoId"):
+                    try:
+                        proyecto_id = uuid.UUID(str(meta.get("proyectoId")))
+                    except (ValueError, TypeError):
+                        pass
 
-        # Find active team where user is leader or active member
-        teams_stmt = select(EquipoEjecutor).where(
-            EquipoEjecutor.lider_id == user.id,
-            EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+            doc = draft.payload_json.get("documental")
+            if isinstance(doc, dict):
+                p_excel = doc.get("programa_excel")
+                if isinstance(p_excel, dict):
+                    conf = p_excel.get("confirmacion")
+                    if isinstance(conf, dict) and conf.get("programa_id"):
+                        try:
+                            programa_id = uuid.UUID(str(conf.get("programa_id")))
+                        except (ValueError, TypeError):
+                            pass
+
+        team_id_raw = (
+            meta_dict.get("equipo_ejecutor_id")
+            or meta_dict.get("equipoId")
+            or meta_dict.get("equipoEjecutorId")
         )
-        teams_res = await self._session.execute(teams_stmt)
-        active_teams = teams_res.scalars().all()
-        if active_teams:
-            target_team = active_teams[0]
-            equipo_id = target_team.id
-            coordinacion_id = target_team.coordinacion_id
-            especialidad_id = target_team.especialidad_id
-            lider_id = user.id
-        else:
-            members_stmt = (
-                select(EquipoEjecutor)
-                .join(EquipoEjecutorMiembro, EquipoEjecutor.id == EquipoEjecutorMiembro.equipo_id)
-                .where(
-                    EquipoEjecutorMiembro.usuario_id == user.id,
-                    EquipoEjecutorMiembro.activo.is_(True),
+        if team_id_raw:
+            try:
+                target_team_id = uuid.UUID(str(team_id_raw))
+                t_stmt = select(EquipoEjecutor).where(
+                    EquipoEjecutor.id == target_team_id,
                     EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
                 )
+                t_res = await self._session.execute(t_stmt)
+                explicit_team = t_res.scalar_one_or_none()
+                if explicit_team:
+                    equipo_id = explicit_team.id
+                    coordinacion_id = explicit_team.coordinacion_id
+                    especialidad_id = explicit_team.especialidad_id
+                    lider_id = explicit_team.lider_id
+            except (ValueError, TypeError):
+                pass
+
+        if equipo_id is None:
+            # Find active team where user is leader or active member
+            teams_stmt = select(EquipoEjecutor).where(
+                EquipoEjecutor.lider_id == user.id,
+                EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
             )
-            members_res = await self._session.execute(members_stmt)
-            member_team = members_res.scalar_one_or_none()
-            if member_team:
-                equipo_id = member_team.id
-                coordinacion_id = member_team.coordinacion_id
-                especialidad_id = member_team.especialidad_id
-                lider_id = member_team.lider_id
+            teams_res = await self._session.execute(teams_stmt)
+            active_teams = teams_res.scalars().all()
+            if active_teams:
+                target_team = active_teams[0]
+                equipo_id = target_team.id
+                coordinacion_id = target_team.coordinacion_id
+                especialidad_id = target_team.especialidad_id
+                lider_id = user.id
+            else:
+                members_stmt = (
+                    select(EquipoEjecutor)
+                    .join(EquipoEjecutorMiembro, EquipoEjecutor.id == EquipoEjecutorMiembro.equipo_id)
+                    .where(
+                        EquipoEjecutorMiembro.usuario_id == user.id,
+                        EquipoEjecutorMiembro.activo.is_(True),
+                        EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                    )
+                )
+                members_res = await self._session.execute(members_stmt)
+                member_team = members_res.scalar_one_or_none()
+                if member_team:
+                    equipo_id = member_team.id
+                    coordinacion_id = member_team.coordinacion_id
+                    especialidad_id = member_team.especialidad_id
+                    lider_id = member_team.lider_id
+                elif user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                    any_team_stmt = select(EquipoEjecutor).where(EquipoEjecutor.estado == EstadoEquipo.ACTIVO).limit(1)
+                    any_team_res = await self._session.execute(any_team_stmt)
+                    fallback_team = any_team_res.scalar_one_or_none()
+                    if fallback_team:
+                        equipo_id = fallback_team.id
+                        coordinacion_id = fallback_team.coordinacion_id
+                        especialidad_id = fallback_team.especialidad_id
+                        lider_id = fallback_team.lider_id
 
         proceso = await self.ensure_proceso_for_referencia(
             referencia_id=referencia_id,
@@ -364,6 +415,9 @@ class AccessScopeService:
                 detail="Proceso curricular no encontrado",
             )
 
+        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+            return proceso
+
         if proceso.estado_scope != EstadoScopeProceso.ASIGNADO:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -381,6 +435,8 @@ class AccessScopeService:
                     "message": "El equipo ejecutor asignado se encuentra inactivo",
                 },
             )
+
+
 
         # Leader has operational access
         if proceso.lider_id == user.id or (
@@ -540,6 +596,9 @@ class AccessScopeService:
         if not candidate_referencias:
             return set()
 
+        if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+            return set(candidate_referencias)
+
         allowed: set[uuid.UUID] = set()
 
         query = (
@@ -600,9 +659,9 @@ class AccessScopeService:
             self._session.add(proceso)
             await self._session.flush()
         else:
-            if programa_id and not proceso.programa_id:
+            if programa_id and proceso.programa_id != programa_id:
                 proceso.programa_id = programa_id
-            if proyecto_id and not proceso.proyecto_id:
+            if proyecto_id and proceso.proyecto_id != proyecto_id:
                 proceso.proyecto_id = proyecto_id
             if equipo_ejecutor_id and not proceso.equipo_ejecutor_id:
                 proceso.equipo_ejecutor_id = equipo_ejecutor_id

@@ -236,8 +236,12 @@ function DraftSummary({
   );
 }
 
-export function ProgramaWizardShell(): React.JSX.Element {
-  const controller = useProgramaWizard();
+export function ProgramaWizardShell({
+  referenciaId,
+}: Readonly<{
+  referenciaId?: string | null;
+}> = {}): React.JSX.Element {
+  const controller = useProgramaWizard(referenciaId);
   const confirm = useConfirm();
   const currentStep =
     PROGRAMA_WIZARD_STEPS[controller.currentStepIndex] ??

@@ -1,7 +1,12 @@
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
 
 let inMemoryAccessToken: string | null = null;
-let refreshPromise: Promise<string | null> | null = null;
+export interface SessionRefreshResult {
+  accessToken: string;
+  user: any;
+}
+
+let refreshSessionPromise: Promise<SessionRefreshResult | null> | null = null;
 
 export type AuthInvalidationHandler = () => void;
 let authInvalidationHandler: AuthInvalidationHandler | null = null;
@@ -39,16 +44,16 @@ export function setAuthToken(token: string | null): void {
 }
 
 /**
- * Single-flight refresh token exchange.
- * Ensures concurrent 401s reuse a single in-flight refresh request
+ * Single-flight session refresh exchange.
+ * Ensures concurrent requests or component mounts reuse a single in-flight refresh request
  * avoiding race conditions with single-use refresh token rotation.
  */
-export async function refreshTokenSingleFlight(): Promise<string | null> {
-  if (refreshPromise) {
-    return refreshPromise;
+export async function refreshSessionSingleFlight(): Promise<SessionRefreshResult | null> {
+  if (refreshSessionPromise) {
+    return refreshSessionPromise;
   }
 
-  refreshPromise = (async () => {
+  refreshSessionPromise = (async () => {
     try {
       const res = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
         method: "POST",
@@ -69,16 +74,24 @@ export async function refreshTokenSingleFlight(): Promise<string | null> {
         return null;
       }
       setAuthToken(newToken);
-      return newToken;
+      return {
+        accessToken: newToken,
+        user: data.user,
+      };
     } catch {
       notifyAuthInvalidated();
       return null;
     } finally {
-      refreshPromise = null;
+      refreshSessionPromise = null;
     }
   })();
 
-  return refreshPromise;
+  return refreshSessionPromise;
+}
+
+export async function refreshTokenSingleFlight(): Promise<string | null> {
+  const result = await refreshSessionSingleFlight();
+  return result?.accessToken ?? null;
 }
 
 export async function authFetch(

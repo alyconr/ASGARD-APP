@@ -216,20 +216,45 @@ class ProyectoCargueService:
                 prefix=f"proyectos-formativos/{proyecto_ref_id}/"
             )
 
-        # 4. Reset drafts to initial states
+        # 4. Reset drafts to initial states while preserving team scope
         now = datetime.now(UTC).isoformat()
         if draft_programa is not None:
+            old_meta = draft_programa.payload_json.get("meta", {}) if isinstance(draft_programa.payload_json, dict) else {}
             draft_programa.paso_actual = "origen-documental"
             draft_programa.estado_borrador = EstadoBloque.BORRADOR
+            meta_dict = {
+                "touchedSteps": ["origen-documental"],
+                "lastInteractionAt": now,
+            }
+            preserved_team_id = (
+                old_meta.get("equipo_ejecutor_id")
+                or old_meta.get("equipoId")
+                or old_meta.get("equipoEjecutorId")
+            )
+            if preserved_team_id:
+                meta_dict["equipo_ejecutor_id"] = str(preserved_team_id)
+
             draft_programa.payload_json = {
-                "meta": {
-                    "touchedSteps": ["origen-documental"],
-                    "lastInteractionAt": now,
-                },
+                "meta": meta_dict,
                 "documental": {},
                 "curricular": {},
             }
             self._session.add(draft_programa)
+
+            # Preserve ProcesoCurricular anchor, just reset linked entities
+            from src.infrastructure.db.models.organizacion import ProcesoCurricular
+            proc_stmt = select(ProcesoCurricular).where(
+                (ProcesoCurricular.referencia_id == draft_programa.referencia_id)
+                | (ProcesoCurricular.programa_id == programa_id)
+            )
+            try:
+                proc_res = await self._session.execute(proc_stmt)
+                procs = proc_res.scalars().all()
+                for proc in procs:
+                    proc.programa_id = None
+                    proc.proyecto_id = None
+            except Exception:
+                pass
 
         if draft_proyecto is not None:
             draft_proyecto.paso_actual = "fuente-proyecto"

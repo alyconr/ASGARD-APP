@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
@@ -170,7 +171,7 @@ class ProcesoCurricularResponse(BaseModel):
 
 
 class IniciarProcesoRequest(BaseModel):
-    equipo_ejecutor_id: uuid.UUID
+    equipo_ejecutor_id: uuid.UUID | None = None
     programa_id: uuid.UUID | None = None
     codigo_programa: str | None = None
     tipo_necesidad: str = "CREAR_PLANEACION"
@@ -183,4 +184,48 @@ class MiEquipoResponse(BaseModel):
     rol_en_equipo: str  # "LIDER" | "MIEMBRO"
     programas_autorizados: list[ProgramaAutorizadoResponse] = []
     procesos: list[ProcesoCurricularResponse] = []
+
+
+class ProcesoCambioActorSchema(BaseModel):
+    id: uuid.UUID | None = None
+    nombre: str | None = None
+    apellido: str | None = None
+    email: str | None = None
+    rol: str | None = None
+
+
+class ProcesoCambioItemSchema(BaseModel):
+    id: uuid.UUID
+    fecha_evento: datetime
+    accion: str
+    tipo_evento: str
+    descripcion: str
+    actor: ProcesoCambioActorSchema | None = None
+    entidad: str
+    entidad_id: uuid.UUID | None = None
+    detalle: dict[str, Any] | None = None
+
+
+class ProcesoHistorialResponse(BaseModel):
+    proceso_id: uuid.UUID
+    referencia_id: uuid.UUID
+    estado_scope: str
+    tipo_necesidad: str
+    equipo: dict[str, Any] | None = None
+    programa: dict[str, Any] | None = None
+    proyecto: dict[str, Any] | None = None
+    planeaciones: dict[str, Any] = Field(default_factory=dict)
+    fecha_creacion: datetime
+    fecha_ultima_modificacion: datetime
+    total_cambios: int
+    cambios: list[ProcesoCambioItemSchema] = Field(default_factory=list)
+    garantia_unicidad: bool = True
+    mensaje_unicidad: str = "Este proceso opera bajo una instancia curricular única y consolidada sin duplicidad."
+
+
+class RegistrarCambioProcesoRequest(BaseModel):
+    accion: str = "PROCESO_CAMBIO_REGISTRADO"
+    descripcion: str
+    detalle: dict[str, Any] | None = None
+
 

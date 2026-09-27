@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import io
 import uuid
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.planeacion import (
@@ -28,12 +31,81 @@ from src.application.services.planeacion_service import (
 from src.application.services.access_scope import AccessScopeService
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.db.models.auth import Usuario
+from src.infrastructure.db.models.organizacion import ProcesoCurricular
+from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
+from src.infrastructure.db.models.proyecto import ActividadProyecto, ProyectoFormativo
 from src.infrastructure.db.session import get_async_session
+from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.repositories.planeacion import PlaneacionPedagogicaRepository
 from src.infrastructure.storage.document_storage import MinioDocumentStorageService
 from src.interfaces.http.deps import get_access_scope_service, get_current_user
 
 router = APIRouter(prefix="/api/v1/planeaciones", tags=["planeacion-pedagogica"])
+
+
+async def _safe_actor_id(session: AsyncSession, user: Usuario | None) -> uuid.UUID | None:
+    """Verify actor exists in the database to prevent foreign key errors in mock environments."""
+    if not user or not getattr(user, "id", None):
+        return None
+    try:
+        existing = await session.get(Usuario, user.id)
+        return user.id if existing else None
+    except Exception:
+        return None
+
+
+async def _resolve_referencia_id(session: AsyncSession, proyecto_id: uuid.UUID | None) -> uuid.UUID | None:
+    """Resolve process referencia_id from the project identifier."""
+    if not proyecto_id:
+        return None
+    try:
+        stmt = select(ProcesoCurricular.referencia_id).where(ProcesoCurricular.proyecto_id == proyecto_id)
+        res = await session.execute(stmt)
+        ref = res.scalar_one_or_none()
+        if ref:
+            return ref
+        proy = await session.get(ProyectoFormativo, proyecto_id)
+        if proy and proy.programa_id:
+            stmt2 = select(ProcesoCurricular.referencia_id).where(ProcesoCurricular.programa_id == proy.programa_id)
+            res2 = await session.execute(stmt2)
+            ref2 = res2.scalar_one_or_none()
+            if ref2:
+                return ref2
+    except Exception:
+        pass
+    return None
+
+
+async def _touch_proceso(session: AsyncSession, referencia_id: uuid.UUID | None) -> None:
+    """Update process modification timestamp to reflect new planning changes."""
+    if not referencia_id:
+        return
+    try:
+        stmt = (
+            update(ProcesoCurricular)
+            .where(ProcesoCurricular.referencia_id == referencia_id)
+            .values(fecha_actualizacion=datetime.now(UTC))
+        )
+        await session.execute(stmt)
+    except Exception:
+        pass
+
+
+def _extract_actividad_descripcion(datos: dict[str, Any] | None) -> str:
+    """Extract learning activity name from complementary dictionary."""
+    if not datos or not isinstance(datos, dict):
+        return ""
+    if datos.get("actividades_aprendizaje"):
+        return str(datos["actividades_aprendizaje"]).strip()
+    if datos.get("actividad_aprendizaje"):
+        return str(datos["actividad_aprendizaje"]).strip()
+    rap_map = datos.get("rap_complementary_map")
+    if isinstance(rap_map, dict):
+        for val in rap_map.values():
+            if isinstance(val, dict) and val.get("actividades_aprendizaje"):
+                return str(val["actividades_aprendizaje"]).strip()
+    return ""
+
 
 
 def get_planeacion_service(
@@ -137,6 +209,23 @@ async def guardar_configuracion_formato_oficial(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         result = await service.guardar_configuracion_documento(proyecto_id, dto)
+        referencia_id = await _resolve_referencia_id(session, proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="PlaneacionDocumentoConfig",
+            entidad_id=proyecto_id,
+            accion="CONFIGURACION_FORMATO_ACTUALIZADA",
+            detalle={
+                "clasificacion_informacion": dto.clasificacion_informacion,
+                "equipo_gestion_curricular": dto.equipo_gestion_curricular,
+                "regional": dto.regional,
+                "centro_formacion": dto.centro_formacion,
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
     except (PlaneacionAccessError, ValueError) as error:
@@ -176,6 +265,23 @@ async def generar_formato_consolidado(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         result = await service.generar_formato_consolidado(proyecto_id)
+        referencia_id = await _resolve_referencia_id(session, proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="ProyectoFormativo",
+            entidad_id=proyecto_id,
+            accion="GPFI_F_134_CONSOLIDADO_GENERADO",
+            detalle={
+                "file_name": result.file_name,
+                "planeaciones_incluidas": result.planeaciones_incluidas,
+                "filas_generadas": result.filas_generadas,
+                "storage_key": result.storage_key,
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
     except (PlaneacionAccessError, ValueError) as error:
@@ -258,6 +364,29 @@ async def generar_formato_individual(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         result = await service.generar_formato_individual(planeacion_id)
+        planeacion = None
+        try:
+            planeacion = await session.get(PlaneacionPedagogica, planeacion_id)
+        except Exception:
+            pass
+        proyecto_id = planeacion.proyecto_id if planeacion else None
+        referencia_id = await _resolve_referencia_id(session, proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="PlaneacionPedagogica",
+            entidad_id=planeacion_id,
+            accion="GPFI_F_134_INDIVIDUAL_GENERADO",
+            detalle={
+                "planeacion_id": str(planeacion_id),
+                "file_name": result.file_name,
+                "filas_generadas": result.filas_generadas,
+                "storage_key": result.storage_key,
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
     except (PlaneacionAccessError, ValueError) as error:
@@ -298,7 +427,39 @@ async def guardar_borrador(
     if not await scope_service.can_access_project(current_user, dto.proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
+        is_creation = dto.planeacion_id is None
         res = await service.guardar_borrador(dto)
+        referencia_id = await _resolve_referencia_id(session, dto.proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+
+        actividad_nombre = _extract_actividad_descripcion(dto.datos_complementarios)
+        if not actividad_nombre and dto.actividad_id:
+            try:
+                act = await session.get(ActividadProyecto, dto.actividad_id)
+                if act and act.descripcion:
+                    actividad_nombre = act.descripcion
+            except Exception:
+                pass
+
+        accion = "PLANEACION_CREADA" if is_creation else "PLANEACION_ACTUALIZADA"
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="PlaneacionPedagogica",
+            entidad_id=res.id,
+            accion=accion,
+            detalle={
+                "planeacion_id": str(res.id),
+                "proyecto_id": str(dto.proyecto_id),
+                "actividad_id": str(dto.actividad_id),
+                "descripcion_actividad": actividad_nombre,
+                "resultados_count": len(dto.resultados_ids),
+                "conocimientos_count": len(dto.conocimientos_ids),
+                "criterios_count": len(dto.criterios_ids),
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
     except PlaneacionAccessError as error:
@@ -338,6 +499,35 @@ async def confirmar_y_generar(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
         res = await service.confirmar_y_generar(planeacion_id)
+        referencia_id = await _resolve_referencia_id(session, res.proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+
+        actividad_nombre = _extract_actividad_descripcion(res.datos_complementarios)
+        if not actividad_nombre and res.actividad_id:
+            try:
+                act = await session.get(ActividadProyecto, res.actividad_id)
+                if act and act.descripcion:
+                    actividad_nombre = act.descripcion
+            except Exception:
+                pass
+
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="PlaneacionPedagogica",
+            entidad_id=res.id,
+            accion="PLANEACION_COMPLETADA",
+            detalle={
+                "planeacion_id": str(res.id),
+                "proyecto_id": str(res.proyecto_id),
+                "actividad_id": str(res.actividad_id) if res.actividad_id else None,
+                "descripcion_actividad": actividad_nombre,
+                "file_name": res.file_name,
+                "storage_key": res.storage_key,
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
     except PlaneacionAccessError as error:
@@ -375,7 +565,43 @@ async def eliminar_planeacion(
     if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
+        planeacion = None
+        try:
+            planeacion = await session.get(PlaneacionPedagogica, planeacion_id)
+        except Exception:
+            pass
+
+        proyecto_id = planeacion.proyecto_id if planeacion else None
+        referencia_id = await _resolve_referencia_id(session, proyecto_id)
+        actor_id = await _safe_actor_id(session, current_user)
+
+        actividad_nombre = ""
+        if planeacion:
+            actividad_nombre = _extract_actividad_descripcion(planeacion.datos_complementarios)
+            if not actividad_nombre and planeacion.actividad_id:
+                try:
+                    act = await session.get(ActividadProyecto, planeacion.actividad_id)
+                    if act and act.descripcion:
+                        actividad_nombre = act.descripcion
+                except Exception:
+                    pass
+
         await service.eliminar_planeacion(planeacion_id)
+
+        audit_repo = AuditRepository(session)
+        await audit_repo.add_event(
+            entidad="PlaneacionPedagogica",
+            entidad_id=planeacion_id,
+            accion="PLANEACION_ELIMINADA",
+            detalle={
+                "planeacion_id": str(planeacion_id),
+                "proyecto_id": str(proyecto_id) if proyecto_id else None,
+                "descripcion_actividad": actividad_nombre,
+            },
+            actor_usuario_id=actor_id,
+            referencia_id=referencia_id,
+        )
+        await _touch_proceso(session, referencia_id)
         await session.commit()
     except Exception as error:
         await session.rollback()

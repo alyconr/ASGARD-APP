@@ -28,6 +28,7 @@ from src.application.dto.programa_excel import (
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import (
     EstadoBloque,
+    EstadoScopeProceso,
     MotivoPendienteAsignacion,
     TipoConocimiento,
     TipoElementoCurricularPendiente,
@@ -578,6 +579,70 @@ class ProgramaExcelImportService:
             draft=draft,
             workbook=workbook,
         )
+
+        if hasattr(self._session, "execute"):
+            import inspect
+            from sqlalchemy import select
+            from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
+            try:
+                proc_stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+                proc_exec = self._session.execute(proc_stmt)
+                if inspect.isawaitable(proc_exec):
+                    proc_exec = await proc_exec
+                proc = proc_exec.scalar_one_or_none()
+                meta = draft.payload_json.get("meta") if isinstance(draft.payload_json, dict) else {}
+                raw_tid = meta.get("equipo_ejecutor_id") or meta.get("equipoId") or meta.get("equipoEjecutorId")
+                team_id = None
+                if raw_tid:
+                    try:
+                        team_id = uuid.UUID(str(raw_tid))
+                    except (ValueError, TypeError):
+                        pass
+
+                if isinstance(proc, ProcesoCurricular) or hasattr(proc, "programa_id"):
+                    proc.programa_id = import_result.programa_id
+                    if team_id and not getattr(proc, "equipo_ejecutor_id", None):
+                        proc.equipo_ejecutor_id = team_id
+                        proc.estado_scope = EstadoScopeProceso.ASIGNADO
+                elif proc is None and hasattr(self._session, "add"):
+                    new_proc = ProcesoCurricular(
+                        referencia_id=referencia_id,
+                        programa_id=import_result.programa_id,
+                        equipo_ejecutor_id=team_id,
+                        estado_scope=EstadoScopeProceso.ASIGNADO if team_id else EstadoScopeProceso.SIN_ASIGNAR,
+                    )
+                    self._session.add(new_proc)
+                    proc = new_proc
+
+                target_team_id = getattr(proc, "equipo_ejecutor_id", None) or team_id
+                if target_team_id and hasattr(self._session, "delete"):
+                    from sqlalchemy import or_
+                    cleanup_stmt = select(ProcesoCurricular).where(
+                        ProcesoCurricular.equipo_ejecutor_id == target_team_id,
+                        ProcesoCurricular.id != proc.id,
+                        or_(
+                            ProcesoCurricular.programa_id.is_(None),
+                            ProcesoCurricular.programa_id == import_result.programa_id,
+                        ),
+                    )
+                    clean_res = self._session.execute(cleanup_stmt)
+                    if inspect.isawaitable(clean_res):
+                        clean_res = await clean_res
+                    orphans = clean_res.scalars().all()
+                    for orphan in orphans:
+                        if orphan.referencia_id and hasattr(self._draft_repository, "delete"):
+                            try:
+                                del_draft = self._draft_repository.delete(orphan.referencia_id)
+                                if inspect.isawaitable(del_draft):
+                                    await del_draft
+                            except Exception:
+                                pass
+                        del_proc = self._session.delete(orphan)
+                        if inspect.isawaitable(del_proc):
+                            await del_proc
+            except Exception:
+                pass
         draft.paso_actual = "revision-programa"
         draft.payload_json = _merge_excel_import_into_payload(
             payload=draft.payload_json,

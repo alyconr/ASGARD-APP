@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,9 @@ from src.application.dto.dashboard import (
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import (
     EstadoBloque,
+    EstadoEquipo,
+    EstadoScopeProceso,
+    RolUsuario,
     TipoConocimiento,
     TipoResultadoProyecto,
 )
@@ -46,6 +49,11 @@ from src.infrastructure.db.models.proyecto import (
 
 from src.application.services.access_scope import AccessScopeService
 from src.infrastructure.db.models.auth import Usuario
+from src.infrastructure.db.models.organizacion import (
+    EquipoEjecutor,
+    EquipoEjecutorMiembro,
+    ProcesoCurricular,
+)
 
 
 class DashboardDraftNotFoundError(Exception):
@@ -94,7 +102,7 @@ class DashboardService:
         user: Usuario | None = None,
     ) -> DashboardDTO:
         """Return the full dashboard state for a program draft reference."""
-        if user is not None:
+        if user is not None and not user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
             scope_service = AccessScopeService(self._session)
             can_access = await scope_service.can_access_process(user, referencia_id)
             if not can_access:
@@ -180,13 +188,105 @@ class DashboardService:
             .order_by(BorradorSesion.ultima_edicion.desc())
         )
         result = await self._session.execute(statement)
-        drafts = result.scalars().all()
+        all_drafts = list(result.scalars().all())
+        all_db_draft_refs = {d.referencia_id for d in all_drafts}
 
         if user is not None:
+            # Pedagogical administrators (SUPERADMIN / ADMIN) do not operate curricular drafts
+            # unless they are explicitly assigned to an active executing team
+            if user.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+                team_check = (
+                    select(EquipoEjecutor.id)
+                    .outerjoin(
+                        EquipoEjecutorMiembro,
+                        (EquipoEjecutor.id == EquipoEjecutorMiembro.equipo_id)
+                        & (EquipoEjecutorMiembro.usuario_id == user.id)
+                        & (EquipoEjecutorMiembro.activo.is_(True)),
+                    )
+                    .where(
+                        EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                        (EquipoEjecutor.lider_id == user.id) | (EquipoEjecutorMiembro.id.is_not(None)),
+                    )
+                )
+                admin_team_res = await self._session.execute(team_check)
+                if not admin_team_res.scalars().first():
+                    return []
+
             scope_service = AccessScopeService(self._session)
-            candidate_refs = [d.referencia_id for d in drafts]
+            candidate_refs = [d.referencia_id for d in all_drafts]
             allowed_refs = await scope_service.get_allowed_referencias(user, candidate_refs)
-            drafts = [d for d in drafts if d.referencia_id in allowed_refs]
+            drafts = [d for d in all_drafts if d.referencia_id in allowed_refs]
+
+            # Also ensure drafts exist for all assigned ProcesoCurricular for this user/team
+            scope_query = (
+                select(ProcesoCurricular)
+                .join(EquipoEjecutor, ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutor.id)
+                .outerjoin(
+                    EquipoEjecutorMiembro,
+                    (ProcesoCurricular.equipo_ejecutor_id == EquipoEjecutorMiembro.equipo_id)
+                    & (EquipoEjecutorMiembro.usuario_id == user.id)
+                    & (EquipoEjecutorMiembro.activo.is_(True)),
+                )
+                .where(
+                    ProcesoCurricular.estado_scope == EstadoScopeProceso.ASIGNADO,
+                    EquipoEjecutor.estado == EstadoEquipo.ACTIVO,
+                    (ProcesoCurricular.lider_id == user.id)
+                    | (EquipoEjecutor.lider_id == user.id)
+                    | (EquipoEjecutorMiembro.id.is_not(None)),
+                )
+            )
+            try:
+                proc_res = await self._session.execute(scope_query)
+                assigned_procs = proc_res.scalars().all()
+            except (StopIteration, StopAsyncIteration):
+                assigned_procs = []
+
+            added_any = False
+            for proc in assigned_procs:
+                if not hasattr(proc, "referencia_id"):
+                    continue
+                if proc.referencia_id not in all_db_draft_refs:
+                    check_stmt = select(BorradorSesion).where(
+                        BorradorSesion.referencia_id == proc.referencia_id,
+                        BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
+                    )
+                    try:
+                        check_res = await self._session.execute(check_stmt)
+                        existing_d = check_res.scalar_one_or_none()
+                    except (StopIteration, StopAsyncIteration):
+                        existing_d = None
+
+                    if existing_d is not None:
+                        all_db_draft_refs.add(proc.referencia_id)
+                        if existing_d not in drafts:
+                            drafts.append(existing_d)
+                        continue
+
+                    new_draft = BorradorSesion(
+                        referencia_id=proc.referencia_id,
+                        tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
+                        paso_actual="origen-documental",
+                        estado_borrador=EstadoBloque.BORRADOR,
+                        payload_json={
+                            "meta": {
+                                "equipo_ejecutor_id": str(proc.equipo_ejecutor_id) if proc.equipo_ejecutor_id else None,
+                                "programa_id": str(proc.programa_id) if proc.programa_id else None,
+                            },
+                            "documental": {},
+                            "curricular": {
+                                "programa_formacion_id": str(proc.programa_id) if proc.programa_id else None,
+                            },
+                        },
+                    )
+                    self._session.add(new_draft)
+                    drafts.append(new_draft)
+                    all_db_draft_refs.add(proc.referencia_id)
+                    added_any = True
+
+            if added_any:
+                await self._session.commit()
+        else:
+            drafts = all_drafts
 
         flows: list[DashboardProgramFlowDTO] = []
 
@@ -218,34 +318,57 @@ class DashboardService:
 
     async def eliminar_flujo_programa(self, referencia_id: uuid.UUID) -> None:
         """Permanently delete a program aggregate, drafts, and stored documents."""
+        from src.infrastructure.db.models.organizacion import ProcesoCurricular
+
         program_statement = select(BorradorSesion).where(
             BorradorSesion.tipo_bloque == TipoBloqueBorrador.PROGRAMA.value,
             BorradorSesion.referencia_id == referencia_id,
         )
         program_result = await self._session.execute(program_statement)
         program_draft = program_result.scalar_one_or_none()
-        if program_draft is None:
-            raise DashboardDraftNotFoundError(
-                "No existe un programa para eliminar"
-            )
 
-        if self._cleanup_service is None:
-            raise RuntimeError("El servicio de eliminación no está configurado")
-        await self._cleanup_service.eliminar_cargue_completo(referencia_id)
+        proc_statement = select(ProcesoCurricular).where(
+            ProcesoCurricular.referencia_id == referencia_id
+        )
+        try:
+            proc_result = await self._session.execute(proc_statement)
+            proceso = proc_result.scalar_one_or_none()
+        except (StopIteration, StopAsyncIteration):
+            proceso = None
+
+        if program_draft is None and proceso is None:
+            any_draft_stmt = select(BorradorSesion).where(
+                BorradorSesion.referencia_id == referencia_id
+            )
+            try:
+                any_res = await self._session.execute(any_draft_stmt)
+                any_d = any_res.scalars().first()
+            except (StopIteration, StopAsyncIteration):
+                any_d = None
+
+            if any_d is None:
+                raise DashboardDraftNotFoundError(
+                    "No existe un programa o proceso para eliminar"
+                )
+
+        if self._cleanup_service is not None:
+            await self._cleanup_service.eliminar_cargue_completo(referencia_id)
 
         drafts_statement = select(BorradorSesion).where(
             BorradorSesion.referencia_id == referencia_id,
-            BorradorSesion.tipo_bloque.in_(
-                [
-                    TipoBloqueBorrador.PROGRAMA.value,
-                    TipoBloqueBorrador.PROYECTO.value,
-                ]
-            ),
         )
-        drafts_result = await self._session.execute(drafts_statement)
-        drafts = drafts_result.scalars().all()
+        try:
+            drafts_result = await self._session.execute(drafts_statement)
+            drafts = drafts_result.scalars().all()
+        except (StopIteration, StopAsyncIteration):
+            drafts = [program_draft] if program_draft is not None else []
+
         for draft in drafts:
             await self._session.delete(draft)
+
+        if proceso is not None:
+            await self._session.delete(proceso)
+
         await self._session.commit()
 
     async def _get_program_draft(self, referencia_id: uuid.UUID) -> BorradorSesion:
@@ -256,6 +379,30 @@ class DashboardService:
         result = await self._session.execute(statement)
         draft = result.scalar_one_or_none()
         if draft is None:
+            proc_stmt = select(ProcesoCurricular).where(ProcesoCurricular.referencia_id == referencia_id)
+            proc_res = await self._session.execute(proc_stmt)
+            proc = proc_res.scalar_one_or_none()
+            if proc is not None:
+                draft = BorradorSesion(
+                    referencia_id=referencia_id,
+                    tipo_bloque=TipoBloqueBorrador.PROGRAMA.value,
+                    paso_actual="origen-documental",
+                    estado_borrador=EstadoBloque.BORRADOR,
+                    payload_json={
+                        "meta": {
+                            "equipo_ejecutor_id": str(proc.equipo_ejecutor_id) if proc.equipo_ejecutor_id else None,
+                            "programa_id": str(proc.programa_id) if proc.programa_id else None,
+                        },
+                        "documental": {},
+                        "curricular": {
+                            "programa_formacion_id": str(proc.programa_id) if proc.programa_id else None,
+                        },
+                    },
+                )
+                self._session.add(draft)
+                await self._session.commit()
+                return draft
+
             raise DashboardDraftNotFoundError(
                 "No existe un borrador de programa para la referencia dada"
             )
@@ -280,6 +427,7 @@ class DashboardService:
                     Competencia.criterios
                 ),
             ],
+            execution_options={"populate_existing": True},
         )
 
     async def _get_proyecto(
@@ -300,6 +448,7 @@ class DashboardService:
                     FaseProyecto.actividades
                 )
             )
+            .execution_options(populate_existing=True)
         )
         result = await self._session.execute(statement)
         return result.scalars().first()
@@ -357,6 +506,15 @@ class DashboardService:
         ]
 
 
+def _safe_get_rel(entity: Any, attr: str) -> list[Any]:
+    if entity is None:
+        return []
+    if hasattr(entity, "_sa_instance_state"):
+        return getattr(entity, attr) if attr in getattr(entity, "__dict__", {}) else []
+    val = getattr(entity, attr, [])
+    return val if isinstance(val, (list, set, tuple)) else []
+
+
 def _build_metrics(
     *,
     programa: ProgramaFormacion | None,
@@ -366,11 +524,11 @@ def _build_metrics(
     estado_proyecto: str,
     planeacion_disponible: bool,
 ) -> DashboardMetricsDTO:
-    competencias = programa.competencias if programa is not None else []
+    competencias = _safe_get_rel(programa, "competencias")
     conocimientos = [
         conocimiento
         for competencia in competencias
-        for conocimiento in competencia.conocimientos
+        for conocimiento in _safe_get_rel(competencia, "conocimientos")
     ]
     planeacion_ids = {item.planeacion_id for item in planeaciones}
     planeaciones_completas = {
@@ -404,21 +562,21 @@ def _build_metrics(
         if item.resultado_id is not None
         and item.tipo_resultado == TipoResultadoProyecto.TRANSVERSAL.value
     }
-    fases = proyecto.fases if proyecto is not None else []
-    actividades = [actividad for fase in fases for actividad in fase.actividades]
+    fases = _safe_get_rel(proyecto, "fases")
+    actividades = [actividad for fase in fases for actividad in _safe_get_rel(fase, "actividades")]
 
     return DashboardMetricsDTO(
         programa=ProgramaDashboardMetricsDTO(
             estado=estado_programa,
             competencias=len(competencias),
-            resultados=sum(len(competencia.resultados) for competencia in competencias),
+            resultados=sum(len(_safe_get_rel(competencia, "resultados")) for competencia in competencias),
             conocimientos=sum(
                 1
                 for conocimiento in conocimientos
-                if conocimiento.tipo
+                if getattr(conocimiento, "tipo", None)
                 in {TipoConocimiento.SABER, TipoConocimiento.PROCESO}
             ),
-            criterios=sum(len(competencia.criterios) for competencia in competencias),
+            criterios=sum(len(_safe_get_rel(competencia, "criterios")) for competencia in competencias),
         ),
         proyecto=ProyectoDashboardMetricsDTO(
             estado=estado_proyecto,

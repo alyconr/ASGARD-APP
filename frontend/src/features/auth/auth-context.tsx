@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AuthState, User } from "./types";
-import { authFetch, getApiBaseUrl, setAuthInvalidationHandler, setAuthToken } from "@/lib/api";
+import { authFetch, getApiBaseUrl, refreshSessionSingleFlight, setAuthInvalidationHandler, setAuthToken } from "@/lib/api";
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User>;
@@ -37,22 +37,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }, []);
 
   useEffect(() => {
-    // Attempt silent refresh using HttpOnly cookie on mount
-    fetch(`${getApiBaseUrl()}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
+    // Attempt silent refresh using shared single-flight exchange on mount
+    refreshSessionSingleFlight()
+      .then((sessionData) => {
+        if (!sessionData) {
           throw new Error("No active session");
         }
-        const data = await res.json();
-        setAuthToken(data.access_token);
         setState({
-          user: data.user,
-          token: data.access_token,
+          user: sessionData.user,
+          token: sessionData.accessToken,
           isLoading: false,
           isAuthenticated: true,
         });

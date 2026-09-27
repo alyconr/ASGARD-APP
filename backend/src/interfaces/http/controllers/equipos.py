@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from src.application.services.access_scope import AccessScopeService
 from src.application.services.organization_admin import OrganizationAdminService
+from src.application.services.proceso_historial import ProcesoHistorialService
 from src.application.services.team_admin import TeamAdminService, _map_proceso_dto
 from src.domain.shared.enums import EstadoScopeProceso, RolUsuario
 from src.infrastructure.db.models.auth import Usuario
@@ -38,7 +39,11 @@ from src.interfaces.http.schemas.organizacion import (
     ProgramaAutorizadoCreate,
     ProgramaAutorizadoResponse,
     ProcesoAsignarRequest,
+    ProcesoCambioActorSchema,
+    ProcesoCambioItemSchema,
     ProcesoCurricularResponse,
+    ProcesoHistorialResponse,
+    RegistrarCambioProcesoRequest,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["organizacion"])
@@ -239,6 +244,16 @@ async def list_equipos(
     )
 
 
+@router.get("/equipos/mis-equipos", response_model=list[MiEquipoResponse])
+async def list_mis_equipos(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> list[MiEquipoResponse]:
+    """List all executing teams that the current authenticated user belongs to."""
+    service = TeamAdminService(session)
+    return await service.list_my_teams(current_user)
+
+
 @router.get("/equipos/{equipo_id}", response_model=EquipoEjecutorResponse)
 async def get_equipo(
     equipo_id: uuid.UUID,
@@ -409,14 +424,6 @@ async def list_procesos_sin_asignar(
 # ==========================================
 
 
-@router.get("/equipos/mis-equipos", response_model=list[MiEquipoResponse])
-async def list_mis_equipos(
-    session: Annotated[AsyncSession, Depends(get_async_session)],
-    current_user: Annotated[Usuario, Depends(get_current_user)],
-) -> list[MiEquipoResponse]:
-    """List all executing teams that the current authenticated user belongs to."""
-    service = TeamAdminService(session)
-    return await service.list_my_teams(current_user)
 
 
 @router.post(
@@ -438,6 +445,12 @@ async def iniciar_proceso(
     """Start a new curricular process strictly scoped to the specified executing team and program."""
     if equipo_id is not None:
         payload.equipo_ejecutor_id = equipo_id
+    if payload.equipo_ejecutor_id is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="equipo_ejecutor_id es requerido",
+        )
     service = TeamAdminService(session)
     return await service.iniciar_proceso_curricular(current_user, payload)
 
@@ -524,4 +537,92 @@ async def check_proceso_access(
     """Check that current user has operational access to the process."""
     proceso = await scope_service.require_process_access(current_user, referencia_id)
     return _map_proceso_dto(proceso)
+
+
+@router.get("/procesos/{referencia_id}/historial", response_model=ProcesoHistorialResponse)
+async def get_proceso_historial(
+    referencia_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    scope_service: Annotated[AccessScopeService, Depends(get_access_scope_service)],
+) -> ProcesoHistorialResponse:
+    """Retrieve full change history and consolidated lifecycle state for a unique curricular process."""
+    service = ProcesoHistorialService(session, scope_service=scope_service)
+    dto = await service.obtener_historial(actor=current_user, referencia_id=referencia_id)
+    return ProcesoHistorialResponse(
+        proceso_id=dto.proceso_id,
+        referencia_id=dto.referencia_id,
+        estado_scope=dto.estado_scope,
+        tipo_necesidad=dto.tipo_necesidad,
+        equipo=dto.equipo,
+        programa=dto.programa,
+        proyecto=dto.proyecto,
+        planeaciones=dto.planeaciones,
+        fecha_creacion=dto.fecha_creacion,
+        fecha_ultima_modificacion=dto.fecha_ultima_modificacion,
+        total_cambios=dto.total_cambios,
+        cambios=[
+            ProcesoCambioItemSchema(
+                id=c.id,
+                fecha_evento=c.fecha_evento,
+                accion=c.accion,
+                tipo_evento=c.tipo_evento,
+                descripcion=c.descripcion,
+                actor=ProcesoCambioActorSchema(
+                    id=c.actor.id,
+                    nombre=c.actor.nombre,
+                    apellido=c.actor.apellido,
+                    email=c.actor.email,
+                    rol=c.actor.rol,
+                ) if c.actor else None,
+                entidad=c.entidad,
+                entidad_id=c.entidad_id,
+                detalle=c.detalle,
+            )
+            for c in dto.cambios
+        ],
+        garantia_unicidad=dto.garantia_unicidad,
+        mensaje_unicidad=dto.mensaje_unicidad,
+    )
+
+
+@router.post(
+    "/procesos/{referencia_id}/cambios",
+    response_model=ProcesoCambioItemSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def registrar_cambio_proceso(
+    referencia_id: uuid.UUID,
+    payload: RegistrarCambioProcesoRequest,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+    scope_service: Annotated[AccessScopeService, Depends(get_access_scope_service)],
+) -> ProcesoCambioItemSchema:
+    """Register an operational change note or event strictly on the existing process."""
+    service = ProcesoHistorialService(session, scope_service=scope_service)
+    item = await service.registrar_cambio(
+        actor=current_user,
+        referencia_id=referencia_id,
+        accion=payload.accion,
+        descripcion=payload.descripcion,
+        detalle=payload.detalle,
+    )
+    return ProcesoCambioItemSchema(
+        id=item.id,
+        fecha_evento=item.fecha_evento,
+        accion=item.accion,
+        tipo_evento=item.tipo_evento,
+        descripcion=item.descripcion,
+        actor=ProcesoCambioActorSchema(
+            id=item.actor.id,
+            nombre=item.actor.nombre,
+            apellido=item.actor.apellido,
+            email=item.actor.email,
+            rol=item.actor.rol,
+        ) if item.actor else None,
+        entidad=item.entidad,
+        entidad_id=item.entidad_id,
+        detalle=item.detalle,
+    )
+
 
