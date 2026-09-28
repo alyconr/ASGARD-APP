@@ -61,4 +61,13 @@ describe("RevisionPlanningViewer", () => {
     fireEvent.click(section!.querySelector("button")!);
     expect(onAddObservation).toHaveBeenCalledWith("ESTRATEGIAS_DIDACTICAS");
   });
+
+  it("returns to the planning tree from the end of the review", () => {
+    const onBack = vi.fn();
+    render(<RevisionPlanningViewer detail={detail} loading={false} error={null} onBack={onBack} onRetry={vi.fn()} onAddObservation={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar revisión y volver al árbol" }));
+
+    expect(onBack).toHaveBeenCalledOnce();
+  });
 });

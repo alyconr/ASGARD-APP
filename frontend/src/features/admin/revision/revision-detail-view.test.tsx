@@ -118,6 +118,9 @@ describe("RevisionDetailView", () => {
     }));
     expect(await screen.findByText("Aclarar la estrategia")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Finalizar revisión y volver al árbol" }));
+    expect(screen.getByRole("button", { name: "Revisar planeación" })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /Observaciones & Ajustes/i }));
     expect(screen.getByText("Aclarar la estrategia")).toBeInTheDocument();
   });

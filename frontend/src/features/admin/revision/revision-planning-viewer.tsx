@@ -162,6 +162,23 @@ export function RevisionPlanningViewer({
           <span className="text-slate-500">Comentarios transversales sobre la planeación.</span>
         </RevisionSection>
       )}
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900 dark:bg-emerald-950/20">
+        <div>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">¿Terminaste de revisar esta planeación?</p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+            Regresa al árbol para continuar con las demás planeaciones de la entrega.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Finalizar revisión y volver al árbol
+        </button>
+      </div>
     </div>
   );
 }
