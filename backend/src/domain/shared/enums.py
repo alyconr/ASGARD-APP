@@ -154,3 +154,21 @@ class EstadoObservacionRevision(str, Enum):
     RESUELTO = "RESUELTO"
 
 
+class SeccionObservacionPlaneacion(str, Enum):
+    """Catalog of valid planning sections for targeted pedagogical observations."""
+
+    GENERAL = "GENERAL"
+    FASE = "FASE"
+    ACTIVIDAD_PROYECTO = "ACTIVIDAD_PROYECTO"
+    COMPETENCIA = "COMPETENCIA"
+    RAPS = "RAPS"
+    ACTIVIDADES_APRENDIZAJE = "ACTIVIDADES_APRENDIZAJE"
+    SABERES = "SABERES"
+    CRITERIOS_EVALUACION = "CRITERIOS_EVALUACION"
+    ESTRATEGIAS_DIDACTICAS = "ESTRATEGIAS_DIDACTICAS"
+    AMBIENTES = "AMBIENTES"
+    MATERIALES = "MATERIALES"
+    INSTRUCTORES = "INSTRUCTORES"
+    HORAS = "HORAS"
+
+

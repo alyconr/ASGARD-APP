@@ -9,21 +9,31 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.application.dto.revision_curricular import (
+    ActividadProyectoResumenDTO,
     AjusteReportarDTO,
     AprobacionRequestDTO,
     BandejaRevisionFiltrosDTO,
     BandejaRevisionPaginadaDTO,
+    CompetenciaResumenDTO,
+    ConocimientoResumenDTO,
+    CriterioResumenDTO,
     EntregaRevisionDetalleDTO,
     EntregaRevisionResumenDTO,
     EnvioRevisionRequestDTO,
+    FaseResumenDTO,
+    HorasPlaneacionDTO,
     ObservacionCreateDTO,
     ObservacionDTO,
+    PlaneacionRevisionDetalleDTO,
+    PlaneacionRevisionItemDTO,
+    PlaneacionesEntregaListDTO,
     PreflightEnvioRevisionDTO,
+    RAPResumenDTO,
 )
 from src.application.services.access_scope import AccessScopeService
 from src.domain.shared.enums import (
@@ -31,16 +41,15 @@ from src.domain.shared.enums import (
     EstadoEntregaRevision,
     EstadoEquipo,
     EstadoObservacionRevision,
-    EstadoScopeProceso,
     RolUsuario,
+    SeccionObservacionPlaneacion,
     TipoElementoObservacion,
 )
 from src.infrastructure.db.models.audit import EventoAuditoria
 from src.infrastructure.db.models.auth import Usuario
-from src.infrastructure.db.models.curriculum import ProgramaFormacion
+from src.infrastructure.db.models.curriculum import ResultadoAprendizaje
 from src.infrastructure.db.models.organizacion import (
     EquipoEjecutor,
-    EquipoEjecutorMiembro,
     ProcesoCurricular,
 )
 from src.infrastructure.db.models.planeacion import (
@@ -50,7 +59,6 @@ from src.infrastructure.db.models.planeacion import (
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
     FaseProyecto,
-    ProyectoFormativo,
 )
 from src.infrastructure.db.models.revision_curricular import (
     EntregaRevisionCurricular,
@@ -458,6 +466,432 @@ class RevisionCurricularService:
 
         return await self.obtener_detalle_entrega(actor, entrega.id)
 
+    @staticmethod
+    def _normalize_section_key(key: str | None) -> str | None:
+        if not key:
+            return None
+        cleaned = (
+            key.strip()
+            .upper()
+            .replace("Á", "A")
+            .replace("É", "E")
+            .replace("Í", "I")
+            .replace("Ó", "O")
+            .replace("Ú", "U")
+            .replace(" ", "_")
+            .replace("-", "_")
+        )
+        aliases = {
+            "ACTIVIDADES_DE_APRENDIZAJE": "ACTIVIDADES_APRENDIZAJE",
+            "CRITERIOS_DE_EVALUACION": "CRITERIOS_EVALUACION",
+            "ACTIVIDAD": "ACTIVIDAD_PROYECTO",
+            "RESULTADOS": "RAPS",
+            "RESULTADOS_APRENDIZAJE": "RAPS",
+            "RESULTADOS_DE_APRENDIZAJE": "RAPS",
+            "CONOCIMIENTOS": "SABERES",
+            "CONOCIMIENTOS_SABER": "SABERES",
+            "CONOCIMIENTOS_PROCESO": "SABERES",
+            "CRITERIOS": "CRITERIOS_EVALUACION",
+            "ESTRATEGIAS": "ESTRATEGIAS_DIDACTICAS",
+            "AMBIENTE": "AMBIENTES",
+            "MATERIAL": "MATERIALES",
+            "INSTRUCTOR": "INSTRUCTORES",
+            "HORA": "HORAS",
+            "DURACION": "HORAS",
+        }
+        cleaned = aliases.get(cleaned, cleaned)
+        if cleaned in {s.value for s in SeccionObservacionPlaneacion}:
+            return cleaned
+        return None
+
+    @staticmethod
+    def _parse_float(val: Any) -> float:
+        if val is None or val == "":
+            return 0.0
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return 0.0
+
+    async def obtener_planeaciones_entrega(
+        self,
+        actor: Usuario,
+        entrega_id: UUID,
+    ) -> PlaneacionesEntregaListDTO:
+        """Fetch read-only list of plannings that belong exclusively to this delivery snapshot."""
+        self._require_pedagogical_reviewer(actor)
+
+        stmt = (
+            select(EntregaRevisionCurricular)
+            .where(EntregaRevisionCurricular.id == entrega_id)
+            .options(selectinload(EntregaRevisionCurricular.observaciones))
+        )
+        res = await self.session.execute(stmt)
+        entrega = res.scalar_one_or_none()
+        if not entrega:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrega no encontrada.")
+
+        snapshot = entrega.snapshot_metadatos or {}
+        raw_ids = snapshot.get("planeaciones_ids", [])
+        if not raw_ids:
+            if int(snapshot.get("planeaciones_count") or 0) > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El snapshot declara planeaciones, pero no contiene sus identificadores.",
+                )
+            return PlaneacionesEntregaListDTO(
+                entrega_id=entrega.id,
+                version=entrega.version,
+                total=0,
+                horas_directas_total=0.0,
+                horas_independientes_total=0.0,
+                planeaciones=[],
+            )
+
+        valid_ids: list[UUID] = []
+        for item in raw_ids:
+            try:
+                valid_ids.append(UUID(str(item)))
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El snapshot contiene un identificador de planeación inválido.",
+                ) from None
+
+        # Query only the frozen planning IDs belonging to this project
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(
+                PlaneacionPedagogica.id.in_(valid_ids),
+                PlaneacionPedagogica.proyecto_id == entrega.proyecto_id,
+            )
+            .options(
+                selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlaneacionPedagogica.actividad),
+                selectinload(PlaneacionPedagogica.resultados).selectinload(ResultadoAprendizaje.competencia),
+            )
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        plans = list(plan_res.scalars().all())
+        if len(plans) != len(set(valid_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No fue posible resolver todas las planeaciones congeladas en la entrega.",
+            )
+
+        obs_total_map: dict[UUID, int] = {}
+        obs_pending_map: dict[UUID, int] = {}
+        for o in (entrega.observaciones or []):
+            if o.target_type == TipoElementoObservacion.PLANEACION and o.target_id:
+                obs_total_map[o.target_id] = obs_total_map.get(o.target_id, 0) + 1
+                if o.estado == EstadoObservacionRevision.PENDIENTE:
+                    obs_pending_map[o.target_id] = obs_pending_map.get(o.target_id, 0) + 1
+
+        items: list[PlaneacionRevisionItemDTO] = []
+        total_directas = 0.0
+        total_independientes = 0.0
+
+        for p in plans:
+            data = p.datos_complementarios or {}
+            h_direct = self._parse_float(data.get("horas_trabajo_directo"))
+            h_indep = self._parse_float(data.get("horas_trabajo_independiente"))
+            h_total = self._parse_float(data.get("duracion_actividad_horas") or data.get("duracion_horas")) or (h_direct + h_indep)
+
+            total_directas += h_direct
+            total_independientes += h_indep
+
+            comp_map: dict[UUID, CompetenciaResumenDTO] = {}
+            all_raps: list[RAPResumenDTO] = []
+            for r in p.resultados:
+                comp = getattr(r, "competencia", None)
+                if comp is None:
+                    continue
+                comp_id = comp.id
+                comp_cod = comp.codigo_competencia if comp else "N/A"
+                comp_nom = comp.nombre_competencia if comp else "Competencia"
+
+                rap_dto = RAPResumenDTO(
+                    id=r.id,
+                    codigo=r.codigo_resultado,
+                    descripcion=r.descripcion,
+                    tipo_resultado=None,
+                )
+                all_raps.append(rap_dto)
+
+                if comp_id not in comp_map:
+                    comp_map[comp_id] = CompetenciaResumenDTO(
+                        id=comp_id,
+                        codigo=comp_cod,
+                        nombre=comp_nom,
+                        resultados_count=0,
+                        resultados=[],
+                    )
+                comp_map[comp_id].resultados.append(rap_dto)
+                comp_map[comp_id].resultados_count += 1
+
+            actividades_text = str(data.get("actividades_aprendizaje") or "").strip()
+            if not actividades_text and p.actividad:
+                actividades_text = p.actividad.descripcion
+
+            ambiente_text = str(
+                data.get("ambiente")
+                or data.get("ambientes_aprendizaje")
+                or (", ".join(data.get("ambientes_tipificados", [])) if isinstance(data.get("ambientes_tipificados"), list) else data.get("ambientes_tipificados"))
+                or ""
+            ).strip() or None
+
+            instructores_text = str(
+                data.get("instructores")
+                or data.get("instructor_responsable")
+                or ""
+            ).strip() or None
+
+            item_dto = PlaneacionRevisionItemDTO(
+                id=p.id,
+                estado=p.estado.value if hasattr(p.estado, "value") else str(p.estado),
+                fase=FaseResumenDTO(
+                    id=p.fase.id if p.fase else None,
+                    nombre=p.fase.nombre_fase if p.fase else "Fase",
+                    orden=p.fase.orden if p.fase else None,
+                ),
+                actividad_proyecto=ActividadProyectoResumenDTO(
+                    id=p.actividad.id if p.actividad else None,
+                    descripcion=p.actividad.descripcion if p.actividad else "Actividad de Proyecto",
+                    orden=p.actividad.orden if p.actividad else None,
+                ),
+                competencias=list(comp_map.values()),
+                raps=all_raps,
+                actividades_aprendizaje=actividades_text,
+                horas=HorasPlaneacionDTO(
+                    directas=h_direct,
+                    independientes=h_indep,
+                    total=h_total,
+                ),
+                ambiente=ambiente_text,
+                instructores=instructores_text,
+                observaciones_count=obs_total_map.get(p.id, 0),
+                observaciones_pendientes_count=obs_pending_map.get(p.id, 0),
+            )
+            items.append(item_dto)
+
+        # Deterministic sort
+        items.sort(
+            key=lambda x: (
+                x.fase.orden if x.fase.orden is not None else 9999,
+                x.fase.nombre,
+                x.actividad_proyecto.orden if x.actividad_proyecto.orden is not None else 9999,
+                x.actividad_proyecto.descripcion,
+                str(x.id),
+            )
+        )
+
+        return PlaneacionesEntregaListDTO(
+            entrega_id=entrega.id,
+            version=entrega.version,
+            total=len(items),
+            horas_directas_total=round(total_directas, 2),
+            horas_independientes_total=round(total_independientes, 2),
+            planeaciones=items,
+        )
+
+    async def obtener_planeacion_detalle_entrega(
+        self,
+        actor: Usuario,
+        entrega_id: UUID,
+        planeacion_id: UUID,
+    ) -> PlaneacionRevisionDetalleDTO:
+        """Fetch comprehensive read-only detail of one planning frozen in this delivery."""
+        self._require_pedagogical_reviewer(actor)
+
+        stmt = select(EntregaRevisionCurricular).where(EntregaRevisionCurricular.id == entrega_id)
+        res = await self.session.execute(stmt)
+        entrega = res.scalar_one_or_none()
+        if not entrega:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrega no encontrada.")
+
+        # Whitelist anti-IDOR check
+        snapshot = entrega.snapshot_metadatos or {}
+        raw_ids = snapshot.get("planeaciones_ids", [])
+        allowed_ids = {str(item) for item in raw_ids}
+        if str(planeacion_id) not in allowed_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="La planeación pedagógica no pertenece a esta entrega de revisión.",
+            )
+
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(
+                PlaneacionPedagogica.id == planeacion_id,
+                PlaneacionPedagogica.proyecto_id == entrega.proyecto_id,
+            )
+            .options(
+                selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlaneacionPedagogica.actividad),
+                selectinload(PlaneacionPedagogica.resultados).selectinload(ResultadoAprendizaje.competencia),
+                selectinload(PlaneacionPedagogica.conocimientos),
+                selectinload(PlaneacionPedagogica.criterios),
+            )
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        p = plan_res.scalar_one_or_none()
+        if not p:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Planeación pedagógica no encontrada.",
+            )
+
+        # Query all observations on this planning for this delivery
+        obs_stmt = (
+            select(ObservacionRevision)
+            .where(
+                ObservacionRevision.entrega_id == entrega.id,
+                ObservacionRevision.target_type == TipoElementoObservacion.PLANEACION,
+                ObservacionRevision.target_id == p.id,
+            )
+            .options(
+                selectinload(ObservacionRevision.creado_por),
+                selectinload(ObservacionRevision.ajuste_reportado_por),
+                selectinload(ObservacionRevision.resuelto_por),
+            )
+            .order_by(ObservacionRevision.fecha_creacion.asc())
+        )
+        obs_res = await self.session.execute(obs_stmt)
+        obs_entities = obs_res.scalars().all()
+        obs_dtos = [
+            ObservacionDTO(
+                id=o.id,
+                entrega_id=o.entrega_id,
+                target_type=o.target_type,
+                target_id=o.target_id,
+                section_key=o.section_key,
+                comentario=o.comentario,
+                estado=o.estado,
+                creado_por_id=o.creado_por_id,
+                creado_por_nombre=f"{o.creado_por.nombre} {o.creado_por.apellido}" if o.creado_por else "Usuario",
+                fecha_creacion=o.fecha_creacion,
+                ajuste_reportado_por_id=o.ajuste_reportado_por_id,
+                ajuste_reportado_por_nombre=f"{o.ajuste_reportado_por.nombre} {o.ajuste_reportado_por.apellido}" if o.ajuste_reportado_por else None,
+                fecha_ajuste_reportado=o.fecha_ajuste_reportado,
+                comentario_ajuste=o.comentario_ajuste,
+                resuelto_por_id=o.resuelto_por_id,
+                resuelto_por_nombre=f"{o.resuelto_por.nombre} {o.resuelto_por.apellido}" if o.resuelto_por else None,
+                fecha_resolucion=o.fecha_resolucion,
+            )
+            for o in obs_entities
+        ]
+
+        data = p.datos_complementarios or {}
+        h_direct = self._parse_float(data.get("horas_trabajo_directo"))
+        h_indep = self._parse_float(data.get("horas_trabajo_independiente"))
+        h_total = self._parse_float(data.get("duracion_actividad_horas") or data.get("duracion_horas")) or (h_direct + h_indep)
+
+        comp_map: dict[UUID, CompetenciaResumenDTO] = {}
+        for r in p.resultados:
+            comp = getattr(r, "competencia", None)
+            if comp is None:
+                continue
+            comp_id = comp.id
+            comp_cod = comp.codigo_competencia if comp else "N/A"
+            comp_nom = comp.nombre_competencia if comp else "Competencia"
+
+            rap_dto = RAPResumenDTO(
+                id=r.id,
+                codigo=r.codigo_resultado,
+                descripcion=r.descripcion,
+                tipo_resultado=None,
+            )
+            if comp_id not in comp_map:
+                comp_map[comp_id] = CompetenciaResumenDTO(
+                    id=comp_id,
+                    codigo=comp_cod,
+                    nombre=comp_nom,
+                    resultados_count=0,
+                    resultados=[],
+                )
+            comp_map[comp_id].resultados.append(rap_dto)
+            comp_map[comp_id].resultados_count += 1
+
+        conocimientos_saber: list[ConocimientoResumenDTO] = []
+        conocimientos_proceso: list[ConocimientoResumenDTO] = []
+        for k in p.conocimientos:
+            tipo_str = str(getattr(k.tipo, "value", k.tipo) if hasattr(k, "tipo") else "SABER").upper()
+            dto_k = ConocimientoResumenDTO(id=k.id, tipo=tipo_str, descripcion=k.descripcion)
+            if "SABER" in tipo_str:
+                conocimientos_saber.append(dto_k)
+            else:
+                conocimientos_proceso.append(dto_k)
+
+        criterios_eval: list[CriterioResumenDTO] = [
+            CriterioResumenDTO(
+                id=cr.id,
+                codigo=getattr(cr, "codigo", None),
+                descripcion=cr.descripcion,
+            )
+            for cr in p.criterios
+        ]
+
+        actividades_text = str(data.get("actividades_aprendizaje") or "").strip()
+        if not actividades_text and p.actividad:
+            actividades_text = p.actividad.descripcion
+
+        ambientes_text = str(
+            data.get("ambiente")
+            or data.get("ambientes_aprendizaje")
+            or (", ".join(data.get("ambientes_tipificados", [])) if isinstance(data.get("ambientes_tipificados"), list) else data.get("ambientes_tipificados"))
+            or ""
+        ).strip()
+
+        materiales_text = str(
+            data.get("materiales_formacion")
+            or data.get("recursos_didacticos")
+            or ""
+        ).strip()
+
+        instructores_text = str(
+            data.get("instructores")
+            or data.get("instructor_responsable")
+            or ""
+        ).strip()
+
+        estrategias_text = str(data.get("estrategias_didacticas") or "").strip()
+        evidencia_text = str(data.get("descripcion_evidencia_aprendizaje") or "").strip()
+        observaciones_didacticas = str(data.get("observaciones") or "").strip() or None
+
+        return PlaneacionRevisionDetalleDTO(
+            id=p.id,
+            entrega_id=entrega.id,
+            version_entrega=entrega.version,
+            estado=p.estado.value if hasattr(p.estado, "value") else str(p.estado),
+            fase=FaseResumenDTO(
+                id=p.fase.id if p.fase else None,
+                nombre=p.fase.nombre_fase if p.fase else "Fase",
+                orden=p.fase.orden if p.fase else None,
+            ),
+            actividad_proyecto=ActividadProyectoResumenDTO(
+                id=p.actividad.id if p.actividad else None,
+                descripcion=p.actividad.descripcion if p.actividad else "Actividad de Proyecto",
+                orden=p.actividad.orden if p.actividad else None,
+            ),
+            competencias=list(comp_map.values()),
+            conocimientos_saber=conocimientos_saber,
+            conocimientos_proceso=conocimientos_proceso,
+            criterios_evaluacion=criterios_eval,
+            actividades_aprendizaje=actividades_text,
+            descripcion_evidencia=evidencia_text,
+            estrategias_didacticas=estrategias_text,
+            ambientes=ambientes_text,
+            materiales=materiales_text,
+            instructores=instructores_text,
+            horas=HorasPlaneacionDTO(
+                directas=h_direct,
+                independientes=h_indep,
+                total=h_total,
+            ),
+            observaciones_didacticas=observaciones_didacticas,
+            observaciones=obs_dtos,
+        )
+
     # -------------------------------------------------------------------------
     # Observations & Feedback
     # -------------------------------------------------------------------------
@@ -479,6 +913,43 @@ class RevisionCurricularService:
 
         if entrega.estado == EstadoEntregaRevision.APROBADO:
             raise HTTPException(status_code=400, detail="No se pueden agregar observaciones a una entrega ya aprobada.")
+
+        # Validate planning targets against delivery whitelist and known section catalog
+        if dto.target_type == TipoElementoObservacion.PLANEACION:
+            if dto.target_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="La observación de planeación requiere target_id.",
+                )
+
+            allowed_ids = {
+                str(item)
+                for item in (entrega.snapshot_metadatos or {}).get("planeaciones_ids", [])
+            }
+            if str(dto.target_id) not in allowed_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="La planeación indicada no pertenece a esta entrega de revisión.",
+                )
+
+            normalized = self._normalize_section_key(dto.section_key or "GENERAL")
+            if not normalized:
+                valid_sections = {s.value for s in SeccionObservacionPlaneacion}
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Sección de planeación inválida '{dto.section_key}'. Secciones válidas: {', '.join(sorted(valid_sections))}",
+                )
+            dto.section_key = normalized
+
+            planning_exists_stmt = select(PlaneacionPedagogica.id).where(
+                PlaneacionPedagogica.id == dto.target_id,
+                PlaneacionPedagogica.proyecto_id == entrega.proyecto_id,
+            )
+            if (await self.session.execute(planning_exists_stmt)).scalar_one_or_none() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="La planeación indicada no pertenece al proyecto de esta entrega.",
+                )
 
         # Ensure delivery is in review
         if entrega.estado in (EstadoEntregaRevision.ENVIADO_REVISION, EstadoEntregaRevision.REENVIADO):
@@ -841,6 +1312,18 @@ class RevisionCurricularService:
         )
         config_res = await self.session.execute(config_stmt)
         doc_config = config_res.scalar_one_or_none()
+        config_dict = None
+        if doc_config:
+            config_dict = {
+                "fecha_elaboracion": doc_config.fecha_elaboracion.isoformat() if doc_config.fecha_elaboracion else None,
+                "clasificacion_informacion": doc_config.clasificacion_informacion,
+                "regional": doc_config.regional,
+                "centro_formacion": doc_config.centro_formacion,
+                "equipo_gestion_curricular": list(doc_config.equipo_gestion_curricular or []),
+                "storage_key": doc_config.storage_key,
+                "checksum_sha256": doc_config.checksum_sha256,
+                "version": doc_config.version,
+            }
 
         return {
             "planeaciones_count": len(plans),
@@ -848,6 +1331,7 @@ class RevisionCurricularService:
             "checksum_consolidado": doc_config.checksum_sha256 if doc_config else None,
             "storage_key_consolidado": doc_config.storage_key if doc_config else None,
             "version_documento_config": doc_config.version if doc_config else 1,
+            "configuracion_documental": config_dict,
             "snapshot_timestamp": datetime.now(UTC).isoformat(),
         }
 

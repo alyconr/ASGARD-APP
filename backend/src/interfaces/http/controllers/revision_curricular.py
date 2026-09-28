@@ -16,6 +16,8 @@ from src.application.dto.revision_curricular import (
     EnvioRevisionRequestDTO,
     ObservacionCreateDTO,
     ObservacionDTO,
+    PlaneacionRevisionDetalleDTO,
+    PlaneacionesEntregaListDTO,
     PreflightEnvioRevisionDTO,
 )
 from src.application.services.access_scope import AccessScopeService
@@ -153,6 +155,35 @@ async def detalle_completo_entrega(
 ) -> EntregaRevisionDetalleDTO:
     """Fetch complete detail of a delivery version including observations and version history."""
     return await service.obtener_detalle_entrega(current_user, entrega_id)
+
+
+@router.get(
+    "/entregas/{entrega_id}/planeaciones",
+    response_model=PlaneacionesEntregaListDTO,
+    status_code=status.HTTP_200_OK,
+)
+async def planeaciones_entrega(
+    entrega_id: uuid.UUID,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlaneacionesEntregaListDTO:
+    """Fetch structured tree of plannings frozen in this delivery snapshot."""
+    return await service.obtener_planeaciones_entrega(current_user, entrega_id)
+
+
+@router.get(
+    "/entregas/{entrega_id}/planeaciones/{planeacion_id}",
+    response_model=PlaneacionRevisionDetalleDTO,
+    status_code=status.HTTP_200_OK,
+)
+async def planeacion_detalle_entrega(
+    entrega_id: uuid.UUID,
+    planeacion_id: uuid.UUID,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlaneacionRevisionDetalleDTO:
+    """Fetch read-only full curricular details and contextual observations of one planning in this delivery."""
+    return await service.obtener_planeacion_detalle_entrega(current_user, entrega_id, planeacion_id)
 
 
 @router.post(

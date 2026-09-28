@@ -142,3 +142,117 @@ class AprobacionRequestDTO(BaseModel):
     """Payload for final approval and download authorization."""
 
     notas_aprobacion: str | None = None
+
+
+# -----------------------------------------------------------------------------
+# Read-only Planning Review Inspection DTOs
+# -----------------------------------------------------------------------------
+
+
+class FaseResumenDTO(BaseModel):
+    id: uuid.UUID | None = None
+    nombre: str
+    orden: int | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ActividadProyectoResumenDTO(BaseModel):
+    id: uuid.UUID | None = None
+    descripcion: str
+    orden: int | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RAPResumenDTO(BaseModel):
+    id: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    tipo_resultado: str | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompetenciaResumenDTO(BaseModel):
+    id: uuid.UUID
+    codigo: str
+    nombre: str
+    resultados_count: int = 0
+    resultados: list[RAPResumenDTO] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConocimientoResumenDTO(BaseModel):
+    id: uuid.UUID
+    tipo: str
+    descripcion: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CriterioResumenDTO(BaseModel):
+    id: uuid.UUID
+    codigo: str | None = None
+    descripcion: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HorasPlaneacionDTO(BaseModel):
+    directas: float = 0.0
+    independientes: float = 0.0
+    total: float = 0.0
+
+
+class PlaneacionRevisionItemDTO(BaseModel):
+    """Summary item for the planning tree belonging to an official delivery version."""
+
+    id: uuid.UUID
+    estado: str
+    fase: FaseResumenDTO
+    actividad_proyecto: ActividadProyectoResumenDTO
+    competencias: list[CompetenciaResumenDTO] = Field(default_factory=list)
+    raps: list[RAPResumenDTO] = Field(default_factory=list)
+    actividades_aprendizaje: str
+    horas: HorasPlaneacionDTO
+    ambiente: str | None = None
+    instructores: str | None = None
+    observaciones_count: int = 0
+    observaciones_pendientes_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlaneacionesEntregaListDTO(BaseModel):
+    """Collection of plannings strictly frozen in this delivery snapshot."""
+
+    entrega_id: uuid.UUID
+    version: int
+    total: int
+    horas_directas_total: float = 0.0
+    horas_independientes_total: float = 0.0
+    planeaciones: list[PlaneacionRevisionItemDTO] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlaneacionRevisionDetalleDTO(BaseModel):
+    """Comprehensive read-only inspection payload of one planning for pedagogical review."""
+
+    id: uuid.UUID
+    entrega_id: uuid.UUID
+    version_entrega: int
+    estado: str
+    fase: FaseResumenDTO
+    actividad_proyecto: ActividadProyectoResumenDTO
+    competencias: list[CompetenciaResumenDTO] = Field(default_factory=list)
+    conocimientos_saber: list[ConocimientoResumenDTO] = Field(default_factory=list)
+    conocimientos_proceso: list[ConocimientoResumenDTO] = Field(default_factory=list)
+    criterios_evaluacion: list[CriterioResumenDTO] = Field(default_factory=list)
+    actividades_aprendizaje: str = ""
+    descripcion_evidencia: str = ""
+    estrategias_didacticas: str = ""
+    ambientes: str = ""
+    materiales: str = ""
+    instructores: str = ""
+    horas: HorasPlaneacionDTO
+    observaciones_didacticas: str | None = None
+    observaciones: list[ObservacionDTO] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)

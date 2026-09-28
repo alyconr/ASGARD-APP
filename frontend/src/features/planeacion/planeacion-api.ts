@@ -558,6 +558,112 @@ export interface BandejaRevisionFiltros {
   limit?: number;
 }
 
+export type SeccionObservacionPlaneacion =
+  | "GENERAL"
+  | "FASE"
+  | "ACTIVIDAD_PROYECTO"
+  | "COMPETENCIA"
+  | "RAPS"
+  | "ACTIVIDADES_APRENDIZAJE"
+  | "SABERES"
+  | "CRITERIOS_EVALUACION"
+  | "ESTRATEGIAS_DIDACTICAS"
+  | "AMBIENTES"
+  | "MATERIALES"
+  | "INSTRUCTORES"
+  | "HORAS";
+
+export interface FaseResumen {
+  id: string | null;
+  nombre: string;
+  orden?: number | null;
+}
+
+export interface ActividadProyectoResumen {
+  id: string | null;
+  descripcion: string;
+  orden?: number | null;
+}
+
+export interface RAPResumen {
+  id: string;
+  codigo?: string | null;
+  descripcion: string;
+  tipo_resultado?: string | null;
+}
+
+export interface CompetenciaResumen {
+  id: string;
+  codigo: string;
+  nombre: string;
+  resultados_count: number;
+  resultados: RAPResumen[];
+}
+
+export interface ConocimientoResumen {
+  id: string;
+  tipo: string;
+  descripcion: string;
+}
+
+export interface CriterioResumen {
+  id: string;
+  codigo?: string | null;
+  descripcion: string;
+}
+
+export interface HorasPlaneacion {
+  directas: number;
+  independientes: number;
+  total: number;
+}
+
+export interface PlaneacionRevisionItem {
+  id: string;
+  estado: string;
+  fase: FaseResumen;
+  actividad_proyecto: ActividadProyectoResumen;
+  competencias: CompetenciaResumen[];
+  raps: RAPResumen[];
+  actividades_aprendizaje: string;
+  horas: HorasPlaneacion;
+  ambiente?: string | null;
+  instructores?: string | null;
+  observaciones_count: number;
+  observaciones_pendientes_count: number;
+}
+
+export interface PlaneacionesEntregaList {
+  entrega_id: string;
+  version: number;
+  total: number;
+  horas_directas_total: number;
+  horas_independientes_total: number;
+  planeaciones: PlaneacionRevisionItem[];
+}
+
+export interface PlaneacionRevisionDetalle {
+  id: string;
+  entrega_id: string;
+  version_entrega: number;
+  estado: string;
+  fase: FaseResumen;
+  actividad_proyecto: ActividadProyectoResumen;
+  competencias: CompetenciaResumen[];
+  conocimientos_saber: ConocimientoResumen[];
+  conocimientos_proceso: ConocimientoResumen[];
+  criterios_evaluacion: CriterioResumen[];
+  actividades_aprendizaje: string;
+  descripcion_evidencia: string;
+  estrategias_didacticas: string;
+  ambientes: string;
+  materiales: string;
+  instructores: string;
+  horas: HorasPlaneacion;
+  observaciones_didacticas?: string | null;
+  observaciones: ObservacionRevision[];
+}
+
 export interface ObservacionCreatePayload {
   target_type: TipoElementoObservacion;
   target_id?: string | null;
@@ -690,6 +796,23 @@ export async function aprobarEntregaRevision(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notas_aprobacion: notas_aprobacion || null }),
     },
+  );
+}
+
+export async function fetchPlaneacionesEntrega(
+  entrega_id: string,
+): Promise<PlaneacionesEntregaList> {
+  return requestJson<PlaneacionesEntregaList>(
+    `/revision-curricular/entregas/${entrega_id}/planeaciones`,
+  );
+}
+
+export async function fetchPlaneacionRevisionDetalle(
+  entrega_id: string,
+  planeacion_id: string,
+): Promise<PlaneacionRevisionDetalle> {
+  return requestJson<PlaneacionRevisionDetalle>(
+    `/revision-curricular/entregas/${entrega_id}/planeaciones/${planeacion_id}`,
   );
 }
 

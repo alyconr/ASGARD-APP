@@ -19,6 +19,10 @@ import {
 import { toast } from "sonner";
 import {
   type EntregaRevisionDetalle,
+  type ObservacionRevision,
+  type PlaneacionRevisionDetalle,
+  type PlaneacionesEntregaList,
+  type SeccionObservacionPlaneacion,
   type TipoElementoObservacion,
   fetchDetalleEntrega,
   iniciarRevisionEntrega,
@@ -27,8 +31,12 @@ import {
   resolverObservacion,
   aprobarEntregaRevision,
   downloadFormatoOficialConsolidado,
+  fetchPlaneacionRevisionDetalle,
+  fetchPlaneacionesEntrega,
 } from "@/features/planeacion/planeacion-api";
 import { cn } from "@/lib/utils";
+import { RevisionPlanningTree } from "./revision-planning-tree";
+import { RevisionPlanningViewer } from "./revision-planning-viewer";
 
 interface RevisionDetailViewProps {
   entregaId: string;
@@ -36,27 +44,6 @@ interface RevisionDetailViewProps {
 }
 
 type TabInspector = "planeaciones" | "configuracion" | "observaciones" | "historial";
-
-interface PlanningSnapshotItem {
-  id?: string;
-  nombre_fase?: string;
-  actividad_proyecto?: string;
-  descripcion_actividad?: string;
-  actividades_aprendizaje?: string;
-  duracion_horas?: number;
-  horas_directas?: number;
-  horas_independientes?: number;
-  horas_totales?: number;
-  horas_directo?: number;
-  horas_independiente?: number;
-  estrategias_didacticas?: string;
-  ambiente?: string;
-  materiales?: string;
-  instructores?: string;
-  estado?: string;
-  raps?: Array<{ codigo?: string; descripcion?: string }>;
-  [key: string]: unknown;
-}
 
 interface DocumentConfigSnapshot {
   fecha_elaboracion?: string;
@@ -70,9 +57,6 @@ interface DocumentConfigSnapshot {
 
 interface SnapshotMetadata {
   planeaciones_count?: number;
-  horas_directas_total?: number;
-  horas_independientes_total?: number;
-  planeaciones_resumen?: PlanningSnapshotItem[];
   configuracion_documental?: DocumentConfigSnapshot;
   [key: string]: unknown;
 }
@@ -81,6 +65,13 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
   const [entrega, setEntrega] = useState<EntregaRevisionDetalle | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabInspector>("planeaciones");
+  const [planeaciones, setPlaneaciones] = useState<PlaneacionesEntregaList | null>(null);
+  const [planeacionesLoading, setPlaneacionesLoading] = useState(true);
+  const [planeacionesError, setPlaneacionesError] = useState<string | null>(null);
+  const [selectedPlaneacionId, setSelectedPlaneacionId] = useState<string | null>(null);
+  const [selectedPlaneacion, setSelectedPlaneacion] = useState<PlaneacionRevisionDetalle | null>(null);
+  const [selectedPlaneacionLoading, setSelectedPlaneacionLoading] = useState(false);
+  const [selectedPlaneacionError, setSelectedPlaneacionError] = useState<string | null>(null);
 
   // Observation Modal state
   const [isObsModalOpen, setIsObsModalOpen] = useState(false);
@@ -115,9 +106,83 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
     }
   }, [entregaId]);
 
+  const loadPlaneaciones = useCallback(async () => {
+    setPlaneacionesLoading(true);
+    setPlaneacionesError(null);
+    try {
+      setPlaneaciones(await fetchPlaneacionesEntrega(entregaId));
+    } catch (error) {
+      setPlaneacionesError(
+        error instanceof Error ? error.message : "Error al cargar las planeaciones de la entrega",
+      );
+    } finally {
+      setPlaneacionesLoading(false);
+    }
+  }, [entregaId]);
+
+  const loadSelectedPlaneacion = useCallback(async () => {
+    if (!selectedPlaneacionId) return;
+    setSelectedPlaneacionLoading(true);
+    setSelectedPlaneacionError(null);
+    try {
+      setSelectedPlaneacion(
+        await fetchPlaneacionRevisionDetalle(entregaId, selectedPlaneacionId),
+      );
+    } catch (error) {
+      setSelectedPlaneacionError(
+        error instanceof Error ? error.message : "Error al cargar la planeación",
+      );
+    } finally {
+      setSelectedPlaneacionLoading(false);
+    }
+  }, [entregaId, selectedPlaneacionId]);
+
   useEffect(() => {
     void loadDetalle();
-  }, [loadDetalle]);
+    void loadPlaneaciones();
+  }, [loadDetalle, loadPlaneaciones]);
+
+  useEffect(() => {
+    void loadSelectedPlaneacion();
+  }, [loadSelectedPlaneacion]);
+
+  const applyObservation = useCallback((observation: ObservacionRevision, isNew = false) => {
+    setEntrega((current) => {
+      if (!current) return current;
+      const observations = current.observaciones.some((item) => item.id === observation.id)
+        ? current.observaciones.map((item) => (item.id === observation.id ? observation : item))
+        : [...current.observaciones, observation];
+      return {
+        ...current,
+        observaciones: observations,
+        observaciones_pendientes_count: observations.filter((item) => item.estado === "PENDIENTE").length,
+        observaciones_ajustadas_count: observations.filter((item) => item.estado === "AJUSTE_REPORTADO").length,
+        observaciones_resueltas_count: observations.filter((item) => item.estado === "RESUELTO").length,
+      };
+    });
+    setSelectedPlaneacion((current) => {
+      if (!current || observation.target_id !== current.id) return current;
+      const observations = current.observaciones.some((item) => item.id === observation.id)
+        ? current.observaciones.map((item) => (item.id === observation.id ? observation : item))
+        : [...current.observaciones, observation];
+      return { ...current, observaciones: observations };
+    });
+    if (observation.target_type === "PLANEACION" && observation.target_id) {
+      setPlaneaciones((current) => current ? {
+        ...current,
+        planeaciones: current.planeaciones.map((planning) => {
+          if (planning.id !== observation.target_id) return planning;
+          return {
+            ...planning,
+            observaciones_count: planning.observaciones_count + (isNew ? 1 : 0),
+            observaciones_pendientes_count:
+              planning.observaciones_pendientes_count +
+              (isNew && observation.estado === "PENDIENTE" ? 1 : 0),
+          };
+        }),
+      } : current);
+    }
+  }, []);
 
   // Actions
   const handleIniciarRevision = async () => {
@@ -137,13 +202,13 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
     }
     setIsSavingObs(true);
     try {
-      await crearObservacionEntrega(entregaId, {
+      const observation = await crearObservacionEntrega(entregaId, {
         target_type: obsTargetType,
         target_id: obsTargetId || null,
         section_key: obsSectionKey || null,
         comentario: obsComentario.trim(),
       });
-      await loadDetalle();
+      applyObservation(observation, true);
       setIsObsModalOpen(false);
       setObsComentario("");
       setObsSectionKey("");
@@ -158,8 +223,8 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
 
   const handleResolverObservacion = async (obsId: string) => {
     try {
-      await resolverObservacion(obsId);
-      await loadDetalle();
+      applyObservation(await resolverObservacion(obsId));
+      await loadPlaneaciones();
       toast.success("Observación marcada como resuelta.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al resolver la observación");
@@ -211,6 +276,18 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
     setIsObsModalOpen(true);
   };
 
+  const openPlanning = (planeacionId: string) => {
+    setSelectedPlaneacion(null);
+    setSelectedPlaneacionError(null);
+    setSelectedPlaneacionId(planeacionId);
+  };
+
+  const openPlanningObservation = (section: SeccionObservacionPlaneacion) => {
+    if (selectedPlaneacionId) {
+      openNewObsFor("PLANEACION", selectedPlaneacionId, section);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-96 items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
@@ -257,7 +334,6 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
   }
 
   const snapshot = (entrega.snapshot_metadatos || {}) as SnapshotMetadata;
-  const planningsTree = snapshot.planeaciones_resumen || [];
   const configSnapshot = snapshot.configuracion_documental || {};
   const pendingObsCount = entrega.observaciones_pendientes_count;
   const adjustedObsCount = entrega.observaciones_ajustadas_count;
@@ -408,7 +484,7 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
           )}
         >
           <Layers className="h-4 w-4" />
-          Árbol de Planeaciones ({snapshot.planeaciones_count ?? planningsTree.length})
+          Árbol de Planeaciones ({planeaciones?.total ?? snapshot.planeaciones_count ?? 0})
         </button>
 
         <button
@@ -447,84 +523,27 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
 
       {/* TAB 1: PLANEACIONES */}
       {activeTab === "planeaciones" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Planeaciones Pedagógicas Integradas en la Entrega
-            </h3>
-            <span className="text-xs text-slate-500">
-              Horas totales directas: <strong>{snapshot.horas_directas_total ?? 0}h</strong> ·
-              Horas independientes: <strong>{snapshot.horas_independientes_total ?? 0}h</strong>
-            </span>
-          </div>
-
-          {planningsTree.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
-              No hay detalle de planeaciones estructuradas en el snapshot.
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              {planningsTree.map((p, idx) => (
-                <div
-                  key={p.id || idx}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase text-slate-400">
-                          {p.nombre_fase || "Fase de Proyecto"}
-                        </span>
-                        <span className="text-slate-300">/</span>
-                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                          {p.actividad_proyecto || "Actividad del proyecto"}
-                        </span>
-                      </div>
-                      <h4 className="mt-1 text-sm font-bold text-slate-900 dark:text-white">
-                        {p.actividades_aprendizaje || "Actividad de Aprendizaje Integrada"}
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-                        {p.estado || "COMPLETO"}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openNewObsFor(
-                            "PLANEACION",
-                            p.id,
-                            `Actividad: ${p.actividades_aprendizaje || "Planeación"}`,
-                          )
-                        }
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Observar
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300 sm:grid-cols-3">
-                    <div>
-                      <span className="font-semibold text-slate-500">Horas:</span>{" "}
-                      Directas: {p.horas_directas ?? 0}h · Independientes: {p.horas_independientes ?? 0}h (Total: {p.horas_totales ?? 0}h)
-                    </div>
-                    <div>
-                      <span className="font-semibold text-slate-500">Ambiente:</span>{" "}
-                      {p.ambiente || "No especificado"}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-slate-500">Instructores:</span>{" "}
-                      {p.instructores || "No especificado"}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        selectedPlaneacionId ? (
+          <RevisionPlanningViewer
+            detail={selectedPlaneacion}
+            loading={selectedPlaneacionLoading}
+            error={selectedPlaneacionError}
+            onBack={() => {
+              setSelectedPlaneacionId(null);
+              setSelectedPlaneacion(null);
+            }}
+            onRetry={() => void loadSelectedPlaneacion()}
+            onAddObservation={openPlanningObservation}
+          />
+        ) : (
+          <RevisionPlanningTree
+            data={planeaciones}
+            loading={planeacionesLoading}
+            error={planeacionesError}
+            onRetry={() => void loadPlaneaciones()}
+            onSelect={openPlanning}
+          />
+        )
       )}
 
       {/* TAB 2: CONFIGURACION DOCUMENTAL */}
@@ -713,7 +732,8 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
                 <select
                   value={obsTargetType}
                   onChange={(e) => setObsTargetType(e.target.value as TipoElementoObservacion)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  disabled={obsTargetType === "PLANEACION" && Boolean(obsTargetId)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                 >
                   <option value="PLANEACION">Planeación / Actividad Específica</option>
                   <option value="CONFIGURACION_DOCUMENTAL">Configuración Documental</option>
@@ -725,14 +745,17 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
 
               <div>
                 <label className="font-semibold text-slate-700 dark:text-slate-300">
-                  Sección / Campo (Opcional)
+                  {obsTargetType === "PLANEACION" && obsTargetId
+                    ? "Sección de la planeación"
+                    : "Sección / Campo (Opcional)"}
                 </label>
                 <input
                   type="text"
                   value={obsSectionKey}
                   onChange={(e) => setObsSectionKey(e.target.value)}
+                  readOnly={obsTargetType === "PLANEACION" && Boolean(obsTargetId)}
                   placeholder="Ej. Estrategias Didácticas, Duración de Horas..."
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-emerald-500 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:read-only:bg-slate-900"
                 />
               </div>
 

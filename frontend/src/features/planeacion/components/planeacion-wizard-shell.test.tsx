@@ -449,7 +449,6 @@ describe("PlaneacionWizardShell", () => {
       listo: true,
       storage_key: "planeacion/consolidado.xlsx",
       file_name: "GPFI-F-134V05-planeacion-pedagogica.xlsx",
-      content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       checksum_sha256: "hash123",
       fecha_generacion: "2026-09-27T10:00:00Z",
       faltantes: [],
