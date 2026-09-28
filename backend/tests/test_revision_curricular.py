@@ -745,12 +745,12 @@ async def test_crear_observacion_validates_section_and_whitelist():
         await service.crear_observacion(ctx["admin"], entrega.id, bad_sec_dto)
     assert exc.value.status_code == 422
 
-    # 3. Accept valid section_key (e.g. AMBIENTES)
+    # 3. Accept and normalize the learning evidence section label
     good_sec_dto = ObservacionCreateDTO(
         target_type=TipoElementoObservacion.PLANEACION,
         target_id=plan_valid.id,
-        section_key="AMBIENTES",
-        comentario="Especificar software requerido en el ambiente",
+        section_key="DESCRIPCIÓN DE LA EVIDENCIA DE APRENDIZAJE",
+        comentario="Precisar el producto que demuestra el aprendizaje",
     )
     session.add = MagicMock()
     # Mocking _get_observacion_dto execution
@@ -765,8 +765,8 @@ async def test_crear_observacion_validates_section_and_whitelist():
             entrega_id=entrega.id,
             target_type=TipoElementoObservacion.PLANEACION,
             target_id=plan_valid.id,
-            section_key="AMBIENTES",
-            comentario="Especificar software requerido en el ambiente",
+            section_key="DESCRIPCION_EVIDENCIA_APRENDIZAJE",
+            comentario="Precisar el producto que demuestra el aprendizaje",
             estado=EstadoObservacionRevision.PENDIENTE,
             creado_por_id=ctx["admin"].id,
             creado_por=ctx["admin"],
@@ -783,4 +783,4 @@ async def test_crear_observacion_validates_section_and_whitelist():
     session.execute.side_effect = mock_execute_2
 
     obs = await service.crear_observacion(ctx["admin"], entrega.id, good_sec_dto)
-    assert obs.section_key == "AMBIENTES"
+    assert obs.section_key == "DESCRIPCION_EVIDENCIA_APRENDIZAJE"

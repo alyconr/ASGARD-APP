@@ -46,7 +46,7 @@ describe("RevisionPlanningViewer", () => {
   it("renders the complete curriculum and contextual observations in read-only sections", () => {
     render(<RevisionPlanningViewer detail={detail} loading={false} error={null} onBack={vi.fn()} onRetry={vi.fn()} onAddObservation={vi.fn()} />);
 
-    for (const heading of ["Fase", "Actividad de proyecto", "Competencias", "Resultados de aprendizaje", "Actividades de aprendizaje", "Saberes", "Criterios de evaluación", "Estrategias didácticas", "Ambientes", "Materiales", "Instructores", "Horas"]) {
+    for (const heading of ["Fase", "Actividad de proyecto", "Competencias", "Resultados de aprendizaje", "Actividades de aprendizaje", "Descripción de la evidencia de aprendizaje", "Saberes", "Criterios de evaluación", "Estrategias didácticas", "Ambientes", "Materiales", "Instructores", "Horas"]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
     expect(screen.getByText("Precisar el producto esperado")).toBeInTheDocument();
@@ -60,6 +60,17 @@ describe("RevisionPlanningViewer", () => {
     const section = screen.getByRole("heading", { name: "Estrategias didácticas" }).closest("section");
     fireEvent.click(section!.querySelector("button")!);
     expect(onAddObservation).toHaveBeenCalledWith("ESTRATEGIAS_DIDACTICAS");
+  });
+
+  it("targets the learning evidence description independently", () => {
+    const onAddObservation = vi.fn();
+    render(<RevisionPlanningViewer detail={detail} loading={false} error={null} onBack={vi.fn()} onRetry={vi.fn()} onAddObservation={onAddObservation} />);
+
+    const section = screen.getByRole("heading", { name: "Descripción de la evidencia de aprendizaje" }).closest("section");
+    expect(section).toHaveTextContent("Diagrama de componentes");
+    fireEvent.click(section!.querySelector("button")!);
+
+    expect(onAddObservation).toHaveBeenCalledWith("DESCRIPCION_EVIDENCIA_APRENDIZAJE");
   });
 
   it("returns to the planning tree from the end of the review", () => {

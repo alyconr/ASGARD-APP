@@ -170,7 +170,7 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
     if (observation.target_type === "PLANEACION" && observation.target_id) {
       setPlaneaciones((current) => current ? {
         ...current,
-        planeaciones: current.planeaciones.map((planning) => {
+        planeaciones: (current.planeaciones || []).map((planning) => {
           if (planning.id !== observation.target_id) return planning;
           return {
             ...planning,
@@ -484,7 +484,7 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
           )}
         >
           <Layers className="h-4 w-4" />
-          Árbol de Planeaciones ({planeaciones?.total ?? snapshot.planeaciones_count ?? 0})
+          Árbol de Planeaciones ({planeaciones?.total_planeaciones ?? snapshot.planeaciones_count ?? 0})
         </button>
 
         <button

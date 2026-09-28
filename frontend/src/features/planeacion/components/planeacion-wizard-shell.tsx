@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   HelpCircle,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,6 +42,7 @@ import {
   type ClasificacionInformacion,
   type FormatoOficialEstado,
   type EntregaRevisionDetalle,
+  type ObservacionRevision,
   type PreflightEnvioRevision,
   savePlaneacionBorrador,
   confirmarPlaneacion,
@@ -373,6 +375,126 @@ function formatPreviewDate(date: Date): string {
 function formatInputDate(date: Date): string {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function getFieldObservations(
+  allObservations: ObservacionRevision[] | undefined,
+  fieldId: string,
+  activePlanningId: string | null,
+): ObservacionRevision[] {
+  if (!allObservations || allObservations.length === 0) return [];
+  return allObservations.filter((obs) => {
+    if (obs.target_type !== "PLANEACION") return false;
+    if (activePlanningId && obs.target_id && obs.target_id !== activePlanningId) {
+      return false;
+    }
+    const sec = (obs.section_key || "").toUpperCase().trim();
+    if (fieldId === "actividades_aprendizaje" || fieldId === "descripcion_evidencia_aprendizaje") {
+      return sec === "ACTIVIDADES_APRENDIZAJE" || sec.includes("ACTIVIDAD") || sec.includes("APRENDIZAJE");
+    }
+    if (fieldId === "duracion_actividad_horas" || fieldId === "horas_trabajo_directo" || fieldId === "horas_trabajo_independiente") {
+      return sec === "HORAS" || sec.includes("HORA");
+    }
+    if (fieldId === "estrategias_didacticas") {
+      return sec === "ESTRATEGIAS_DIDACTICAS" || sec.includes("ESTRATEGIA");
+    }
+    if (fieldId === "ambiente" || fieldId === "ambientes_tipificados") {
+      return sec === "AMBIENTES" || sec.includes("AMBIENTE");
+    }
+    if (fieldId === "materiales_formacion") {
+      return sec === "MATERIALES" || sec.includes("MATERIAL") || sec.includes("RECURSO");
+    }
+    if (fieldId === "instructores") {
+      return sec === "INSTRUCTORES" || sec.includes("INSTRUCTOR");
+    }
+    if (fieldId === "competencias") {
+      return sec === "COMPETENCIA" || sec.includes("COMPETENCIA");
+    }
+    if (fieldId === "resultados") {
+      return sec === "RAPS" || sec.includes("RAP") || sec.includes("RESULTADO");
+    }
+    if (fieldId === "saberes") {
+      return sec === "SABERES" || sec.includes("SABER") || sec.includes("CONOCIMIENTO");
+    }
+    if (fieldId === "criterios") {
+      return sec === "CRITERIOS_EVALUACION" || sec.includes("CRITERIO");
+    }
+    if (fieldId === "fase_actividad") {
+      return sec === "FASE" || sec === "ACTIVIDAD_PROYECTO";
+    }
+    return false;
+  });
+}
+
+function FieldObservationBanner({
+  observations,
+  onOpenReportModal,
+}: {
+  observations: ObservacionRevision[];
+  onOpenReportModal: (obs: ObservacionRevision) => void;
+}): React.JSX.Element | null {
+  if (!observations || observations.length === 0) return null;
+
+  return (
+    <div className="space-y-2 mb-3">
+      {observations.map((obs) => (
+        <div
+          key={obs.id}
+          className={cn(
+            "rounded-lg border-2 p-3 text-xs shadow-xs transition",
+            obs.estado === "RESUELTO"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+              : obs.estado === "AJUSTE_REPORTADO"
+              ? "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200"
+              : "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200",
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/60 pb-1.5 dark:border-amber-800/40">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-bold uppercase tracking-wider text-[11px]">
+                Observación Pedagógica ({obs.section_key || "CAMPO"})
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.2 text-[10px] font-bold uppercase",
+                  obs.estado === "RESUELTO"
+                    ? "bg-emerald-200 text-emerald-900"
+                    : obs.estado === "AJUSTE_REPORTADO"
+                    ? "bg-sky-200 text-sky-900"
+                    : "bg-amber-200 text-amber-900",
+                )}
+              >
+                {obs.estado}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenReportModal(obs)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+            >
+              <Pencil className="h-3 w-3" />
+              {obs.comentario_ajuste ? "Editar ajuste reportado" : "Reportar ajuste"}
+            </button>
+          </div>
+
+          <p className="mt-2 font-medium leading-relaxed whitespace-pre-wrap text-slate-800 dark:text-slate-200">
+            {obs.comentario}
+          </p>
+
+          {obs.comentario_ajuste && (
+            <div className="mt-2 rounded bg-white/80 p-2 text-[11px] text-slate-800 border border-emerald-200 dark:bg-slate-900/60 dark:border-emerald-800 dark:text-slate-200">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                Ajuste registrado:
+              </span>{" "}
+              {obs.comentario_ajuste}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function PlaneacionWizardShell({
@@ -959,6 +1081,213 @@ export function PlaneacionWizardShell({
       toast.error("Error al cargar los detalles del borrador");
     } finally {
       setIsLoadingDetails(false);
+    }
+  };
+
+  const loadPlanningByIdAndNavigate = async (
+    planningId: string,
+    targetStep: StepId,
+    elementId: string,
+  ) => {
+    setIsLoadingDetails(true);
+    try {
+      const details = await fetchPlaneacionDetalle(planningId);
+      setActivePlanningId(details.id);
+      setFaseId(details.fase_id ?? "");
+      setActividadId(details.actividad_id ?? "");
+      setSelectedResultadoIds(details.resultados_ids);
+      const compIds = (details.competencias ?? []).map((c) => c.competencia_id);
+      setSelectedCompetenciaIds(compIds);
+      setSelectedConocimientos(details.conocimientos_ids);
+      setSelectedCriterios(details.criterios_ids);
+
+      const c = details.datos_complementarios;
+      const rapsFromDb =
+        c && typeof c.raps === "object" && c.raps !== null
+          ? (c.raps as Record<string, ComplementaryDataPerRap>)
+          : {};
+      setRapComplementaryMap(rapsFromDb);
+
+      const firstRapId = details.resultados_ids[0] ?? null;
+      setActiveRapIdForComplementary(firstRapId);
+      const firstRapData = firstRapId ? rapsFromDb[firstRapId] : null;
+
+      if (firstRapData) {
+        setActividadesAprendizaje(
+          firstRapData.actividades_aprendizaje ??
+            getStringValue(c, "actividades_aprendizaje"),
+        );
+        setEstrategias(
+          firstRapData.estrategias_didacticas ??
+            getStringValue(c, "estrategias_didacticas"),
+        );
+        setAmbientesTipificados(
+          firstRapData.ambientes_tipificados ??
+            getStringValue(c, "ambientes_tipificados"),
+        );
+        setAmbiente(
+          firstRapData.ambiente ??
+            getStringValue(c, "ambiente", "ambientes_aprendizaje"),
+        );
+        setMaterialesFormacion(
+          firstRapData.materiales_formacion ??
+            getStringValue(c, "materiales_formacion", "recursos_didacticos"),
+        );
+        setDescripcionEvidencia(
+          firstRapData.descripcion_evidencia_aprendizaje ??
+            getStringValue(c, "descripcion_evidencia_aprendizaje"),
+        );
+        setObservaciones(
+          firstRapData.observaciones ?? getStringValue(c, "observaciones"),
+        );
+        setDuracionHoras(
+          firstRapData.duracion_actividad_horas ??
+            getNumberValue(c, "duracion_actividad_horas", "duracion_horas"),
+        );
+        setHorasTrabajoDirecto(
+          firstRapData.horas_trabajo_directo ??
+            getNumberValue(c, "horas_trabajo_directo"),
+        );
+        setHorasTrabajoIndependiente(
+          firstRapData.horas_trabajo_independiente ??
+            getNumberValue(c, "horas_trabajo_independiente"),
+        );
+        setInstructores(
+          firstRapData.instructores ??
+            getStringValue(c, "instructores", "instructor_responsable"),
+        );
+        setTematicasSaber(
+          firstRapData.tematicas_saber ?? normalizeTematicas(c.tematicas_saber),
+        );
+        setTematicasProceso(
+          firstRapData.tematicas_proceso ??
+            normalizeTematicas(c.tematicas_proceso),
+        );
+      } else {
+        setActividadesAprendizaje(getStringValue(c, "actividades_aprendizaje"));
+        setEstrategias(getStringValue(c, "estrategias_didacticas"));
+        setAmbientesTipificados(getStringValue(c, "ambientes_tipificados"));
+        setAmbiente(getStringValue(c, "ambiente", "ambientes_aprendizaje"));
+        setMaterialesFormacion(
+          getStringValue(c, "materiales_formacion", "recursos_didacticos"),
+        );
+        setDescripcionEvidencia(
+          getStringValue(c, "descripcion_evidencia_aprendizaje"),
+        );
+        setObservaciones(getStringValue(c, "observaciones"));
+        setDuracionHoras(
+          getNumberValue(c, "duracion_actividad_horas", "duracion_horas"),
+        );
+        setHorasTrabajoDirecto(getNumberValue(c, "horas_trabajo_directo"));
+        setHorasTrabajoIndependiente(
+          getNumberValue(c, "horas_trabajo_independiente"),
+        );
+        setInstructores(
+          getStringValue(c, "instructores", "instructor_responsable"),
+        );
+        setTematicasSaber(normalizeTematicas(c.tematicas_saber));
+        setTematicasProceso(normalizeTematicas(c.tematicas_proceso));
+      }
+      setReadComplementaryFields(
+        new Set(COMPLEMENTARY_FIELDS.map((field) => field.id)),
+      );
+      try {
+        setOfficialStatus(
+          await fetchFormatoOficialEstadoIndividual(details.id),
+        );
+      } catch {
+        setOfficialStatus(null);
+      }
+
+      setActiveStep(targetStep);
+      toast.info("Saltando a la sección de la planeación para realizar la corrección.");
+
+      window.setTimeout(() => {
+        const el = document.getElementById(elementId);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-4", "ring-amber-400", "ring-offset-2", "transition-all", "duration-500");
+          window.setTimeout(() => {
+            el.classList.remove("ring-4", "ring-amber-400", "ring-offset-2");
+          }, 3500);
+        }
+      }, 300);
+    } catch {
+      toast.error("Error al cargar los detalles de la planeación para edición");
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+  const handleJumpToObservationField = async (obs: ObservacionRevision) => {
+    setIsObservacionesModalOpen(false);
+
+    if (obs.target_type === "CONFIGURACION_DOCUMENTAL") {
+      setActiveStep("dashboard");
+      window.setTimeout(() => {
+        document
+          .getElementById("planeacion-document-config")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+      return;
+    }
+
+    if (obs.target_type === "PLANEACION") {
+      const sec = (obs.section_key || "").toUpperCase().trim();
+      let targetStep: StepId = "complementario";
+      let elementId = "field-actividades_aprendizaje";
+
+      if (sec.includes("ACTIVIDAD_PROYECTO") || sec.includes("FASE")) {
+        targetStep = "curricular";
+        elementId = "section-fase-actividad";
+      } else if (sec.includes("COMPETENCIA")) {
+        targetStep = "curricular";
+        elementId = "section-competencias";
+      } else if (sec.includes("RAP")) {
+        targetStep = "curricular";
+        elementId = "section-resultados";
+      } else if (sec.includes("SABER")) {
+        targetStep = "curricular";
+        elementId = "section-saberes";
+      } else if (sec.includes("CRITERIO")) {
+        targetStep = "curricular";
+        elementId = "section-criterios";
+      } else if (sec.includes("ACTIVIDAD") || sec.includes("APRENDIZAJE")) {
+        targetStep = "complementario";
+        elementId = "field-actividades_aprendizaje";
+      } else if (sec.includes("ESTRATEGIA")) {
+        targetStep = "complementario";
+        elementId = "field-estrategias_didacticas";
+      } else if (sec.includes("AMBIENTE")) {
+        targetStep = "complementario";
+        elementId = "field-ambiente";
+      } else if (sec.includes("MATERIAL")) {
+        targetStep = "complementario";
+        elementId = "field-materiales_formacion";
+      } else if (sec.includes("INSTRUCTOR")) {
+        targetStep = "complementario";
+        elementId = "field-instructores";
+      } else if (sec.includes("HORA")) {
+        targetStep = "complementario";
+        elementId = "field-duracion_actividad_horas";
+      }
+
+      if (obs.target_id && obs.target_id !== activePlanningId) {
+        await loadPlanningByIdAndNavigate(obs.target_id, targetStep, elementId);
+      } else {
+        setActiveStep(targetStep);
+        toast.info("Saltando al campo con observación para realizar la corrección.");
+        window.setTimeout(() => {
+          const el = document.getElementById(elementId);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.classList.add("ring-4", "ring-amber-400", "ring-offset-2", "transition-all", "duration-500");
+            window.setTimeout(() => {
+              el.classList.remove("ring-4", "ring-amber-400", "ring-offset-2");
+            }, 3500);
+          }
+        }, 300);
+      }
     }
   };
 
@@ -1805,6 +2134,18 @@ export function PlaneacionWizardShell({
                         )}>
                           {planning.estado}
                         </span>
+                        {(() => {
+                          const planObs = (entregaActual?.observaciones || []).filter(
+                            (o) => o.target_type === "PLANEACION" && o.target_id === planning.id && o.estado === "PENDIENTE"
+                          );
+                          if (planObs.length === 0) return null;
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 border border-rose-200">
+                              <AlertTriangle className="h-3 w-3" />
+                              {planObs.length} obs. pendiente{planObs.length !== 1 ? "s" : ""}
+                            </span>
+                          );
+                        })()}
                         <span className="text-xs font-semibold text-slate-600">
                           {planning.nombre_fase}
                         </span>
@@ -2395,9 +2736,54 @@ export function PlaneacionWizardShell({
                     Instrucciones
                   </button>
                 </div>
-                
+
+                {/* Banner de observaciones pendientes en la planeación actual */}
+                {activePlanningId && (() => {
+                  const plObservations = (entregaActual?.observaciones || []).filter(
+                    (o) => o.target_type === "PLANEACION" && o.target_id === activePlanningId && o.estado === "PENDIENTE"
+                  );
+                  if (plObservations.length === 0) return null;
+                  return (
+                    <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/40">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
+                          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-wider">
+                              Esta planeación tiene {plObservations.length} observación(es) pedagógica(s) para corregir
+                            </h4>
+                            <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                              Revisa los componentes curriculares señalados abajo, realiza los ajustes solicitados y reporta las correcciones realizadas.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsObservacionesModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 transition shadow-xs"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          Ver observaciones ({plObservations.length})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="grid gap-6">
-                  <div className="rounded-lg border border-[color:var(--card-border)] bg-slate-50/50 p-4 grid gap-4">
+                  <div id="section-fase-actividad" className="rounded-lg border border-[color:var(--card-border)] bg-slate-50/50 p-4 grid gap-4">
+                    <FieldObservationBanner
+                      observations={getFieldObservations(
+                        entregaActual?.observaciones,
+                        "fase_actividad",
+                        activePlanningId,
+                      )}
+                      onOpenReportModal={(obs) => {
+                        setAjusteObservacionId(obs.id);
+                        setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                        setIsObservacionesModalOpen(true);
+                      }}
+                    />
                     {/* Step 1: Fase del Proyecto Formativo (Filtro Opcional) */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -2476,7 +2862,19 @@ export function PlaneacionWizardShell({
 
                   {/* Step 1.3: Competencias Selection */}
                   {actividadId && (
-                    <div className="border-t border-[var(--line)] pt-4">
+                    <div id="section-competencias" className="border-t border-[var(--line)] pt-4">
+                      <FieldObservationBanner
+                        observations={getFieldObservations(
+                          entregaActual?.observaciones,
+                          "competencias",
+                          activePlanningId,
+                        )}
+                        onOpenReportModal={(obs) => {
+                          setAjusteObservacionId(obs.id);
+                          setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                          setIsObservacionesModalOpen(true);
+                        }}
+                      />
                       <div className="mb-3 flex items-center justify-between">
                         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
                           3. Competencias Vinculadas a la Actividad ({actividadCompetencias.length})
@@ -2577,7 +2975,19 @@ export function PlaneacionWizardShell({
 
                   {/* Step 1.4: Resultados de Aprendizaje (RAP) Selection */}
                   {selectedCompetencias.length > 0 && (
-                    <div className="border-t border-[var(--line)] pt-4">
+                    <div id="section-resultados" className="border-t border-[var(--line)] pt-4">
+                      <FieldObservationBanner
+                        observations={getFieldObservations(
+                          entregaActual?.observaciones,
+                          "resultados",
+                          activePlanningId,
+                        )}
+                        onOpenReportModal={(obs) => {
+                          setAjusteObservacionId(obs.id);
+                          setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                          setIsObservacionesModalOpen(true);
+                        }}
+                      />
                       <div className="mb-3 flex items-center justify-between">
                         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-800">
                           4. Resultados de Aprendizaje (RAP) a Desarrollar ({selectedResultados.length} seleccionados)
@@ -2652,7 +3062,7 @@ export function PlaneacionWizardShell({
 
                   {/* Step 1.5: Saberes & Criterios Selection */}
                   {selectedResultados.length > 0 && (
-                    <>
+                    <div id="section-saberes" className="space-y-4">
                       {/* Select All Toggle Control Bar */}
                       <div className="flex items-center justify-between border-t border-[var(--line)] pt-4">
                         <div>
@@ -2676,6 +3086,18 @@ export function PlaneacionWizardShell({
                           {isAllSelected ? "Deseleccionar Todo" : "Seleccionar Todo"}
                         </button>
                       </div>
+
+                      <FieldObservationBanner
+                        observations={[
+                          ...getFieldObservations(entregaActual?.observaciones, "saberes", activePlanningId),
+                          ...getFieldObservations(entregaActual?.observaciones, "criterios", activePlanningId),
+                        ]}
+                        onOpenReportModal={(obs) => {
+                          setAjusteObservacionId(obs.id);
+                          setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                          setIsObservacionesModalOpen(true);
+                        }}
+                      />
 
                       {selectedCompetencias.map((comp) => (
                         <div key={`saberes-${comp.id}`} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4">
@@ -2894,7 +3316,7 @@ export function PlaneacionWizardShell({
                           )}
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 
@@ -2964,6 +3386,39 @@ export function PlaneacionWizardShell({
                     <strong>Formato Oficial SENA (GPFI-F-134 V05):</strong> Toda la información didáctica registrada se integrará directamente en la matriz de planeación pedagógica y se exportará en el libro de trabajo oficial institucional Excel.
                   </span>
                 </p>
+
+                {/* Banner de observaciones pendientes en la planeación actual */}
+                {activePlanningId && (() => {
+                  const plObservations = (entregaActual?.observaciones || []).filter(
+                    (o) => o.target_type === "PLANEACION" && o.target_id === activePlanningId && o.estado === "PENDIENTE"
+                  );
+                  if (plObservations.length === 0) return null;
+                  return (
+                    <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/40">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
+                          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-wider">
+                              Esta planeación tiene {plObservations.length} observación(es) pedagógica(s) para corregir
+                            </h4>
+                            <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                              Revisa los campos didácticos señalados abajo, realiza los ajustes solicitados y reporta las correcciones realizadas.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsObservacionesModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 transition shadow-xs"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          Ver observaciones ({plObservations.length})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Selector de RAP para Diligenciamiento Individual */}
                 {selectedResultados.length > 0 && (
@@ -3100,8 +3555,21 @@ export function PlaneacionWizardShell({
                     return (
                       <article
                         key={field.id}
+                        id={`field-${field.id}`}
                         className="grid gap-3 rounded-lg border border-[color:var(--card-border)] bg-white p-4"
                       >
+                        <FieldObservationBanner
+                          observations={getFieldObservations(
+                            entregaActual?.observaciones,
+                            field.id,
+                            activePlanningId,
+                          )}
+                          onOpenReportModal={(obs) => {
+                            setAjusteObservacionId(obs.id);
+                            setDetalleAjusteTexto(obs.comentario_ajuste || "");
+                            setIsObservacionesModalOpen(true);
+                          }}
+                        />
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
                             <label
@@ -4164,16 +4632,40 @@ export function PlaneacionWizardShell({
                           </span>
                         )}
                       </div>
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
-                          obs.estado === "RESUELTO"
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
-                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300"
+                      <div className="flex items-center gap-2">
+                        {obs.target_type === "PLANEACION" && (
+                          <button
+                            type="button"
+                            onClick={() => void handleJumpToObservationField(obs)}
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 transition shadow-2xs"
+                            title="Saltar directamente a editar este campo en la planeación pedagógica"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Ir al campo a corregir
+                          </button>
                         )}
-                      >
-                        {obs.estado}
-                      </span>
+                        {obs.target_type === "CONFIGURACION_DOCUMENTAL" && (
+                          <button
+                            type="button"
+                            onClick={() => void handleJumpToObservationField(obs)}
+                            className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 hover:bg-sky-100 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-300 transition shadow-2xs"
+                            title="Ir a Configuración Documental"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Ir a Configuración
+                          </button>
+                        )}
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                            obs.estado === "RESUELTO"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300"
+                          )}
+                        >
+                          {obs.estado}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mt-3 space-y-2">

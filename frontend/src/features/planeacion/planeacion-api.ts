@@ -565,6 +565,7 @@ export type SeccionObservacionPlaneacion =
   | "COMPETENCIA"
   | "RAPS"
   | "ACTIVIDADES_APRENDIZAJE"
+  | "DESCRIPCION_EVIDENCIA_APRENDIZAJE"
   | "SABERES"
   | "CRITERIOS_EVALUACION"
   | "ESTRATEGIAS_DIDACTICAS"
@@ -616,6 +617,9 @@ export interface HorasPlaneacion {
   directas: number;
   independientes: number;
   total: number;
+  horas_directas?: number;
+  horas_independientes?: number;
+  horas_totales?: number;
 }
 
 export interface PlaneacionRevisionItem {
@@ -626,20 +630,26 @@ export interface PlaneacionRevisionItem {
   competencias: CompetenciaResumen[];
   raps: RAPResumen[];
   actividades_aprendizaje: string;
+  actividad_aprendizaje?: string;
   horas: HorasPlaneacion;
   ambiente?: string | null;
-  instructores?: string | null;
+  ambientes?: string | string[] | null;
+  instructores?: string | string[] | null;
   observaciones_count: number;
   observaciones_pendientes_count: number;
+  total_observaciones?: number;
+  observaciones_pendientes?: number;
 }
 
 export interface PlaneacionesEntregaList {
   entrega_id: string;
   version: number;
   total: number;
+  total_planeaciones?: number;
   horas_directas_total: number;
   horas_independientes_total: number;
   planeaciones: PlaneacionRevisionItem[];
+  items?: PlaneacionRevisionItem[];
 }
 
 export interface PlaneacionRevisionDetalle {

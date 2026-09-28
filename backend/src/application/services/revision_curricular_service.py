@@ -483,6 +483,12 @@ class RevisionCurricularService:
         )
         aliases = {
             "ACTIVIDADES_DE_APRENDIZAJE": "ACTIVIDADES_APRENDIZAJE",
+            "DESCRIPCION_DE_LA_EVIDENCIA_DE_APRENDIZAJE": (
+                "DESCRIPCION_EVIDENCIA_APRENDIZAJE"
+            ),
+            "EVIDENCIA_DE_APRENDIZAJE": (
+                "DESCRIPCION_EVIDENCIA_APRENDIZAJE"
+            ),
             "CRITERIOS_DE_EVALUACION": "CRITERIOS_EVALUACION",
             "ACTIVIDAD": "ACTIVIDAD_PROYECTO",
             "RESULTADOS": "RAPS",
