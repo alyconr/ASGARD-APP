@@ -21,6 +21,10 @@ from src.infrastructure.db.models.organizacion import (
     Especialidad,
     is_coordinacion_transversal,
 )
+from src.infrastructure.db.models.revision_curricular import (
+    EntregaRevisionCurricular,
+    ObservacionRevision,
+)
 from src.infrastructure.repositories.audit import AuditRepository
 from src.infrastructure.security.password import hash_password
 from src.interfaces.http.schemas.auth import (
@@ -542,3 +546,88 @@ class UserAdminService:
         )
         await self.session.commit()
         return {"message": "Contraseña temporal asignada exitosamente. Las sesiones activas han sido revocadas."}
+
+    async def delete_user(self, actor: Usuario, user_id: uuid.UUID) -> dict[str, str]:
+        """Delete user account enforcing privilege, self-protection, and relational integrity invariants."""
+        user = await self.session.get(
+            Usuario,
+            user_id,
+            options=[
+                selectinload(Usuario.roles),
+            ],
+        )
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+        # Auto-delete prevention
+        if actor.id == user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No puede eliminar su propia cuenta de usuario",
+            )
+
+        # ADMIN cannot delete SUPERADMIN
+        if user.has_role(RolUsuario.SUPERADMIN.value) and not actor.has_role(RolUsuario.SUPERADMIN.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Los administradores no tienen permisos para eliminar a un SUPERADMIN",
+            )
+
+        # Prevent deleting the last active SUPERADMIN
+        if user.has_role(RolUsuario.SUPERADMIN.value):
+            active_superadmins = await self._count_active_superadmins()
+            if active_superadmins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="No es posible eliminar al único SUPERADMIN activo del sistema",
+                )
+
+        # Invariant: If user leads an EquipoEjecutor, cannot be deleted (FK has ondelete=RESTRICT)
+        teams_stmt = select(EquipoEjecutor.nombre).where(EquipoEjecutor.lider_id == user.id)
+        teams_res = await self.session.execute(teams_stmt)
+        led_teams = list(teams_res.scalars().all())
+        if led_teams:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar el usuario porque es líder de uno o más equipos ejecutores ({', '.join(led_teams)}). Reasigne el liderazgo antes de eliminarlo o cámbielo a estado INACTIVO o BLOQUEADO.",
+            )
+
+        # Invariant: If user has created submissions or observations in revision curricular, cannot be deleted (ondelete=RESTRICT)
+        entregas_stmt = select(func.count(EntregaRevisionCurricular.id)).where(EntregaRevisionCurricular.enviado_por_id == user.id)
+        entregas_res = await self.session.execute(entregas_stmt)
+        if (entregas_res.scalar_one() or 0) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No se puede eliminar el usuario porque tiene entregas registradas en revisiones curriculares. Para preservar la trazabilidad institucional, cámbielo a estado BLOQUEADO o INACTIVO.",
+            )
+
+        obs_stmt = select(func.count(ObservacionRevision.id)).where(ObservacionRevision.creado_por_id == user.id)
+        obs_res = await self.session.execute(obs_stmt)
+        if (obs_res.scalar_one() or 0) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No se puede eliminar el usuario porque tiene observaciones registradas en revisiones curriculares. Para preservar la trazabilidad institucional, cámbielo a estado BLOQUEADO o INACTIVO.",
+            )
+
+        # Revoke all sessions before deleting
+        await self._revoke_all_sessions(user)
+
+        user_email = user.email
+        user_nombre = f"{user.nombre} {user.apellido}"
+
+        await self.audit_repo.add_event(
+            entidad="Usuario",
+            entidad_id=user.id,
+            accion="USER_DELETED",
+            detalle={
+                "eliminado_por": str(actor.id),
+                "email": user_email,
+                "nombre": user_nombre,
+            },
+        )
+
+        await self.session.delete(user)
+        await self.session.commit()
+
+        return {"message": f"Usuario {user_email} eliminado exitosamente."}
+

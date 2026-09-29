@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Ban,
   UserX,
+  Trash2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -18,6 +19,8 @@ import { authFetch, getApiBaseUrl } from "@/lib/api";
 import { UserFormDialog } from "./user-form-dialog";
 import { UserStatusDialog } from "./user-status-dialog";
 import { UserResetPasswordDialog } from "./user-reset-password-dialog";
+import { UserDeleteDialog } from "./user-delete-dialog";
+import { UserBlockDialog } from "./user-block-dialog";
 
 interface PaginatedUsersResponse {
   items: User[];
@@ -71,6 +74,8 @@ export function UsersAdmin({ currentUser: propUser }: UsersAdminProps = {}): Rea
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [userForStatus, setUserForStatus] = useState<User | null>(null);
   const [userForReset, setUserForReset] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToBlock, setUserToBlock] = useState<User | null>(null);
 
   // Load coordinations for filter
   useEffect(() => {
@@ -350,16 +355,43 @@ export function UsersAdmin({ currentUser: propUser }: UsersAdminProps = {}): Rea
                               type="button"
                               onClick={() => setUserToEdit(u)}
                               title="Editar usuario"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 transition"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
                             </button>
 
+                            {/* Direct Bloquear / Desbloquear */}
+                            <button
+                              type="button"
+                              onClick={() => setUserToBlock(u)}
+                              disabled={currentUser?.id === u.id}
+                              title={
+                                currentUser?.id === u.id
+                                  ? "No puede bloquear su propia cuenta"
+                                  : u.estado === "BLOQUEADO"
+                                  ? "Desbloquear usuario"
+                                  : "Bloquear usuario"
+                              }
+                              className={`rounded-lg p-1.5 transition disabled:opacity-30 disabled:pointer-events-none ${
+                                u.estado === "BLOQUEADO"
+                                  ? "text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/50"
+                                  : "text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                              }`}
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Selector completo de estados */}
                             <button
                               type="button"
                               onClick={() => setUserForStatus(u)}
-                              title="Cambiar estado"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                              disabled={currentUser?.id === u.id}
+                              title={
+                                currentUser?.id === u.id
+                                  ? "No puede cambiar el estado de su propia cuenta"
+                                  : "Cambiar estado"
+                              }
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none dark:hover:bg-slate-800 transition"
                             >
                               <ShieldCheck className="h-3.5 w-3.5" />
                             </button>
@@ -368,9 +400,24 @@ export function UsersAdmin({ currentUser: propUser }: UsersAdminProps = {}): Rea
                               type="button"
                               onClick={() => setUserForReset(u)}
                               title="Restablecer contraseña"
-                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800"
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 transition"
                             >
                               <KeyRound className="h-3.5 w-3.5" />
+                            </button>
+
+                            {/* Eliminar usuario */}
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete(u)}
+                              disabled={currentUser?.id === u.id}
+                              title={
+                                currentUser?.id === u.id
+                                  ? "No puede eliminar su propia cuenta"
+                                  : "Eliminar usuario"
+                              }
+                              className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30 disabled:pointer-events-none dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         ) : (
@@ -444,6 +491,21 @@ export function UsersAdmin({ currentUser: propUser }: UsersAdminProps = {}): Rea
         onClose={() => setUserForReset(null)}
         onSuccess={loadUsers}
         user={userForReset}
+      />
+
+      <UserBlockDialog
+        isOpen={!!userToBlock}
+        onClose={() => setUserToBlock(null)}
+        onSuccess={loadUsers}
+        user={userToBlock}
+      />
+
+      <UserDeleteDialog
+        isOpen={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
+        onSuccess={loadUsers}
+        onSelectBlock={(u) => setUserToBlock(u)}
+        user={userToDelete}
       />
     </div>
   );

@@ -27,6 +27,10 @@ from src.infrastructure.db.models.organizacion import (
     Especialidad,
     ProcesoCurricular,
 )
+from src.infrastructure.db.models.revision_curricular import (
+    EntregaRevisionCurricular,
+    ObservacionRevision,
+)
 from src.infrastructure.security.password import hash_password
 from src.interfaces.http.deps import get_current_user
 from src.interfaces.http.schemas.auth import (
@@ -236,8 +240,33 @@ class AdminMockDbSession:
                 mock_result.scalar_one.return_value = cnt
                 return mock_result
 
+            # Entregas revisión curricular
+            if "entregas_revision_curricular" in text:
+                u_id = next((v for k, v in params.items() if "enviado_por_id" in k), None)
+                cnt = sum(1 for e in self.added if isinstance(e, EntregaRevisionCurricular) and e.enviado_por_id == u_id)
+                mock_result.scalar_one.return_value = cnt
+                return mock_result
+
+            # Observaciones revisión curricular
+            if "observaciones_revision_curricular" in text:
+                u_id = next((v for k, v in params.items() if "creado_por_id" in k), None)
+                cnt = sum(1 for o in self.added if isinstance(o, ObservacionRevision) and o.creado_por_id == u_id)
+                mock_result.scalar_one.return_value = cnt
+                return mock_result
+
             # General count
             mock_result.scalar_one.return_value = len(self.added)
+            return mock_result
+
+        # 7.1 Nombres de equipos por líder en delete_user
+        if "equipos_ejecutores" in text and "nombre" in text and "where" in text and "lider_id" in text.split("where")[1]:
+            lider_id = next((v for k, v in params.items() if "lider_id" in k), None)
+            matched_teams = [
+                eq.nombre for eq in self.added
+                if isinstance(eq, EquipoEjecutor)
+                and (lider_id is None or eq.lider_id == lider_id)
+            ]
+            mock_result.scalars.return_value.all.return_value = matched_teams
             return mock_result
 
         # 8. Membresía existente
@@ -590,6 +619,125 @@ async def test_admin_password_reset_forces_password_change_and_revokes():
     assert target.debe_cambiar_password is True
     assert target.token_version == 2
     assert target_sess.revoked_at is not None
+
+
+async def test_delete_user_success():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    superadmin = _build_user("super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    target = _build_user("target_del@sena.edu.co", RolUsuario.USUARIO_ADICIONAL.value)
+    target_sess = UserSession(id=uuid.uuid4(), usuario_id=target.id, token_family=uuid.uuid4(), jti="del_jti")
+    session.add(superadmin)
+    session.add(target)
+    session.add(target_sess)
+
+    res = await service.delete_user(superadmin, target.id)
+    assert "eliminado exitosamente" in res["message"]
+    assert target.id not in session.objects
+    assert target_sess.revoked_at is not None
+
+
+async def test_user_cannot_delete_themselves():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    session.add(admin)
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(admin, admin.id)
+    assert exc.value.status_code == 409
+    assert "No puede eliminar su propia cuenta" in exc.value.detail
+
+
+async def test_admin_cannot_delete_superadmin():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    admin = _build_user("admin@sena.edu.co", RolUsuario.ADMIN.value)
+    superadmin = _build_user("super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    session.add(admin)
+    session.add(superadmin)
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(admin, superadmin.id)
+    assert exc.value.status_code == 403
+    assert "no tienen permisos para eliminar a un SUPERADMIN" in exc.value.detail
+
+
+async def test_last_active_superadmin_cannot_be_deleted():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    superadmin = _build_user("sole_super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    session.add(superadmin)
+
+    other_superadmin = _build_user("other_super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    # Don't add other_superadmin as active in session, so count remains 1
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(other_superadmin, superadmin.id)
+    assert exc.value.status_code == 409
+    assert "No es posible eliminar al único SUPERADMIN activo" in exc.value.detail
+
+
+async def test_user_leading_team_cannot_be_deleted():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    superadmin = _build_user("super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    target = _build_user("leader@sena.edu.co", RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
+    team = EquipoEjecutor(id=uuid.uuid4(), nombre="Equipo Titanes", coordinacion_id=uuid.uuid4(), especialidad_id=uuid.uuid4(), lider_id=target.id, estado=EstadoEquipo.ACTIVO)
+    session.add(superadmin)
+    session.add(target)
+    session.add(team)
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(superadmin, target.id)
+    assert exc.value.status_code == 409
+    assert "es líder de uno o más equipos ejecutores" in exc.value.detail
+    assert "Equipo Titanes" in exc.value.detail
+
+
+async def test_user_with_curricular_submissions_cannot_be_deleted():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    superadmin = _build_user("super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    target = _build_user("instructor@sena.edu.co", RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
+    entrega = EntregaRevisionCurricular(
+        id=uuid.uuid4(),
+        referencia_id=uuid.uuid4(),
+        proceso_curricular_id=uuid.uuid4(),
+        version=1,
+        enviado_por_id=target.id,
+    )
+    session.add(superadmin)
+    session.add(target)
+    session.add(entrega)
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(superadmin, target.id)
+    assert exc.value.status_code == 409
+    assert "tiene entregas registradas en revisiones curriculares" in exc.value.detail
+
+
+async def test_user_with_curricular_observations_cannot_be_deleted():
+    session = AdminMockDbSession()
+    service = UserAdminService(session)
+    superadmin = _build_user("super@sena.edu.co", RolUsuario.SUPERADMIN.value)
+    target = _build_user("reviewer@sena.edu.co", RolUsuario.ADMIN.value)
+    obs = ObservacionRevision(
+        id=uuid.uuid4(),
+        entrega_id=uuid.uuid4(),
+        creado_por_id=target.id,
+        comentario="Observación de prueba",
+    )
+    session.add(superadmin)
+    session.add(target)
+    session.add(obs)
+
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_user(superadmin, target.id)
+    assert exc.value.status_code == 409
+    assert "tiene observaciones registradas en revisiones curriculares" in exc.value.detail
+
+
+
 
 
 # ==============================================================================

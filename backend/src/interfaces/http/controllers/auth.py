@@ -559,3 +559,18 @@ async def reset_user_password(
     """Administratively reset user password with forced change on next login."""
     service = UserAdminService(session)
     return await service.reset_password(current_user, usuario_id, payload)
+
+
+@router.delete(
+    "/users/{usuario_id}",
+    dependencies=[Depends(require_roles(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value))],
+)
+async def delete_user(
+    usuario_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[Usuario, Depends(get_current_user)],
+) -> dict[str, str]:
+    """Delete a user account with strict safety checks and session revocation."""
+    service = UserAdminService(session)
+    return await service.delete_user(current_user, usuario_id)
+

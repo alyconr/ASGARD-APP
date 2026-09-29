@@ -256,4 +256,39 @@ describe("AdminWorkspace", () => {
       expect(screen.getByTitle("Eliminar coordinación")).toBeInTheDocument();
     });
   });
+
+  it("renders block and delete action buttons for users and opens modals", async () => {
+    render(<AdminWorkspace />);
+
+    const usersTabBtn = screen.getByRole("button", { name: /usuarios y credenciales/i });
+    fireEvent.click(usersTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Administración de Usuarios")).toBeInTheDocument();
+      expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
+    });
+
+    const blockBtn = screen.getByTitle("Bloquear usuario");
+    expect(blockBtn).toBeInTheDocument();
+
+    const deleteBtn = screen.getByTitle("Eliminar usuario");
+    expect(deleteBtn).toBeInTheDocument();
+
+    // Click block button to open block modal
+    fireEvent.click(blockBtn);
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Bloquear Usuario" })).toBeInTheDocument();
+      expect(screen.getByText(/Bloqueo de seguridad inmediato/i)).toBeInTheDocument();
+    });
+
+    // Close block modal
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // Click delete button to open delete modal
+    fireEvent.click(deleteBtn);
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Eliminar Usuario" })).toBeInTheDocument();
+      expect(screen.getByText(/Esta acción es irreversible/i)).toBeInTheDocument();
+    });
+  });
 });
