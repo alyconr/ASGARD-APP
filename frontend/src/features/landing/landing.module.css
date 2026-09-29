@@ -166,7 +166,7 @@
   background: #79b568;
 }
 .copy h1 {
-  font-size: clamp(36px, 3.6vw, 70px);
+  font-size: clamp(28px, 2.8vw, 54px);
   font-weight: 800;
   line-height: 1.16;
   letter-spacing: -0.052em;
@@ -586,7 +586,7 @@
     min-height: 610px;
   }
   .copy h1 {
-    font-size: 3.6vw;
+    font-size: 2.8vw;
   }
   .primary,
   .secondary {
@@ -703,13 +703,10 @@
     height: 3px;
   }
   .copy h1 {
-    font-size: clamp(36px, 9.65vw, 64px);
+    font-size: clamp(20px, 6.2vw, 44px);
     line-height: 1.13;
     width: 100%;
     letter-spacing: -0.055em;
-  }
-  .desktopBreak {
-    display: none;
   }
   .description {
     font-size: 17px;
