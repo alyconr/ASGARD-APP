@@ -24,7 +24,7 @@ for (const viewport of [
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      /Construye planeaciones.*pedagógicas con claridad.*y acompañamiento/,
+      /Planea, construye y transforma.*tu formación.*con ASGARD/,
     );
     await expect(
       page

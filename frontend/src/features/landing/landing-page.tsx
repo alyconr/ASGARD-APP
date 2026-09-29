@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CirclePlay, Sprout } from "lucide-react";
+import { ArrowRight, CirclePlay, Heart, Sprout } from "lucide-react";
 import { useAuth } from "@/features/auth/auth-context";
 import { LoginDialog } from "@/features/auth/login-dialog";
 import { ForceChangePasswordDialog } from "@/features/auth/force-change-password-dialog";
@@ -60,12 +61,24 @@ export function LandingPage({
       <main id="contenido">
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.copy}>
+            <div className={styles.institution}>
+              <Image
+                src="/logo-sena.svg"
+                alt="SENA"
+                width={64}
+                height={64}
+              />
+              <p>
+                Centro de Gestión de Mercados, Logística y Tecnologías de la
+                Información
+              </p>
+            </div>
             <p className={styles.eyebrow}>Asistente pedagógico inteligente</p>
             <h1 id="hero-title">
-              Construye planeaciones
-              <br className={styles.desktopBreak} /> pedagógicas con claridad
+              Planea, construye y transforma
+              <br className={styles.desktopBreak} /> tu formación
               <br className={styles.desktopBreak} />{" "}
-              <span>y acompañamiento</span>
+              <span>con ASGARD</span>
             </h1>
             <p className={styles.description} id="solucion">
               ASGARD ayuda a los instructores del SENA a organizar programa,
@@ -99,7 +112,13 @@ export function LandingPage({
         <HeroFeatureStrip />
       </main>
       <footer className={styles.contact} id="contacto">
-        <span>ASGARD · Acompañamiento pedagógico</span>
+        <p className={styles.credit}>
+          Desarrollado con <Heart role="img" aria-label="amor" /> por el{" "}
+          <strong>
+            Equipo Pedagógico del Centro de Gestión de Mercados, Logística y
+            Tecnologías de la Información
+          </strong>
+        </p>
         <p>
           Para recibir orientación, contacta a tu líder de equipo ejecutor o al
           administrador de tu centro de formación.

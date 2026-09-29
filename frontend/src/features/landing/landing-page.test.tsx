@@ -38,7 +38,7 @@ describe("Landing ASGARD", () => {
   it("muestra el hero, las acciones y las cinco capacidades", () => {
     render(<LandingPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Construye planeaciones pedagógicas con claridad y acompañamiento",
+      "Planea, construye y transforma tu formación con ASGARD",
     );
     expect(
       screen.getByRole("link", { name: "Ver cómo funciona" }),
