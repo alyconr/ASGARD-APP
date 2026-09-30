@@ -203,7 +203,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "planeaciones_pedagogicas",
-        sa.Column("official_version", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("official_version", sa.Integer(), nullable=True),
     )
     op.add_column(
         "planeaciones_pedagogicas",
@@ -229,7 +229,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "planeacion_documento_config",
-        sa.Column("official_version", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("official_version", sa.Integer(), nullable=True),
     )
 
     # 5. planning_edit_requests table
@@ -393,7 +393,7 @@ def upgrade() -> None:
         WHERE e.proyecto_id = p.proyecto_id
           AND e.estado = 'APROBADO'
           AND e.descarga_habilitada = TRUE
-          AND p.estado = 'COMPLETO';
+          AND p.estado = 'COMPLETO'
         """
     )
     op.execute(
@@ -403,13 +403,13 @@ def upgrade() -> None:
             edit_status = 'LOCKED',
             locked_at = COALESCE(p.locked_at, NOW()),
             locked_by = p.locked_by,
-            approved_version = GREATEST(p.official_version, 1),
+            approved_version = GREATEST(COALESCE(p.official_version, 0), 1),
             approved_at = COALESCE(p.official_approved_at, NOW())
         FROM planeacion_resultados pr
         JOIN planeaciones_pedagogicas p ON p.id = pr.planeacion_id
         WHERE pr.resultado_id = r.id
           AND p.approval_status = 'APPROVED'
-          AND p.edit_status = 'LOCKED';
+          AND p.edit_status = 'LOCKED'
         """
     )
     op.execute(
@@ -419,12 +419,12 @@ def upgrade() -> None:
             edit_status = 'LOCKED',
             locked_at = COALESCE(p.locked_at, NOW()),
             locked_by = p.locked_by,
-            approved_version = GREATEST(p.official_version, 1),
+            approved_version = GREATEST(COALESCE(p.official_version, 0), 1),
             approved_at = COALESCE(p.official_approved_at, NOW())
         FROM planeaciones_pedagogicas p
         WHERE p.id = pr.planeacion_id
           AND p.approval_status = 'APPROVED'
-          AND p.edit_status = 'LOCKED';
+          AND p.edit_status = 'LOCKED'
         """
     )
     op.execute(
@@ -438,7 +438,7 @@ def upgrade() -> None:
         FROM entregas_revision_curricular e
         WHERE e.proyecto_id = c.proyecto_id
           AND e.estado = 'APROBADO'
-          AND e.descarga_habilitada = TRUE;
+          AND e.descarga_habilitada = TRUE
         """
     )
 
