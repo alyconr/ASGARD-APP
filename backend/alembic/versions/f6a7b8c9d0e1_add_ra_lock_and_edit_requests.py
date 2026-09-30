@@ -214,21 +214,21 @@ def upgrade() -> None:
         sa.Column("official_approved_by", postgresql.UUID(as_uuid=True), nullable=True),
     )
 
-    # 4. planeacion_documento_configs columns
+    # 4. planeacion_documento_config columns
     op.add_column(
-        "planeacion_documento_configs",
+        "planeacion_documento_config",
         sa.Column("official_storage_key", sa.String(length=512), nullable=True),
     )
     op.add_column(
-        "planeacion_documento_configs",
+        "planeacion_documento_config",
         sa.Column("official_file_name", sa.String(length=255), nullable=True),
     )
     op.add_column(
-        "planeacion_documento_configs",
+        "planeacion_documento_config",
         sa.Column("official_checksum_sha256", sa.String(length=64), nullable=True),
     )
     op.add_column(
-        "planeacion_documento_configs",
+        "planeacion_documento_config",
         sa.Column("official_version", sa.Integer(), nullable=False, server_default="0"),
     )
 
@@ -429,7 +429,7 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        UPDATE planeacion_documento_configs c
+        UPDATE planeacion_documento_config c
         SET
             official_storage_key = c.storage_key,
             official_file_name = c.file_name,
@@ -455,10 +455,10 @@ def downgrade() -> None:
     op.drop_index("ix_planning_edit_requests_planning_status", table_name="planning_edit_requests")
     op.drop_table("planning_edit_requests")
 
-    op.drop_column("planeacion_documento_configs", "official_version")
-    op.drop_column("planeacion_documento_configs", "official_checksum_sha256")
-    op.drop_column("planeacion_documento_configs", "official_file_name")
-    op.drop_column("planeacion_documento_configs", "official_storage_key")
+    op.drop_column("planeacion_documento_config", "official_version")
+    op.drop_column("planeacion_documento_config", "official_checksum_sha256")
+    op.drop_column("planeacion_documento_config", "official_file_name")
+    op.drop_column("planeacion_documento_config", "official_storage_key")
 
     op.drop_column("planeaciones_pedagogicas", "official_approved_by")
     op.drop_column("planeaciones_pedagogicas", "official_approved_at")
