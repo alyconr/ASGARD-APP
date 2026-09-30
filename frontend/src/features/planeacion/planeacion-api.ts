@@ -14,6 +14,13 @@ export type EstadoAprobacionPlaneacion =
 
 export type EstadoEdicionRA = "EDITABLE" | "LOCKED";
 
+export type EstadoDocumentoOficial =
+  | "CURRENT"
+  | "OUTDATED"
+  | "NOT_GENERATED"
+  | "GENERATING"
+  | "ERROR";
+
 export type EstadoSolicitudReapertura =
   | "PENDING"
   | "APPROVED"
@@ -149,6 +156,7 @@ export interface PlaneacionResponse {
   checksum_sha256: string | null;
   fecha_generacion: string | null;
   version: number;
+  official_document_status?: EstadoDocumentoOficial | string;
 }
 
 export interface PlaneacionListResponse {
@@ -163,6 +171,7 @@ export interface PlaneacionListResponse {
   review_status?: EstadoRevisionPlaneacion | string;
   approval_status?: EstadoAprobacionPlaneacion | string;
   edit_status?: EstadoEdicionRA | string;
+  official_document_status?: EstadoDocumentoOficial | string;
   competencias?: PlaneacionListCompetencia[];
   competencias_count: number;
   resultados_count: number;
@@ -190,6 +199,7 @@ export interface PlaneacionDocumentoConfig {
   checksum_sha256: string | null;
   fecha_generacion: string | null;
   version: number;
+  official_document_status?: EstadoDocumentoOficial | string;
 }
 
 export interface PlaneacionDocumentoConfigUpdate {
@@ -216,6 +226,8 @@ export interface FormatoOficialEstado {
   file_name: string | null;
   checksum_sha256: string | null;
   fecha_generacion: string | null;
+  version?: number;
+  official_document_status?: EstadoDocumentoOficial | string;
 }
 
 export interface FormatoOficialGenerado {
@@ -228,6 +240,7 @@ export interface FormatoOficialGenerado {
   filas_generadas: number;
   planeaciones_incluidas: number;
   borradores_excluidos: number;
+  official_document_status?: EstadoDocumentoOficial | string;
 }
 
 export async function fetchPlaneacionContexto(
@@ -542,6 +555,8 @@ export interface ObservacionRevision {
 
 export interface PreflightEnvioRevision {
   listo: boolean;
+  official_document_status?: EstadoDocumentoOficial | string;
+  requiere_generar_formato?: boolean;
   pendientes: string[];
   advertencias?: string[];
   resumen: {
@@ -553,6 +568,8 @@ export interface PreflightEnvioRevision {
     faltantes_count?: number;
     version_actual?: number;
     estado_actual?: string;
+    official_document_status?: string;
+    requiere_generar_formato?: boolean;
     [key: string]: unknown;
   };
 }
@@ -846,13 +863,17 @@ export async function fetchPreflightRevision(
 export async function enviarProcesoARevision(
   referencia_id: string,
   notas_entrega?: string,
+  auto_generar_formato?: boolean,
 ): Promise<EntregaRevisionDetalle> {
   return requestJson<EntregaRevisionDetalle>(
     `/revision-curricular/proceso/${referencia_id}/enviar`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notas_entrega: notas_entrega || null }),
+      body: JSON.stringify({
+        notas_entrega: notas_entrega || null,
+        auto_generar_formato: Boolean(auto_generar_formato),
+      }),
     },
   );
 }

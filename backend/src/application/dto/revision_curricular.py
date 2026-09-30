@@ -19,6 +19,8 @@ class PreflightEnvioRevisionDTO(BaseModel):
     """Result of validating whether a curricular process is ready for submission."""
 
     listo: bool
+    official_document_status: str = "NOT_GENERATED"
+    requiere_generar_formato: bool = False
     pendientes: list[str]
     advertencias: list[str] = Field(default_factory=list)
     resumen: dict[str, Any] = Field(default_factory=dict)
@@ -30,6 +32,7 @@ class EnvioRevisionRequestDTO(BaseModel):
     """Payload sent by executor team when submitting/resubmitting a process."""
 
     notas_entrega: str | None = None
+    auto_generar_formato: bool = False
 
 
 class ObservacionCreateDTO(BaseModel):

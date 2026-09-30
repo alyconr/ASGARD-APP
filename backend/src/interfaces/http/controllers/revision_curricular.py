@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.revision_curricular import (
@@ -26,6 +26,12 @@ from src.application.dto.revision_curricular import (
     PreflightEnvioRevisionDTO,
 )
 from src.application.services.access_scope import AccessScopeService
+from src.application.services.planeacion_service import (
+    OfficialDocumentGenerationError,
+    OfficialDocumentStorageError,
+    PlaneacionFormatoValidationError,
+    PlaneacionPedagogicaService,
+)
 from src.application.services.revision_curricular_service import (
     RevisionCurricularService,
 )
@@ -35,6 +41,7 @@ from src.domain.shared.enums import (
 )
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
+from src.interfaces.http.controllers.planeacion import get_planeacion_service
 from src.interfaces.http.deps import (
     get_access_scope_service,
     get_current_user,
@@ -46,9 +53,14 @@ router = APIRouter(prefix="/api/v1/revision-curricular", tags=["revision-curricu
 def get_revision_service(
     session: AsyncSession = Depends(get_async_session),
     scope_service: AccessScopeService = Depends(get_access_scope_service),
+    planeacion_service: PlaneacionPedagogicaService = Depends(get_planeacion_service),
 ) -> RevisionCurricularService:
     """Build request-scoped revision service instance."""
-    return RevisionCurricularService(session=session, scope_service=scope_service)
+    return RevisionCurricularService(
+        session=session,
+        scope_service=scope_service,
+        planeacion_service=planeacion_service,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -82,7 +94,30 @@ async def enviar_proceso(
     current_user: Usuario = Depends(get_current_user),
 ) -> EntregaRevisionDetalleDTO:
     """Submit or resubmit a completed curricular process for pedagogical review."""
-    return await service.enviar_a_revision(current_user, referencia_id, dto)
+    try:
+        return await service.enviar_a_revision(current_user, referencia_id, dto)
+    except OfficialDocumentStorageError as error:
+        await service.session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": error.code, "message": error.message},
+        ) from error
+    except OfficialDocumentGenerationError as error:
+        await service.session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": error.code, "message": error.message},
+        ) from error
+    except PlaneacionFormatoValidationError as error:
+        await service.session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                "message": "No fue posible generar el formato oficial de la planeación. Verifica la información e inténtalo nuevamente.",
+                "errors": error.messages,
+            },
+        ) from error
 
 
 @router.get(

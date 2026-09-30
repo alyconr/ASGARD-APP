@@ -44,9 +44,11 @@ from src.application.dto.revision_curricular import (
 )
 from src.application.services.access_scope import AccessScopeService
 from src.application.services.notification_events import notification_dispatcher
+from src.application.services.planeacion_service import PlaneacionPedagogicaService
 from src.domain.shared.enums import (
     EstadoAprobacionPlaneacion,
     EstadoBloque,
+    EstadoDocumentoOficial,
     EstadoEdicionRA,
     EstadoEntregaRevision,
     EstadoEquipo,
@@ -89,9 +91,11 @@ class RevisionCurricularService:
         self,
         session: AsyncSession,
         scope_service: AccessScopeService | None = None,
+        planeacion_service: PlaneacionPedagogicaService | None = None,
     ) -> None:
         self.session = session
         self.scope_service = scope_service or AccessScopeService(session)
+        self.planeacion_service = planeacion_service
 
     # -------------------------------------------------------------------------
     # Preflight Validation
@@ -111,6 +115,8 @@ class RevisionCurricularService:
             return PreflightEnvioRevisionDTO(
                 listo=False,
                 pendientes=["Proceso curricular no encontrado."],
+                official_document_status=EstadoDocumentoOficial.NOT_GENERATED.value,
+                requiere_generar_formato=False,
             )
 
         pendientes: list[str] = []
@@ -141,6 +147,8 @@ class RevisionCurricularService:
         planeaciones_completas = 0
         planeaciones_borrador = 0
         actividades_sin_planeacion: list[str] = []
+        official_document_status = EstadoDocumentoOficial.NOT_GENERATED.value
+        requiere_generar_formato = False
 
         if proceso.proyecto_id:
             # Query all activities of the project formativo
@@ -191,6 +199,12 @@ class RevisionCurricularService:
             config_res = await self.session.execute(config_stmt)
             doc_config = config_res.scalar_one_or_none()
 
+            official_document_status = (
+                PlaneacionPedagogicaService._resolve_consolidated_document_status(
+                    doc_config, planeaciones
+                )
+            )
+
             if not doc_config:
                 pendientes.append("No se ha registrado la Configuración Documental institucional.")
             else:
@@ -203,7 +217,13 @@ class RevisionCurricularService:
                 if not doc_config.equipo_gestion_curricular or len(doc_config.equipo_gestion_curricular) == 0:
                     pendientes.append("Falta registrar el Equipo de Gestión Curricular en la Configuración Documental.")
                 if not doc_config.storage_key:
+                    requiere_generar_formato = True
                     pendientes.append("Debe generar previamente el consolidado oficial GPFI-F-134 V05 en MinIO.")
+                elif official_document_status == EstadoDocumentoOficial.OUTDATED.value:
+                    requiere_generar_formato = True
+                    pendientes.append(
+                        "La versión oficial almacenada todavía no contiene los últimos cambios realizados en esta planeación."
+                    )
 
         # Check existing active delivery
         active_delivery = await self._get_latest_delivery_by_ref(referencia_id)
@@ -223,6 +243,8 @@ class RevisionCurricularService:
             "faltantes_count": len(pendientes),
             "version_actual": active_delivery.version if active_delivery else 0,
             "estado_actual": active_delivery.estado.value if active_delivery else "BORRADOR",
+            "official_document_status": official_document_status,
+            "requiere_generar_formato": requiere_generar_formato,
         }
 
         return PreflightEnvioRevisionDTO(
@@ -230,6 +252,8 @@ class RevisionCurricularService:
             pendientes=pendientes,
             advertencias=advertencias,
             resumen=resumen,
+            official_document_status=official_document_status,
+            requiere_generar_formato=requiere_generar_formato,
         )
 
     # -------------------------------------------------------------------------
@@ -243,6 +267,15 @@ class RevisionCurricularService:
         dto: EnvioRevisionRequestDTO,
     ) -> EntregaRevisionDetalleDTO:
         """Submit or resubmit a curricular process to pedagogical review."""
+        if dto.auto_generar_formato and self.planeacion_service is not None:
+            await self.scope_service.require_process_access(actor, referencia_id)
+            proceso_pre = await self._get_proceso_by_ref(referencia_id)
+            if proceso_pre and proceso_pre.proyecto_id:
+                await self.planeacion_service.generar_formato_consolidado(
+                    proceso_pre.proyecto_id,
+                    actor_id=actor.id,
+                )
+
         preflight = await self.validate_preflight_envio(actor, referencia_id)
         if not preflight.listo:
             raise HTTPException(
@@ -251,6 +284,8 @@ class RevisionCurricularService:
                     "code": "PREFLIGHT_VALIDATION_FAILED",
                     "message": "No es posible enviar el proceso a revisión pedagógica.",
                     "pendientes": preflight.pendientes,
+                    "official_document_status": preflight.official_document_status,
+                    "requiere_generar_formato": preflight.requiere_generar_formato,
                 },
             )
 
@@ -408,6 +443,24 @@ class RevisionCurricularService:
                 "notas_entrega": dto.notas_entrega,
                 "snapshot_checksum": snapshot.get("checksum_consolidado"),
                 "relocked_ra_ids": relocked_ra_ids,
+            },
+        )
+        await self._audit(
+            actor_id=actor.id,
+            referencia_id=referencia_id,
+            entidad="EntregaRevisionCurricular",
+            entidad_id=nueva_entrega.id,
+            accion="PLANNING_SUBMITTED_FOR_REVIEW",
+            detalle={
+                "planning_id": str(plans[0].id) if len(plans) == 1 else str(proceso.proyecto_id),
+                "planning_ids": [str(p.id) for p in plans],
+                "team_id": str(proceso.equipo_ejecutor_id),
+                "program_id": str(proceso.programa_id),
+                "user_id": str(actor.id),
+                "timestamp": now.isoformat(),
+                "previous_version": latest.version if latest else None,
+                "new_version": new_version,
+                "document_path": snapshot.get("storage_key_consolidado"),
             },
         )
         if new_version > 1:

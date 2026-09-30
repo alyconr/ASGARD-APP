@@ -189,6 +189,7 @@ class PlaneacionResponseDTO(BaseModel):
     official_file_name: str | None = None
     official_version: int | None = None
     official_approved_at: datetime | None = None
+    official_document_status: str = "NOT_GENERATED"
 
     model_config = {"from_attributes": True}
 
@@ -207,6 +208,7 @@ class PlaneacionListDTO(BaseModel):
     review_status: str = "DRAFT"
     approval_status: str = "PENDING"
     edit_status: str = "EDITABLE"
+    official_document_status: str = "NOT_GENERATED"
     competencias: list[PlaneacionListCompetenciaDTO] = Field(default_factory=list)
     competencias_count: int = 0
     resultados_count: int = 0
@@ -254,6 +256,7 @@ class PlaneacionDocumentoConfigDTO(BaseModel):
     official_storage_key: str | None = None
     official_file_name: str | None = None
     official_version: int | None = None
+    official_document_status: str = "NOT_GENERATED"
 
 
 class FormatoOficialFaltanteDTO(BaseModel):
@@ -268,6 +271,7 @@ class FormatoOficialEstadoDTO(BaseModel):
     """Backend-derived generation readiness for one planning or one project."""
 
     listo: bool
+    official_document_status: str = "NOT_GENERATED"
     faltantes: list[FormatoOficialFaltanteDTO] = Field(default_factory=list)
     planeaciones_completas: int = 0
     borradores_excluidos: int = 0
@@ -275,6 +279,7 @@ class FormatoOficialEstadoDTO(BaseModel):
     file_name: str | None = None
     checksum_sha256: str | None = None
     fecha_generacion: datetime | None = None
+    version: int = 1
 
 
 class FormatoOficialGeneradoDTO(BaseModel):
@@ -289,3 +294,4 @@ class FormatoOficialGeneradoDTO(BaseModel):
     filas_generadas: int
     planeaciones_incluidas: int
     borradores_excluidos: int = 0
+    official_document_status: str = "CURRENT"

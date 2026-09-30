@@ -48,6 +48,7 @@ from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import (
     EstadoAprobacionPlaneacion,
     EstadoBloque,
+    EstadoDocumentoOficial,
     EstadoEdicionRA,
     EstadoRevisionPlaneacion,
     TipoConocimiento,
@@ -81,6 +82,46 @@ _SEGMENT_MAX_LENGTH = 80
 
 class PlaneacionAccessError(Exception):
     """Raised when planning is requested before project completion."""
+
+
+class OfficialDocumentGenerationError(Exception):
+    """Raised when building the official Excel workbook fails."""
+
+    code: str = "OFFICIAL_DOCUMENT_GENERATION_ERROR"
+    default_message: str = (
+        "No fue posible generar el formato oficial de la planeación. "
+        "Verifica la información e inténtalo nuevamente."
+    )
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        code: str | None = None,
+    ) -> None:
+        self.code = code or self.code
+        self.message = message or self.default_message
+        super().__init__(self.message)
+
+
+class OfficialDocumentStorageError(Exception):
+    """Raised when storing the official Excel workbook in MinIO fails."""
+
+    code: str = "OFFICIAL_DOCUMENT_STORAGE_ERROR"
+    default_message: str = (
+        "No fue posible almacenar el formato oficial en el repositorio documental. "
+        "Intenta nuevamente."
+    )
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        code: str | None = None,
+    ) -> None:
+        self.code = code or self.code
+        self.message = message or self.default_message
+        super().__init__(self.message)
 
 
 class LearningResultLockedError(Exception):
@@ -386,6 +427,7 @@ class PlaneacionPedagogicaService:
                     edit_status=(
                         ed_status.value if hasattr(ed_status, "value") else str(ed_status or "EDITABLE")
                     ),
+                    official_document_status=self._resolve_official_document_status(entity),
                     competencias=competencias_list,
                     competencias_count=len(comp_map),
                     resultados_count=len(entity.resultados),
@@ -539,12 +581,29 @@ class PlaneacionPedagogicaService:
                 selected_resultados=resultados,
                 actor_id=actor_id,
             )
+            had_generated = bool(
+                entity.storage_key
+                or entity.fecha_generacion is not None
+                or getattr(entity, "official_storage_key", None)
+                or (getattr(entity, "version", 1) or 1) > 1
+                or (
+                    isinstance(entity.datos_complementarios, dict)
+                    and entity.datos_complementarios.get("official_document_status")
+                    in (EstadoDocumentoOficial.CURRENT.value, EstadoDocumentoOficial.OUTDATED.value)
+                )
+            )
+            datos["official_document_status"] = (
+                EstadoDocumentoOficial.OUTDATED.value
+                if had_generated
+                else EstadoDocumentoOficial.NOT_GENERATED.value
+            )
         else:
             for r in resultados:
                 r_status = getattr(r, "edit_status", None)
                 r_status_str = r_status.value if hasattr(r_status, "value") else str(r_status or "EDITABLE")
                 if r_status_str == EstadoEdicionRA.LOCKED.value:
                     raise LearningResultLockedError(learning_result_id=r.id)
+            datos["official_document_status"] = EstadoDocumentoOficial.NOT_GENERATED.value
             entity = PlaneacionPedagogica(
                 id=uuid.uuid4(),
                 proyecto_id=dto.proyecto_id,
@@ -552,6 +611,7 @@ class PlaneacionPedagogicaService:
                 actividad_id=dto.actividad_id,
             )
 
+        now = datetime.now(UTC)
         entity.fase_id = dto.fase_id
         entity.actividad_id = dto.actividad_id
         entity.estado = EstadoBloque.BORRADOR
@@ -559,6 +619,7 @@ class PlaneacionPedagogicaService:
         entity.resultados = resultados
         entity.conocimientos = conocimientos
         entity.criterios = criterios
+        entity.fecha_actualizacion = now
 
         await self._repository.save(entity)
 
@@ -586,7 +647,7 @@ class PlaneacionPedagogicaService:
                 [gap.mensaje for gap in gaps]
             )
         entity.estado = EstadoBloque.COMPLETO
-        await self._generate_individual(entity)
+        await self._generate_individual(entity, actor_id=actor_id)
         await self._repository.save(entity)
         return await self._map_to_response_dto(entity)
 
@@ -620,12 +681,20 @@ class PlaneacionPedagogicaService:
         )
         if not equipo:
             raise ValueError("El equipo de gestion curricular es obligatorio")
+        had_previous_config_doc = bool(
+            config.storage_key
+            or config.fecha_generacion is not None
+            or getattr(config, "official_storage_key", None)
+            or (getattr(config, "version", 1) or 1) > 1
+        )
         proyecto.programa.modalidad_formacion = dto.modalidad_formacion.strip()
         config.fecha_elaboracion = dto.fecha_elaboracion
         config.clasificacion_informacion = dto.clasificacion_informacion
         config.equipo_gestion_curricular = equipo
         config.regional = dto.regional.strip()
         config.centro_formacion = dto.centro_formacion.strip()
+        if had_previous_config_doc and (getattr(config, "version", 1) or 1) <= 1:
+            config.version = 2
         config.storage_key = None
         config.file_name = None
         config.content_type = None
@@ -643,8 +712,10 @@ class PlaneacionPedagogicaService:
         if entity is None:
             raise ValueError(f"No existe la planeacion pedagogica {planeacion_id}")
         gaps = await self._collect_gaps(entity, require_complete=False)
+        doc_status = self._resolve_official_document_status(entity)
         return FormatoOficialEstadoDTO(
             listo=not gaps,
+            official_document_status=doc_status,
             faltantes=gaps,
             planeaciones_completas=int(entity.estado == EstadoBloque.COMPLETO),
             borradores_excluidos=int(entity.estado != EstadoBloque.COMPLETO),
@@ -652,6 +723,7 @@ class PlaneacionPedagogicaService:
             file_name=entity.file_name,
             checksum_sha256=entity.checksum_sha256,
             fecha_generacion=entity.fecha_generacion,
+            version=entity.version or 1,
         )
 
     async def obtener_estado_formato_consolidado(
@@ -661,24 +733,41 @@ class PlaneacionPedagogicaService:
         """Return project counts, gaps, and last consolidated artifact."""
         entities = await self._repository.list_full_by_proyecto(proyecto_id)
         complete = [e for e in entities if e.estado == EstadoBloque.COMPLETO]
-        drafts = len(entities) - len(complete)
+        draft_entities = [e for e in entities if e.estado != EstadoBloque.COMPLETO]
+        drafts = len(draft_entities)
         config = await self._repository.get_document_config(proyecto_id)
         gaps: list[FormatoOficialFaltanteDTO] = []
         if not complete:
-            gaps.append(
-                self._gap(
-                    "SIN_PLANEACIONES_COMPLETAS",
-                    "No existen planeaciones completas para exportar.",
-                    "confirmacion",
-                )
-            )
+            ready_drafts = 0
+            draft_gaps: list[FormatoOficialFaltanteDTO] = []
+            for d_ent in draft_entities:
+                d_g = await self._collect_gaps(d_ent, require_complete=False)
+                if not d_g:
+                    ready_drafts += 1
+                else:
+                    draft_gaps.extend(d_g)
+            if ready_drafts == 0:
+                if draft_gaps:
+                    gaps.extend(draft_gaps)
+                else:
+                    gaps.append(
+                        self._gap(
+                            "SIN_PLANEACIONES_COMPLETAS",
+                            "No existen planeaciones completas para exportar.",
+                            "confirmacion",
+                        )
+                    )
         else:
             for entity in complete:
                 gaps.extend(await self._collect_gaps(entity, require_complete=True))
+            for d_ent in draft_entities:
+                gaps.extend(await self._collect_gaps(d_ent, require_complete=False))
         gaps = self._unique_gaps(gaps)
-        has_valid_consolidated = bool(complete and config and config.storage_key)
+        doc_status = self._resolve_consolidated_document_status(config, entities)
+        has_valid_consolidated = bool((complete or draft_entities) and config and config.storage_key)
         return FormatoOficialEstadoDTO(
             listo=not gaps,
+            official_document_status=doc_status,
             faltantes=gaps,
             planeaciones_completas=len(complete),
             borradores_excluidos=drafts,
@@ -686,36 +775,58 @@ class PlaneacionPedagogicaService:
             file_name=config.file_name if (config and has_valid_consolidated) else None,
             checksum_sha256=config.checksum_sha256 if (config and has_valid_consolidated) else None,
             fecha_generacion=config.fecha_generacion if (config and has_valid_consolidated) else None,
+            version=(config.version or 1) if config else 1,
         )
 
     async def generar_formato_individual(
         self,
         planeacion_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
     ) -> FormatoOficialGeneradoDTO:
         """Regenerate the official workbook for a completed planning."""
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             raise ValueError(f"No existe la planeacion pedagogica {planeacion_id}")
         self._assert_planning_has_editable_ra(entity)
-        gaps = await self._collect_gaps(entity, require_complete=True)
+        gaps = await self._collect_gaps(entity, require_complete=False)
         if gaps:
             raise PlaneacionFormatoValidationError(
                 [gap.mensaje for gap in gaps]
             )
-        generated = await self._generate_individual(entity)
+        entity.estado = EstadoBloque.COMPLETO
+        generated = await self._generate_individual(entity, actor_id=actor_id)
         await self._repository.save(entity)
         return generated
 
     async def generar_formato_consolidado(
         self,
         proyecto_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
     ) -> FormatoOficialGeneradoDTO:
         """Generate and store all completed project planning rows."""
         await self._ensure_project_complete(proyecto_id)
         entities = await self._repository.list_full_by_proyecto(proyecto_id)
+
+        # Automatically confirm any draft planning that has all required fields complete
+        for entity in entities:
+            if entity.estado != EstadoBloque.COMPLETO:
+                draft_gaps = await self._collect_gaps(entity, require_complete=False)
+                if not draft_gaps:
+                    entity.estado = EstadoBloque.COMPLETO
+                    await self._generate_individual(entity, actor_id=actor_id)
+                    await self._repository.save(entity)
+
         complete = [e for e in entities if e.estado == EstadoBloque.COMPLETO]
         drafts = len(entities) - len(complete)
         if not complete:
+            if entities:
+                all_draft_gaps: list[FormatoOficialFaltanteDTO] = []
+                for e in entities:
+                    all_draft_gaps.extend(await self._collect_gaps(e, require_complete=False))
+                if all_draft_gaps:
+                    raise PlaneacionFormatoValidationError(
+                        [gap.mensaje for gap in self._unique_gaps(all_draft_gaps)]
+                    )
             raise PlaneacionFormatoValidationError(
                 ["No existen planeaciones completas para exportar"]
             )
@@ -729,29 +840,116 @@ class PlaneacionPedagogicaService:
 
         proyecto = complete[0].proyecto
         config = await self._require_config(proyecto.id)
-        metadata = self._build_metadata(proyecto, config)
-        rows = await self._build_rows(complete)
-        result = self._formato_excel_service.generar(metadata=metadata, rows=rows)
+        previous_version = (config.version or 1) if config else 1
+        had_previous = bool(
+            config.storage_key
+            or config.fecha_generacion is not None
+            or getattr(config, "official_storage_key", None)
+            or previous_version > 1
+        )
         programa_dir = sanitize_directory_name(proyecto.programa.nombre_programa)
         proyecto_dir = sanitize_directory_name(proyecto.nombre_proyecto)
         storage_key = (
             f"planeaciones-pedagogicas/{programa_dir}/{proyecto_dir}/"
             f"formato-oficial/{OFFICIAL_FILE_NAME}"
         )
-        await self._storage_service.save_excel(
-            key=storage_key,
-            content=result.content,
-            content_type=EXCEL_CONTENT_TYPE,
-            original_filename=OFFICIAL_FILE_NAME,
-        )
+
+        try:
+            metadata = self._build_metadata(proyecto, config)
+            rows = await self._build_rows(complete)
+            result = self._formato_excel_service.generar(metadata=metadata, rows=rows)
+        except PlaneacionFormatoValidationError as exc:
+            await self._record_official_document_audit(
+                accion="OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                entidad="ProyectoFormativo",
+                entidad_id=proyecto.id,
+                planning_id=complete[0].id if complete else None,
+                proyecto_id=proyecto.id,
+                programa_id=proyecto.programa_id,
+                actor_id=actor_id,
+                previous_version=previous_version,
+                new_version=previous_version,
+                document_path=storage_key,
+                extra={"error_stage": "GENERATION", "reason": "; ".join(exc.messages)},
+            )
+            raise
+        except Exception as exc:
+            await self._record_official_document_audit(
+                accion="OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                entidad="ProyectoFormativo",
+                entidad_id=proyecto.id,
+                planning_id=complete[0].id if complete else None,
+                proyecto_id=proyecto.id,
+                programa_id=proyecto.programa_id,
+                actor_id=actor_id,
+                previous_version=previous_version,
+                new_version=previous_version,
+                document_path=storage_key,
+                extra={"error_stage": "GENERATION", "reason": str(exc)},
+            )
+            raise OfficialDocumentGenerationError() from exc
+
+        try:
+            await self._storage_service.save_excel(
+                key=storage_key,
+                content=result.content,
+                content_type=EXCEL_CONTENT_TYPE,
+                original_filename=OFFICIAL_FILE_NAME,
+            )
+        except Exception as exc:
+            await self._record_official_document_audit(
+                accion="OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                entidad="ProyectoFormativo",
+                entidad_id=proyecto.id,
+                planning_id=complete[0].id if complete else None,
+                proyecto_id=proyecto.id,
+                programa_id=proyecto.programa_id,
+                actor_id=actor_id,
+                previous_version=previous_version,
+                new_version=previous_version,
+                document_path=storage_key,
+                extra={"error_stage": "STORAGE", "reason": str(exc)},
+            )
+            raise OfficialDocumentStorageError() from exc
+
         now = datetime.now(UTC)
-        config.version = config.version + 1 if config.storage_key else config.version
+        new_version = previous_version + 1 if had_previous else previous_version
+        config.version = new_version
         config.storage_key = storage_key
         config.file_name = OFFICIAL_FILE_NAME
         config.content_type = EXCEL_CONTENT_TYPE
         config.checksum_sha256 = result.checksum_sha256
         config.fecha_generacion = now
         await self._repository.save_document_config(config)
+
+        for entity in complete:
+            datos = dict(entity.datos_complementarios) if isinstance(entity.datos_complementarios, dict) else {}
+            datos["official_document_status"] = EstadoDocumentoOficial.CURRENT.value
+            datos["official_document_generated_at"] = now.isoformat()
+            entity.datos_complementarios = datos
+            if not entity.storage_key:
+                entity.storage_key = storage_key
+            entity.fecha_generacion = now
+            entity.fecha_actualizacion = now
+            await self._repository.save(entity)
+
+        await self._record_official_document_audit(
+            accion="OFFICIAL_DOCUMENT_UPDATED" if had_previous else "OFFICIAL_DOCUMENT_GENERATED",
+            entidad="ProyectoFormativo",
+            entidad_id=proyecto.id,
+            planning_id=complete[0].id if complete else None,
+            proyecto_id=proyecto.id,
+            programa_id=proyecto.programa_id,
+            actor_id=actor_id,
+            previous_version=previous_version,
+            new_version=new_version,
+            document_path=storage_key,
+            extra={
+                "planeaciones_incluidas": len(complete),
+                "filas_generadas": result.filas_generadas,
+            },
+        )
+
         return FormatoOficialGeneradoDTO(
             storage_key=storage_key,
             file_name=OFFICIAL_FILE_NAME,
@@ -762,6 +960,7 @@ class PlaneacionPedagogicaService:
             filas_generadas=result.filas_generadas,
             planeaciones_incluidas=len(complete),
             borradores_excluidos=drafts,
+            official_document_status=EstadoDocumentoOficial.CURRENT.value,
         )
 
     async def descargar_formato_individual(
@@ -1232,26 +1431,76 @@ class PlaneacionPedagogicaService:
     async def _generate_individual(
         self,
         entity: PlaneacionPedagogica,
+        actor_id: uuid.UUID | None = None,
     ) -> FormatoOficialGeneradoDTO:
+        had_previous = bool(entity.storage_key)
+        previous_version = entity.version if had_previous else None
         config = await self._require_config(entity.proyecto_id)
         metadata = self._build_metadata(entity.proyecto, config)
-        rows = await self._build_rows([entity])
-        result = self._formato_excel_service.generar(metadata=metadata, rows=rows)
+        try:
+            rows = await self._build_rows([entity])
+            result = self._formato_excel_service.generar(metadata=metadata, rows=rows)
+        except Exception as exc:
+            await self._record_official_document_audit(
+                event_type="OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                proyecto=entity.proyecto,
+                planning_id=entity.id,
+                actor_id=actor_id,
+                previous_version=previous_version,
+                new_version=None,
+                document_path=None,
+                error_detail="Error durante la construcción del formato oficial individual.",
+            )
+            raise OfficialDocumentGenerationError() from exc
+
         storage_key = self._build_individual_storage_key(entity)
         file_name = "GPFI-F-134V05-planeacion.xlsx"
-        await self._storage_service.save_excel(
-            key=storage_key,
-            content=result.content,
-            content_type=EXCEL_CONTENT_TYPE,
-            original_filename=file_name,
-        )
+        try:
+            await self._storage_service.save_excel(
+                key=storage_key,
+                content=result.content,
+                content_type=EXCEL_CONTENT_TYPE,
+                original_filename=file_name,
+            )
+        except Exception as exc:
+            await self._record_official_document_audit(
+                event_type="OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                proyecto=entity.proyecto,
+                planning_id=entity.id,
+                actor_id=actor_id,
+                previous_version=previous_version,
+                new_version=None,
+                document_path=storage_key,
+                error_detail="Error almacenando el formato oficial individual en el repositorio documental.",
+            )
+            raise OfficialDocumentStorageError() from exc
+
         now = datetime.now(UTC)
-        entity.version = entity.version + 1 if entity.storage_key else entity.version
+        entity.version = entity.version + 1 if had_previous else (entity.version or 1)
         entity.storage_key = storage_key
         entity.file_name = file_name
         entity.content_type = EXCEL_CONTENT_TYPE
         entity.checksum_sha256 = result.checksum_sha256
         entity.fecha_generacion = now
+        entity.fecha_actualizacion = now
+        datos = dict(entity.datos_complementarios or {})
+        datos["official_document_status"] = EstadoDocumentoOficial.CURRENT.value
+        datos["official_document_generated_at"] = now.isoformat()
+        entity.datos_complementarios = datos
+
+        await self._record_official_document_audit(
+            event_type=(
+                "OFFICIAL_DOCUMENT_UPDATED"
+                if had_previous
+                else "OFFICIAL_DOCUMENT_GENERATED"
+            ),
+            proyecto=entity.proyecto,
+            planning_id=entity.id,
+            actor_id=actor_id,
+            previous_version=previous_version,
+            new_version=entity.version,
+            document_path=storage_key,
+        )
         return FormatoOficialGeneradoDTO(
             storage_key=storage_key,
             file_name=file_name,
@@ -1261,6 +1510,141 @@ class PlaneacionPedagogicaService:
             version=entity.version,
             filas_generadas=result.filas_generadas,
             planeaciones_incluidas=1,
+            official_document_status=EstadoDocumentoOficial.CURRENT.value,
+        )
+
+    @staticmethod
+    def _resolve_official_document_status(entity: PlaneacionPedagogica) -> str:
+        """Determine whether an individual planning's official document is CURRENT, OUTDATED, or NOT_GENERATED."""
+        datos = entity.datos_complementarios or {}
+        explicit_status = datos.get("official_document_status")
+        if explicit_status == EstadoDocumentoOficial.OUTDATED.value:
+            return EstadoDocumentoOficial.OUTDATED.value
+        if not entity.storage_key:
+            if (
+                getattr(entity, "fecha_generacion", None) is not None
+                or getattr(entity, "official_storage_key", None)
+                or (getattr(entity, "version", 1) or 1) > 1
+            ):
+                return EstadoDocumentoOficial.OUTDATED.value
+            return EstadoDocumentoOficial.NOT_GENERATED.value
+        if entity.estado == EstadoBloque.BORRADOR:
+            return EstadoDocumentoOficial.OUTDATED.value
+        updated_at = getattr(entity, "fecha_actualizacion", None)
+        generated_at = getattr(entity, "fecha_generacion", None)
+        if (
+            updated_at is not None
+            and generated_at is not None
+            and updated_at > generated_at
+        ):
+            return EstadoDocumentoOficial.OUTDATED.value
+        return EstadoDocumentoOficial.CURRENT.value
+
+    @classmethod
+    def _resolve_consolidated_document_status(
+        cls,
+        config: PlaneacionDocumentoConfig | None,
+        entities: Sequence[PlaneacionPedagogica],
+    ) -> str:
+        """Determine whether the project's consolidated official document is CURRENT, OUTDATED, or NOT_GENERATED."""
+        if not entities:
+            return EstadoDocumentoOficial.NOT_GENERATED.value
+        if config is None:
+            return EstadoDocumentoOficial.NOT_GENERATED.value
+        if not config.storage_key:
+            if (
+                getattr(config, "fecha_generacion", None) is not None
+                or getattr(config, "official_storage_key", None)
+                or (getattr(config, "version", 1) or 1) > 1
+                or any(
+                    cls._resolve_official_document_status(e)
+                    == EstadoDocumentoOficial.OUTDATED.value
+                    for e in entities
+                )
+            ):
+                return EstadoDocumentoOficial.OUTDATED.value
+            return EstadoDocumentoOficial.NOT_GENERATED.value
+        config_generated_at = getattr(config, "fecha_generacion", None)
+        config_updated_at = getattr(config, "fecha_actualizacion", None)
+        if (
+            config_updated_at is not None
+            and config_generated_at is not None
+            and config_updated_at > config_generated_at
+        ):
+            return EstadoDocumentoOficial.OUTDATED.value
+        for entity in entities:
+            if entity.estado == EstadoBloque.BORRADOR:
+                return EstadoDocumentoOficial.OUTDATED.value
+            datos = entity.datos_complementarios or {}
+            if datos.get("official_document_status") == EstadoDocumentoOficial.OUTDATED.value:
+                return EstadoDocumentoOficial.OUTDATED.value
+            entity_updated = getattr(entity, "fecha_actualizacion", None)
+            entity_generated = getattr(entity, "fecha_generacion", None)
+            if (
+                entity_updated is not None
+                and entity_generated is not None
+                and entity_updated > entity_generated
+            ):
+                return EstadoDocumentoOficial.OUTDATED.value
+            if (
+                entity_updated is not None
+                and config_generated_at is not None
+                and entity_updated > config_generated_at
+            ):
+                return EstadoDocumentoOficial.OUTDATED.value
+        return EstadoDocumentoOficial.CURRENT.value
+
+    async def _record_official_document_audit(
+        self,
+        *,
+        event_type: str | None = None,
+        accion: str | None = None,
+        entidad: str = "planeacion_pedagogica",
+        entidad_id: uuid.UUID | None = None,
+        proyecto: ProyectoFormativo | None = None,
+        proyecto_id: uuid.UUID | None = None,
+        programa_id: uuid.UUID | None = None,
+        planning_id: uuid.UUID | None = None,
+        actor_id: uuid.UUID | None = None,
+        previous_version: int | None = None,
+        new_version: int | None = None,
+        document_path: str | None = None,
+        error_detail: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        resolved_event = accion or event_type or "OFFICIAL_DOCUMENT_GENERATED"
+        programa = getattr(proyecto, "programa", None) if proyecto else None
+        proceso = getattr(programa, "proceso_curricular", None) if programa else None
+        referencia_id = getattr(programa, "referencia_id", None) if programa else None
+        team_id = getattr(proceso, "equipo_ejecutor_id", None) if proceso else None
+        resolved_program_id = programa_id or (getattr(programa, "id", None) if programa else None)
+        resolved_project_id = proyecto_id or (getattr(proyecto, "id", None) if proyecto else None)
+        target_id = entidad_id or planning_id or resolved_project_id or uuid.uuid4()
+        now_iso = datetime.now(UTC).isoformat()
+        payload: dict[str, Any] = {
+            "planning_id": str(planning_id or target_id),
+            "project_id": str(resolved_project_id) if resolved_project_id else None,
+            "team_id": str(team_id) if team_id else None,
+            "program_id": str(resolved_program_id) if resolved_program_id else None,
+            "user_id": str(actor_id) if actor_id else None,
+            "timestamp": now_iso,
+            "previous_version": previous_version,
+            "new_version": new_version,
+            "document_path": document_path,
+        }
+        if error_detail:
+            payload["error_detail"] = error_detail
+        if extra:
+            payload.update(extra)
+        self._session.add(
+            EventoAuditoria(
+                entidad=entidad,
+                entidad_id=target_id,
+                referencia_id=referencia_id,
+                accion=resolved_event,
+                actor_usuario_id=actor_id,
+                detalle=payload,
+            )
         )
 
     def _build_individual_storage_key(self, entity: PlaneacionPedagogica) -> str:
@@ -2005,11 +2389,24 @@ class PlaneacionPedagogicaService:
             clasificacion_informacion=config.clasificacion_informacion or "",
         )
 
-    @staticmethod
+    @classmethod
     def _map_config(
+        cls,
         proyecto: ProyectoFormativo,
         config: PlaneacionDocumentoConfig | None,
+        entities: Sequence[PlaneacionPedagogica] | None = None,
     ) -> PlaneacionDocumentoConfigDTO:
+        if entities is not None:
+            doc_status = cls._resolve_consolidated_document_status(config, entities)
+        elif config and config.storage_key:
+            config_gen = getattr(config, "fecha_generacion", None)
+            config_upd = getattr(config, "fecha_actualizacion", None)
+            if config_upd is not None and config_gen is not None and config_upd > config_gen:
+                doc_status = EstadoDocumentoOficial.OUTDATED.value
+            else:
+                doc_status = EstadoDocumentoOficial.CURRENT.value
+        else:
+            doc_status = EstadoDocumentoOficial.NOT_GENERATED.value
         return PlaneacionDocumentoConfigDTO(
             proyecto_id=proyecto.id,
             fecha_elaboracion=config.fecha_elaboracion if config else None,
@@ -2034,6 +2431,7 @@ class PlaneacionPedagogicaService:
             checksum_sha256=config.checksum_sha256 if config else None,
             fecha_generacion=config.fecha_generacion if config else None,
             version=config.version if config else 1,
+            official_document_status=doc_status,
             official_storage_key=getattr(config, "official_storage_key", None) if config else None,
             official_file_name=getattr(config, "official_file_name", None) if config else None,
             official_version=getattr(config, "official_version", None) if config else None,
@@ -2120,6 +2518,7 @@ class PlaneacionPedagogicaService:
             checksum_sha256=entity.checksum_sha256,
             fecha_generacion=entity.fecha_generacion,
             version=entity.version or 1,
+            official_document_status=self._resolve_official_document_status(entity),
             official_storage_key=getattr(entity, "official_storage_key", None),
             official_file_name=getattr(entity, "official_file_name", None),
             official_version=getattr(entity, "official_version", None),

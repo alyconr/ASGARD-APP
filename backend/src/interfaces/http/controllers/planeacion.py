@@ -31,7 +31,10 @@ from src.domain.shared.enums import (
 )
 from src.application.services.planeacion_service import (
     LearningResultLockedError,
+    OfficialDocumentGenerationError,
+    OfficialDocumentStorageError,
     PlaneacionAccessError,
+    PlaneacionFormatoValidationError,
     PlaneacionPedagogicaService,
 )
 from src.application.services.access_scope import AccessScopeService
@@ -277,9 +280,9 @@ async def generar_formato_consolidado(
     if not await scope_service.can_access_project(current_user, proyecto_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
-        result = await service.generar_formato_consolidado(proyecto_id)
-        referencia_id = await _resolve_referencia_id(session, proyecto_id)
         actor_id = await _safe_actor_id(session, current_user)
+        result = await service.generar_formato_consolidado(proyecto_id, actor_id=actor_id)
+        referencia_id = await _resolve_referencia_id(session, proyecto_id)
         audit_repo = AuditRepository(session)
         await audit_repo.add_event(
             entidad="ProyectoFormativo",
@@ -297,6 +300,34 @@ async def generar_formato_consolidado(
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
+    except OfficialDocumentStorageError as error:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from error
+    except OfficialDocumentGenerationError as error:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from error
+    except PlaneacionFormatoValidationError as error:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "OFFICIAL_DOCUMENT_GENERATION_FAILED",
+                "message": "No fue posible generar el formato oficial de la planeación. Verifica la información e inténtalo nuevamente.",
+                "errors": error.messages,
+            },
+        ) from error
     except (PlaneacionAccessError, ValueError) as error:
         await session.rollback()
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -395,7 +426,8 @@ async def generar_formato_individual(
     if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
-        result = await service.generar_formato_individual(planeacion_id)
+        actor_id = await _safe_actor_id(session, current_user)
+        result = await service.generar_formato_individual(planeacion_id, actor_id=actor_id)
         planeacion = None
         try:
             planeacion = await session.get(PlaneacionPedagogica, planeacion_id)
@@ -403,7 +435,6 @@ async def generar_formato_individual(
             pass
         proyecto_id = planeacion.proyecto_id if planeacion else None
         referencia_id = await _resolve_referencia_id(session, proyecto_id)
-        actor_id = await _safe_actor_id(session, current_user)
         audit_repo = AuditRepository(session)
         await audit_repo.add_event(
             entidad="PlaneacionPedagogica",
@@ -424,6 +455,24 @@ async def generar_formato_individual(
     except LearningResultLockedError:
         await session.rollback()
         raise
+    except OfficialDocumentStorageError as error:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from error
+    except OfficialDocumentGenerationError as error:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": error.code,
+                "message": error.message,
+            },
+        ) from error
     except (PlaneacionAccessError, ValueError) as error:
         await session.rollback()
         raise HTTPException(status_code=400, detail=str(error)) from error

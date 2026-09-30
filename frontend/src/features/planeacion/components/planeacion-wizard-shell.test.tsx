@@ -213,7 +213,7 @@ describe("PlaneacionWizardShell", () => {
       await screen.findByText("Configuración documental"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Generar consolidado oficial" }),
+      screen.getByRole("button", { name: "Generar formato oficial" }),
     ).toBeDisabled();
     fireEvent.click(
       screen.getByRole("button", { name: "Guardar configuración" }),

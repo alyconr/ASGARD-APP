@@ -609,6 +609,10 @@ export function PlaneacionWizardShell({
   const [ajusteObservacionId, setAjusteObservacionId] = useState<string | null>(null);
   const [detalleAjusteTexto, setDetalleAjusteTexto] = useState("");
   const [isReportingAjuste, setIsReportingAjuste] = useState(false);
+  const [assistedSyncStep, setAssistedSyncStep] = useState<
+    "IDLE" | "GENERATING" | "SAVING" | "SUBMITTING" | "DONE" | "ERROR"
+  >("IDLE");
+  const [assistedSyncError, setAssistedSyncError] = useState<string | null>(null);
 
   // RA Lock & Controlled Reopening State
   const [editRequests, setEditRequests] = useState<PlanningEditRequest[]>([]);
@@ -1622,7 +1626,40 @@ export function PlaneacionWizardShell({
     }
   };
 
+  const resolvedConsolidatedDocStatus = useMemo(() => {
+    if (
+      isOfficialBusy ||
+      assistedSyncStep === "GENERATING" ||
+      assistedSyncStep === "SAVING"
+    ) {
+      return "GENERATING";
+    }
+    if (consolidatedStatus?.official_document_status) {
+      return consolidatedStatus.official_document_status;
+    }
+    if (consolidatedStatus?.storage_key) {
+      return "CURRENT";
+    }
+    return "NOT_GENERATED";
+  }, [isOfficialBusy, assistedSyncStep, consolidatedStatus]);
+
+  const resolveFormatErrorMessage = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message : String(error ?? "");
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes("almacenar") ||
+      lower.includes("repositorio documental") ||
+      lower.includes("minio") ||
+      lower.includes("storage") ||
+      lower.includes("object not found")
+    ) {
+      return "No fue posible almacenar el formato oficial en el repositorio documental. Intenta nuevamente.";
+    }
+    return "No fue posible generar el formato oficial de la planeación. Verifica la información e inténtalo nuevamente.";
+  };
+
   const handleGenerateConsolidated = async () => {
+    if (isOfficialBusy) return;
     setIsOfficialBusy(true);
     try {
       const result = await generarFormatoOficialConsolidado(
@@ -1631,14 +1668,10 @@ export function PlaneacionWizardShell({
       await loadOfficialFormat();
       await loadEstadoRevision();
       toast.success(
-        `${result.planeaciones_incluidas} planeaciones incluidas; ${result.borradores_excluidos} borradores excluidos`,
+        `Formato oficial actualizado (${result.planeaciones_incluidas} planeaciones incluidas; ${result.borradores_excluidos} borradores excluidos)`,
       );
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No fue posible generar el consolidado",
-      );
+      toast.error(resolveFormatErrorMessage(error));
     } finally {
       setIsOfficialBusy(false);
     }
@@ -1653,26 +1686,56 @@ export function PlaneacionWizardShell({
     }
     if (!consolidatedStatus?.storage_key) {
       toast.error(
-        "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes volver a generar el formato consolidado.",
+        "No hay un archivo consolidado disponible para descargar porque la planeación fue eliminada o modificada. Debes actualizar el formato oficial.",
       );
       return;
     }
     try {
       await downloadFormatoOficialConsolidado(contexto.proyecto_id);
-    } catch (error) {
+    } catch {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "No hay un archivo consolidado disponible para descargar. Debes volver a generar el formato consolidado.",
+        "No hay un archivo consolidado disponible para descargar. Verifica que el formato oficial esté actualizado.",
       );
       await loadOfficialFormat();
     }
   };
 
   const handleOpenPreflight = async () => {
+    if (isPreflightLoading || isSubmittingRevision) return;
     setIsPreflightLoading(true);
+    setAssistedSyncStep("IDLE");
+    setAssistedSyncError(null);
     try {
       const data = await fetchPreflightRevision(referenciaId);
+      const docStatus =
+        data.official_document_status ??
+        (data.resumen?.official_document_status as string | undefined);
+      const needsFormatGeneration = Boolean(
+        data.requiere_generar_formato ||
+          data.resumen?.requiere_generar_formato ||
+          docStatus === "NOT_GENERATED" ||
+          docStatus === "OUTDATED",
+      );
+
+      if (!needsFormatGeneration && data.listo && docStatus === "CURRENT") {
+        setIsSubmittingRevision(true);
+        try {
+          const result = await enviarProcesoARevision(referenciaId);
+          setEntregaActual(result);
+          setIsPreflightModalOpen(false);
+          toast.success("Planeación enviada correctamente a revisión.");
+          await loadEstadoRevision();
+          return;
+        } catch {
+          toast.error(
+            "No fue posible completar el envío a revisión. Intenta nuevamente.",
+          );
+          return;
+        } finally {
+          setIsSubmittingRevision(false);
+        }
+      }
+
       setPreflightData(data);
       setDecisionEnvio("ENVIAR_ACTUALES");
       setShowActividadesPendientes(false);
@@ -1689,11 +1752,65 @@ export function PlaneacionWizardShell({
     }
   };
 
+  const handleGenerateAndSubmitForReview = async () => {
+    if (isSubmittingRevision || isOfficialBusy) return;
+    setIsSubmittingRevision(true);
+    setAssistedSyncError(null);
+    setAssistedSyncStep("GENERATING");
+
+    try {
+      await generarFormatoOficialConsolidado(contexto.proyecto_id);
+    } catch (error) {
+      const friendlyError = resolveFormatErrorMessage(error);
+      setAssistedSyncStep("ERROR");
+      setAssistedSyncError(friendlyError);
+      toast.error(friendlyError);
+      setIsSubmittingRevision(false);
+      return;
+    }
+
+    setAssistedSyncStep("SAVING");
+    await loadOfficialFormat();
+    setPreflightData((prev) =>
+      prev
+        ? {
+            ...prev,
+            listo: true,
+            official_document_status: "CURRENT",
+            requiere_generar_formato: false,
+            pendientes: [],
+          }
+        : prev,
+    );
+
+    setAssistedSyncStep("SUBMITTING");
+    try {
+      const result = await enviarProcesoARevision(
+        referenciaId,
+        notasEntrega.trim() || undefined,
+      );
+      setAssistedSyncStep("DONE");
+      setEntregaActual(result);
+      setIsPreflightModalOpen(false);
+      toast.success("Planeación enviada correctamente a revisión.");
+      await loadEstadoRevision();
+    } catch {
+      const submitErrorMsg =
+        "El formato oficial fue actualizado correctamente, pero no fue posible completar el envío a revisión. Puedes intentar enviarlo nuevamente.";
+      setAssistedSyncStep("ERROR");
+      setAssistedSyncError(submitErrorMsg);
+      toast.error(submitErrorMsg);
+    } finally {
+      setIsSubmittingRevision(false);
+    }
+  };
+
   const handleSubmitRevision = async () => {
     if (!preflightData?.listo) {
       toast.error("Existen requisitos pendientes que impiden enviar a revisión pedagógica.");
       return;
     }
+    if (isSubmittingRevision) return;
     setIsSubmittingRevision(true);
     try {
       const result = await enviarProcesoARevision(
@@ -1702,13 +1819,11 @@ export function PlaneacionWizardShell({
       );
       setEntregaActual(result);
       setIsPreflightModalOpen(false);
-      toast.success("¡Proceso curricular enviado a Revisión Pedagógica exitosamente!");
+      toast.success("Planeación enviada correctamente a revisión.");
       await loadEstadoRevision();
-    } catch (error) {
+    } catch {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Error al enviar el proceso a revisión pedagógica.",
+        "El formato oficial fue actualizado correctamente, pero no fue posible completar el envío a revisión. Puedes intentar enviarlo nuevamente.",
       );
     } finally {
       setIsSubmittingRevision(false);
@@ -2392,7 +2507,7 @@ export function PlaneacionWizardShell({
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:flex-wrap sm:items-start">
               <button
                 type="button"
                 disabled={isOfficialBusy}
@@ -2402,18 +2517,51 @@ export function PlaneacionWizardShell({
                 <Save className="h-4 w-4" />
                 Guardar configuración
               </button>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    title="Genera la versión documental de la planeación actual y la almacena en el repositorio institucional."
+                    disabled={isOfficialBusy || consolidatedStatus?.listo !== true}
+                    onClick={() => void handleGenerateConsolidated()}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    {resolvedConsolidatedDocStatus === "GENERATING"
+                      ? "Generando formato oficial..."
+                      : resolvedConsolidatedDocStatus === "OUTDATED"
+                      ? "Actualizar formato oficial"
+                      : resolvedConsolidatedDocStatus === "CURRENT"
+                      ? "Formato oficial actualizado"
+                      : "Generar formato oficial"}
+                  </button>
+                  <span
+                    data-testid="official-document-status-badge"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      resolvedConsolidatedDocStatus === "CURRENT"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : resolvedConsolidatedDocStatus === "OUTDATED"
+                        ? "bg-amber-50 text-amber-800 border border-amber-200"
+                        : "bg-slate-100 text-slate-600 border border-slate-200",
+                    )}
+                  >
+                    {resolvedConsolidatedDocStatus === "CURRENT"
+                      ? "✓ Formato actualizado"
+                      : resolvedConsolidatedDocStatus === "OUTDATED"
+                      ? "⚠ Cambios pendientes de actualizar"
+                      : "○ Formato todavía no generado"}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Genera la versión documental de la planeación actual y la almacena en el repositorio institucional.
+                </span>
+              </div>
+
               <button
                 type="button"
-                disabled={isOfficialBusy || consolidatedStatus?.listo !== true}
-                onClick={() => void handleGenerateConsolidated()}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Generar consolidado oficial
-              </button>
-              <button
-                type="button"
-                disabled={isOfficialBusy || isPreflightLoading}
+                disabled={isOfficialBusy || isPreflightLoading || isSubmittingRevision}
                 onClick={() => void handleOpenPreflight()}
                 className={cn(
                   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition shadow-sm",
@@ -2427,6 +2575,7 @@ export function PlaneacionWizardShell({
                   ? "Reenviar a Revisión"
                   : "Enviar a Revisión Pedagógica"}
               </button>
+
               {(() => {
                 const isApproved = entregaActual?.estado === "APROBADO" && Boolean(entregaActual?.descarga_habilitada);
                 const hasFile = Boolean(consolidatedStatus?.storage_key);
@@ -2436,6 +2585,7 @@ export function PlaneacionWizardShell({
                   <div className="flex flex-col gap-1">
                     <button
                       type="button"
+                      title="Descarga el documento consolidado oficial disponible para esta planeación."
                       disabled={!canDownload}
                       onClick={() => void handleDownloadConsolidated()}
                       className={cn(
@@ -2446,13 +2596,16 @@ export function PlaneacionWizardShell({
                       )}
                     >
                       {canDownload ? <Download className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                      Descargar consolidado
+                      Descargar consolidado oficial
                     </button>
+                    <span className="text-[11px] text-slate-500">
+                      Descarga el documento consolidado oficial disponible para esta planeación.
+                    </span>
                     {!canDownload && (
                       <span className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1">
                         <Lock className="h-3 w-3 shrink-0" />
                         {!hasFile
-                          ? "Genera primero el consolidado."
+                          ? "Actualiza primero el formato oficial."
                           : !isApproved
                           ? "Requiere aprobación pedagógica."
                           : "Descarga no autorizada."}
@@ -4039,7 +4192,11 @@ export function PlaneacionWizardShell({
                       className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FileSpreadsheet className="h-4 w-4" />
-                      Generar formato oficial
+                      {officialStatus?.official_document_status === "OUTDATED"
+                        ? "Actualizar formato oficial"
+                        : officialStatus?.official_document_status === "CURRENT"
+                        ? "Formato oficial actualizado"
+                        : "Generar formato oficial"}
                     </button>
                   ) : (
                     <p className="max-w-sm text-right text-xs leading-5 text-amber-800">
@@ -4532,25 +4689,131 @@ export function PlaneacionWizardShell({
       {isPreflightModalOpen && preflightData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-2xl dark:bg-slate-900 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                <ClipboardCheck className="h-5 w-5" />
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Envío a Revisión Pedagógica
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPreflightModalOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Body */}
             {(() => {
+              const docStatus =
+                preflightData.official_document_status ??
+                (preflightData.resumen?.official_document_status as string | undefined);
+              const nonFormatPendientes = (preflightData.pendientes ?? []).filter(
+                (p) =>
+                  !p.toLowerCase().includes("versión oficial") &&
+                  !p.toLowerCase().includes("formato oficial") &&
+                  !p.toLowerCase().includes("formato consolidado") &&
+                  !p.toLowerCase().includes("consolidado oficial"),
+              );
+              const isAssistedFormatModal =
+                nonFormatPendientes.length === 0 &&
+                Boolean(
+                  preflightData.requiere_generar_formato ||
+                    preflightData.resumen?.requiere_generar_formato ||
+                    docStatus === "NOT_GENERATED" ||
+                    docStatus === "OUTDATED" ||
+                    assistedSyncStep !== "IDLE",
+                );
+
+              if (isAssistedFormatModal) {
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+                      <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                        <FileSpreadsheet className="h-5 w-5" />
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                          La planeación tiene cambios pendientes
+                        </h2>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSubmittingRevision || isOfficialBusy}
+                        onClick={() => setIsPreflightModalOpen(false)}
+                        className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-800 space-y-2 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-slate-200">
+                        <p className="leading-relaxed">
+                          La versión oficial almacenada todavía no contiene los últimos cambios realizados en esta planeación. Antes de enviarla a revisión debemos generar una nueva versión del formato oficial y almacenarla en el repositorio documental.
+                        </p>
+                        <p className="font-medium text-amber-900 dark:text-amber-300">
+                          Puedes realizar esta acción ahora y continuar automáticamente con el envío a revisión.
+                        </p>
+                      </div>
+
+                      {/* Progress Indicator */}
+                      {assistedSyncStep !== "IDLE" && (
+                        <div
+                          data-testid="assisted-sync-progress"
+                          className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-xs dark:border-slate-800 dark:bg-slate-800/50"
+                        >
+                          <div className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                            <span className="inline-block h-2 w-2 rounded-full bg-emerald-600" />
+                            <span>
+                              {assistedSyncStep === "GENERATING" && "Generando formato oficial..."}
+                              {assistedSyncStep === "SAVING" && "Guardando documento..."}
+                              {assistedSyncStep === "SUBMITTING" && "Enviando a revisión..."}
+                              {assistedSyncStep === "DONE" && "Planeación enviada correctamente a revisión."}
+                              {assistedSyncStep === "ERROR" && "Proceso detenido por un inconveniente."}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error Message */}
+                      {assistedSyncError && (
+                        <div
+                          role="alert"
+                          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300"
+                        >
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <p className="font-medium leading-relaxed">{assistedSyncError}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Notas de entrega opcionales */}
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                          Notas o comentarios para el Equipo Pedagógico (opcional)
+                        </label>
+                        <textarea
+                          rows={2}
+                          disabled={isSubmittingRevision || isOfficialBusy}
+                          value={notasEntrega}
+                          onChange={(e) => setNotasEntrega(e.target.value)}
+                          placeholder="Describe aspectos clave, novedades o respuestas a observaciones previas..."
+                          className="w-full rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+                      <button
+                        type="button"
+                        disabled={isSubmittingRevision || isOfficialBusy}
+                        onClick={() => setIsPreflightModalOpen(false)}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmittingRevision || isOfficialBusy}
+                        onClick={() => void handleGenerateAndSubmitForReview()}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Generar formato oficial y enviar a revisión
+                      </button>
+                    </div>
+                  </>
+                );
+              }
+
               const planeacionesCompletas = preflightData.resumen.planeaciones_completas ?? 0;
               const totalActividades = preflightData.resumen.total_actividades_proyecto ?? 0;
               const actividadesSinPlaneacion = (preflightData.resumen.actividades_sin_planeacion as string[]) ?? [];
@@ -4561,6 +4824,23 @@ export function PlaneacionWizardShell({
 
               return (
                 <>
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                      <ClipboardCheck className="h-5 w-5" />
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                        Envío a Revisión Pedagógica
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPreflightModalOpen(false)}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
                   <div className="flex-1 overflow-y-auto p-6 space-y-5">
                     {/* Requirements Checklist */}
                     <div>

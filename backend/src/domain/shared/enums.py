@@ -210,4 +210,15 @@ class EstadoSolicitudReapertura(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+class EstadoDocumentoOficial(str, Enum):
+    """Synchronization status of the official planning document stored in MinIO."""
+
+    CURRENT = "CURRENT"
+    OUTDATED = "OUTDATED"
+    NOT_GENERATED = "NOT_GENERATED"
+    GENERATING = "GENERATING"
+    ERROR = "ERROR"
+
+
+
 
