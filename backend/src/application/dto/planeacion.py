@@ -38,6 +38,14 @@ class ContextoResultadoDTO(BaseModel):
     descripcion: str
     tipo_resultado: TipoResultadoProyecto | None
     orden_resultado: int | None = None
+    edit_status: str = "EDITABLE"
+    locked_at: datetime | None = None
+    locked_by: uuid.UUID | None = None
+    unlocked_at: datetime | None = None
+    unlocked_by: uuid.UUID | None = None
+    unlock_request_id: uuid.UUID | None = None
+    approved_version: int = 0
+    approved_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -116,6 +124,14 @@ class PlaneacionResultadoResumenDTO(BaseModel):
     codigo_resultado: str | None = None
     descripcion: str
     tipo_resultado: TipoResultadoProyecto | None
+    edit_status: str = "EDITABLE"
+    locked_at: datetime | None = None
+    locked_by: uuid.UUID | None = None
+    unlocked_at: datetime | None = None
+    unlocked_by: uuid.UUID | None = None
+    unlock_request_id: uuid.UUID | None = None
+    approved_version: int = 0
+    approved_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -150,6 +166,14 @@ class PlaneacionResponseDTO(BaseModel):
     fase_id: uuid.UUID | None = None
     actividad_id: uuid.UUID | None = None
     estado: str
+    review_status: str = "DRAFT"
+    approval_status: str = "PENDING"
+    edit_status: str = "EDITABLE"
+    locked_at: datetime | None = None
+    locked_by: uuid.UUID | None = None
+    unlocked_at: datetime | None = None
+    unlocked_by: uuid.UUID | None = None
+    unlock_request_id: uuid.UUID | None = None
     datos_complementarios: dict[str, object]
     resultados_ids: list[uuid.UUID]
     conocimientos_ids: list[uuid.UUID]
@@ -161,6 +185,10 @@ class PlaneacionResponseDTO(BaseModel):
     checksum_sha256: str | None = None
     fecha_generacion: datetime | None = None
     version: int
+    official_storage_key: str | None = None
+    official_file_name: str | None = None
+    official_version: int | None = None
+    official_approved_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -176,6 +204,9 @@ class PlaneacionListDTO(BaseModel):
     descripcion_actividad: str | None = None
     actividades_aprendizaje: str | None = None
     estado: str
+    review_status: str = "DRAFT"
+    approval_status: str = "PENDING"
+    edit_status: str = "EDITABLE"
     competencias: list[PlaneacionListCompetenciaDTO] = Field(default_factory=list)
     competencias_count: int = 0
     resultados_count: int = 0
@@ -220,6 +251,9 @@ class PlaneacionDocumentoConfigDTO(BaseModel):
     checksum_sha256: str | None = None
     fecha_generacion: datetime | None = None
     version: int = 1
+    official_storage_key: str | None = None
+    official_file_name: str | None = None
+    official_version: int | None = None
 
 
 class FormatoOficialFaltanteDTO(BaseModel):

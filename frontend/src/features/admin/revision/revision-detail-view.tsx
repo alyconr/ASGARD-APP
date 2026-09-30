@@ -37,13 +37,14 @@ import {
 import { cn } from "@/lib/utils";
 import { RevisionPlanningTree } from "./revision-planning-tree";
 import { RevisionPlanningViewer } from "./revision-planning-viewer";
+import { AdminEditRequestList } from "./admin-edit-requests";
 
 interface RevisionDetailViewProps {
   entregaId: string;
   onBack: () => void;
 }
 
-type TabInspector = "planeaciones" | "configuracion" | "observaciones" | "historial";
+type TabInspector = "planeaciones" | "configuracion" | "observaciones" | "solicitudes" | "historial";
 
 interface DocumentConfigSnapshot {
   fecha_elaboracion?: string;
@@ -524,7 +525,37 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          data-testid="tab-solicitudes-modificacion-entrega"
+          onClick={() => setActiveTab("solicitudes")}
+          className={cn(
+            "inline-flex items-center gap-2 pb-3 text-xs font-semibold border-b-2 -mb-px transition",
+            activeTab === "solicitudes"
+              ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-400"
+              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200",
+          )}
+        >
+          <span>🔓</span>
+          Solicitudes de modificación
+        </button>
       </div>
+
+      {/* TAB SOLICITUDES DE MODIFICACION */}
+      {activeTab === "solicitudes" && (
+        <AdminEditRequestList
+          referenciaId={entrega.referencia_id}
+          onViewPlanning={(req) => {
+            setActiveTab("planeaciones");
+            openPlanning(req.planning_id);
+          }}
+          onRequestProcessed={() => {
+            void loadPlaneaciones();
+            if (selectedPlaneacionId) void loadSelectedPlaneacion();
+          }}
+        />
+      )}
 
       {/* TAB 1: PLANEACIONES */}
       {activeTab === "planeaciones" && (

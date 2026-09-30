@@ -30,7 +30,10 @@ from src.infrastructure.db.models.proyecto import (
 )
 from src.infrastructure.db.models.revision_curricular import (
     EntregaRevisionCurricular,
+    LearningResultVersion,
     ObservacionRevision,
+    PlanningEditRequest,
+    PlanningEditRequestItem,
 )
 
 __all__ = [
@@ -48,9 +51,12 @@ __all__ = [
     "Especialidad",
     "EventoAuditoria",
     "FaseProyecto",
+    "LearningResultVersion",
     "ObservacionRevision",
     "PlaneacionDocumentoConfig",
     "PlaneacionPedagogica",
+    "PlanningEditRequest",
+    "PlanningEditRequestItem",
     "ProcesoCurricular",
     "ProgramaFormacion",
     "ProyectoFormativo",

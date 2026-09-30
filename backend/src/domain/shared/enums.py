@@ -173,3 +173,41 @@ class SeccionObservacionPlaneacion(str, Enum):
     HORAS = "HORAS"
 
 
+class EstadoRevisionPlaneacion(str, Enum):
+    """Explicit review lifecycle state (review_status) for plannings."""
+
+    DRAFT = "DRAFT"
+    IN_REVIEW = "IN_REVIEW"
+    OBSERVED = "OBSERVED"
+    APPROVED = "APPROVED"
+    CHANGES_ALLOWED = "CHANGES_ALLOWED"
+
+
+class EstadoAprobacionPlaneacion(str, Enum):
+    """Explicit pedagogical approval state (approval_status) for plannings."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    PREVIOUS_VERSION_APPROVED = "PREVIOUS_VERSION_APPROVED"
+    REJECTED = "REJECTED"
+
+
+class EstadoEdicionRA(str, Enum):
+    """Explicit editability lock state (edit_status) for Learning Results and plannings."""
+
+    EDITABLE = "EDITABLE"
+    LOCKED = "LOCKED"
+
+
+class EstadoSolicitudReapertura(str, Enum):
+    """Lifecycle states for a formal planning edit reopening request (PlanningEditRequest)."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    PARTIALLY_APPROVED = "PARTIALLY_APPROVED"
+    REJECTED = "REJECTED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+

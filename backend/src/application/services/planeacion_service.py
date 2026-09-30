@@ -46,10 +46,14 @@ from src.application.services.planeacion_formato_excel import (
 )
 from src.domain.drafts.types import TipoBloqueBorrador
 from src.domain.shared.enums import (
+    EstadoAprobacionPlaneacion,
     EstadoBloque,
+    EstadoEdicionRA,
+    EstadoRevisionPlaneacion,
     TipoConocimiento,
     TipoResultadoProyecto,
 )
+from src.infrastructure.db.models.audit import EventoAuditoria
 from src.infrastructure.db.models.curriculum import (
     Competencia,
     Conocimiento,
@@ -77,6 +81,28 @@ _SEGMENT_MAX_LENGTH = 80
 
 class PlaneacionAccessError(Exception):
     """Raised when planning is requested before project completion."""
+
+
+class LearningResultLockedError(Exception):
+    """Raised when attempting to modify or delete an approved and locked Learning Result."""
+
+    code: str = "LEARNING_RESULT_LOCKED"
+    default_message: str = (
+        "Este resultado de aprendizaje se encuentra aprobado y bloqueado para edición."
+    )
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        code: str | None = None,
+        learning_result_id: uuid.UUID | None = None,
+    ) -> None:
+        self.code = code or self.code
+        self.message = message or self.default_message
+        self.learning_result_id = learning_result_id
+        super().__init__(self.message)
+
 
 
 class DocumentStorageProtocol(Protocol):
@@ -225,17 +251,30 @@ class PlaneacionPedagogicaService:
             if pair in seen_resultados:
                 continue
             seen_resultados.add(pair)
+            res_obj = asignacion.resultado
             grupos.setdefault(competencia.id, []).append(
                 ContextoResultadoDTO(
-                    id=asignacion.resultado.id,
-                    codigo_resultado=asignacion.resultado.codigo_resultado,
-                    descripcion=asignacion.resultado.descripcion,
+                    id=res_obj.id,
+                    codigo_resultado=res_obj.codigo_resultado,
+                    descripcion=res_obj.descripcion,
                     tipo_resultado=(
                         TipoResultadoProyecto(asignacion.tipo_resultado)
                         if asignacion.tipo_resultado is not None
                         else None
                     ),
                     orden_resultado=asignacion.orden_resultado,
+                    edit_status=(
+                        res_obj.edit_status.value
+                        if hasattr(getattr(res_obj, "edit_status", None), "value")
+                        else str(getattr(res_obj, "edit_status", None) or "EDITABLE")
+                    ),
+                    locked_at=getattr(res_obj, "locked_at", None),
+                    locked_by=getattr(res_obj, "locked_by", None),
+                    unlocked_at=getattr(res_obj, "unlocked_at", None),
+                    unlocked_by=getattr(res_obj, "unlocked_by", None),
+                    unlock_request_id=getattr(res_obj, "unlock_request_id", None),
+                    approved_version=int(getattr(res_obj, "approved_version", 0) or 0),
+                    approved_at=getattr(res_obj, "approved_at", None),
                 )
             )
 
@@ -319,6 +358,9 @@ class PlaneacionPedagogicaService:
                 )
                 for c_id, (c_code, count) in comp_map.items()
             ]
+            rev_status = getattr(entity, "review_status", None)
+            app_status = getattr(entity, "approval_status", None)
+            ed_status = getattr(entity, "edit_status", None)
             dtos.append(
                 PlaneacionListDTO(
                     id=entity.id,
@@ -335,6 +377,15 @@ class PlaneacionPedagogicaService:
                         else None
                     ),
                     estado=entity.estado.value,
+                    review_status=(
+                        rev_status.value if hasattr(rev_status, "value") else str(rev_status or "DRAFT")
+                    ),
+                    approval_status=(
+                        app_status.value if hasattr(app_status, "value") else str(app_status or "PENDING")
+                    ),
+                    edit_status=(
+                        ed_status.value if hasattr(ed_status, "value") else str(ed_status or "EDITABLE")
+                    ),
                     competencias=competencias_list,
                     competencias_count=len(comp_map),
                     resultados_count=len(entity.resultados),
@@ -358,12 +409,31 @@ class PlaneacionPedagogicaService:
             return None
         return await self._map_to_response_dto(entity)
 
-    async def guardar_borrador(self, dto: PlaneacionSaveDTO) -> PlaneacionResponseDTO:
+    async def guardar_borrador(
+        self,
+        dto: PlaneacionSaveDTO,
+        actor_id: uuid.UUID | None = None,
+    ) -> PlaneacionResponseDTO:
         """Create or update an integrated pedagogical planning draft.
 
         The backend never trusts the frontend: every curricular membership
         (fase -> actividad -> competencia -> resultado) is re-verified here.
+        Locked learning results cannot be modified or removed without an approved
+        PlanningEditRequest.
         """
+        existing_entity: PlaneacionPedagogica | None = None
+        if dto.planeacion_id is not None:
+            existing_entity = await self._repository.get_by_id(dto.planeacion_id)
+            if existing_entity is None:
+                raise ValueError(
+                    f"No existe la planeación pedagógica con id {dto.planeacion_id}"
+                )
+            if existing_entity.proyecto_id != dto.proyecto_id:
+                raise ValueError(
+                    "La planeación no pertenece al proyecto formativo indicado"
+                )
+            self._assert_planning_has_editable_ra(existing_entity)
+
         await self._ensure_project_complete(dto.proyecto_id)
 
         proyecto = await self._session.get(ProyectoFormativo, dto.proyecto_id)
@@ -458,17 +528,23 @@ class PlaneacionPedagogicaService:
                     "competencias involucradas en la planeacion"
                 )
 
-        if dto.planeacion_id is not None:
-            entity = await self._repository.get_by_id(dto.planeacion_id)
-            if entity is None:
-                raise ValueError(
-                    f"No existe la planeación pedagógica con id {dto.planeacion_id}"
-                )
-            if entity.proyecto_id != dto.proyecto_id:
-                raise ValueError(
-                    "La planeación no pertenece al proyecto formativo indicado"
-                )
+        datos = dict(dto.datos_complementarios)
+        datos.pop("asignaciones_proyecto", None)
+
+        if existing_entity is not None:
+            entity = existing_entity
+            datos = await self._enforce_ra_locks_on_mutation(
+                entity=entity,
+                incoming_datos=datos,
+                selected_resultados=resultados,
+                actor_id=actor_id,
+            )
         else:
+            for r in resultados:
+                r_status = getattr(r, "edit_status", None)
+                r_status_str = r_status.value if hasattr(r_status, "value") else str(r_status or "EDITABLE")
+                if r_status_str == EstadoEdicionRA.LOCKED.value:
+                    raise LearningResultLockedError(learning_result_id=r.id)
             entity = PlaneacionPedagogica(
                 id=uuid.uuid4(),
                 proyecto_id=dto.proyecto_id,
@@ -479,8 +555,6 @@ class PlaneacionPedagogicaService:
         entity.fase_id = dto.fase_id
         entity.actividad_id = dto.actividad_id
         entity.estado = EstadoBloque.BORRADOR
-        datos = dict(dto.datos_complementarios)
-        datos.pop("asignaciones_proyecto", None)
         entity.datos_complementarios = datos
         entity.resultados = resultados
         entity.conocimientos = conocimientos
@@ -494,7 +568,9 @@ class PlaneacionPedagogicaService:
         return await self._map_to_response_dto(refetched)
 
     async def confirmar_y_generar(
-        self, planeacion_id: uuid.UUID
+        self,
+        planeacion_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
     ) -> PlaneacionResponseDTO:
         """Complete one integrated planning and generate its official workbook."""
         entity = await self._repository.get_by_id(planeacion_id)
@@ -502,6 +578,7 @@ class PlaneacionPedagogicaService:
             raise ValueError(
                 f"No existe la planeación pedagógica con id {planeacion_id}"
             )
+        self._assert_planning_has_editable_ra(entity)
         await self._ensure_project_complete(entity.proyecto_id)
         gaps = await self._collect_gaps(entity, require_complete=False)
         if gaps:
@@ -619,6 +696,7 @@ class PlaneacionPedagogicaService:
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             raise ValueError(f"No existe la planeacion pedagogica {planeacion_id}")
+        self._assert_planning_has_editable_ra(entity)
         gaps = await self._collect_gaps(entity, require_complete=True)
         if gaps:
             raise PlaneacionFormatoValidationError(
@@ -690,15 +768,35 @@ class PlaneacionPedagogicaService:
         self,
         planeacion_id: uuid.UUID,
     ) -> tuple[bytes, str]:
-        """Read a previously generated individual workbook from MinIO."""
+        """Read a previously generated individual workbook from MinIO.
+
+        If the planning is currently in controlled reopening (PREVIOUS_VERSION_APPROVED),
+        serve the preserved official_storage_key until the new version is approved.
+        """
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             raise ValueError(f"No existe la planeacion pedagogica {planeacion_id}")
+
+        app_status = getattr(entity, "approval_status", None)
+        app_status_str = (
+            app_status.value if hasattr(app_status, "value") else str(app_status or "")
+        )
+        official_key = getattr(entity, "official_storage_key", None)
+        if (
+            app_status_str == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED.value
+            and official_key
+        ):
+            content = await self._storage_service.read_excel(key=official_key)
+            return content, getattr(entity, "official_file_name", None) or entity.file_name or OFFICIAL_FILE_NAME
+
         if (
             entity.estado != EstadoBloque.COMPLETO
             or not entity.storage_key
             or entity.content_type != EXCEL_CONTENT_TYPE
         ):
+            if official_key:
+                content = await self._storage_service.read_excel(key=official_key)
+                return content, getattr(entity, "official_file_name", None) or entity.file_name or OFFICIAL_FILE_NAME
             raise FileNotFoundError("La planeacion no tiene un Excel oficial generado")
         content = await self._storage_service.read_excel(key=entity.storage_key)
         return content, entity.file_name or OFFICIAL_FILE_NAME
@@ -707,16 +805,35 @@ class PlaneacionPedagogicaService:
         self,
         proyecto_id: uuid.UUID,
     ) -> tuple[bytes, str]:
-        """Read the latest consolidated project workbook from MinIO."""
+        """Read the latest consolidated project workbook from MinIO.
+
+        If any planning in the project is in controlled reopening and an official
+        consolidated workbook was previously approved, serve the preserved official key.
+        """
         entities = await self._repository.list_full_by_proyecto(proyecto_id)
         complete = [e for e in entities if e.estado == EstadoBloque.COMPLETO]
         config = await self._repository.get_document_config(proyecto_id)
+        official_key = getattr(config, "official_storage_key", None) if config else None
+        has_reopened = any(
+            (
+                getattr(e, "approval_status", None) == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED
+                or str(getattr(e, "approval_status", "")) == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED.value
+            )
+            for e in entities
+        )
+        if has_reopened and official_key and config is not None:
+            content = await self._storage_service.read_excel(key=official_key)
+            return content, getattr(config, "official_file_name", None) or config.file_name or OFFICIAL_FILE_NAME
+
         if (
             not complete
             or config is None
             or not config.storage_key
             or config.content_type != EXCEL_CONTENT_TYPE
         ):
+            if official_key and config is not None:
+                content = await self._storage_service.read_excel(key=official_key)
+                return content, getattr(config, "official_file_name", None) or config.file_name or OFFICIAL_FILE_NAME
             if complete and config and config.fecha_elaboracion and config.regional and config.centro_formacion:
                 await self.generar_formato_consolidado(proyecto_id)
                 config = await self._repository.get_document_config(proyecto_id)
@@ -729,11 +846,17 @@ class PlaneacionPedagogicaService:
         content = await self._storage_service.read_excel(key=config.storage_key)
         return content, config.file_name or OFFICIAL_FILE_NAME
 
-    async def eliminar_planeacion(self, planeacion_id: uuid.UUID) -> None:
+    async def eliminar_planeacion(
+        self,
+        planeacion_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
+    ) -> None:
         """Remove the planning record from DB and its workbook from MinIO."""
         entity = await self._repository.get_by_id(planeacion_id)
         if entity is None:
             return
+
+        self._assert_planning_can_be_deleted(entity)
 
         # Invalidate existing consolidated project workbook in MinIO and DB
         if entity.proyecto_id:
@@ -766,6 +889,239 @@ class PlaneacionPedagogicaService:
                 pass
 
         await self._repository.delete(entity)
+
+    # ------------------------------------------------------------------
+    # Learning Result Locking & Controlled Reopening Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_ra_lock_metadata(
+        entity: PlaneacionPedagogica | None,
+        resultado: ResultadoAprendizaje,
+    ) -> dict[str, object]:
+        """Resolve authoritative lock metadata for a Learning Result inside a planning."""
+        ra_locks: dict[str, object] = {}
+        if entity is not None and isinstance(entity.datos_complementarios, dict):
+            raw_locks = entity.datos_complementarios.get("ra_locks")
+            if isinstance(raw_locks, dict):
+                entry = raw_locks.get(str(resultado.id))
+                if isinstance(entry, dict):
+                    ra_locks = dict(entry)
+
+        res_status_attr = getattr(resultado, "edit_status", None)
+        res_status_str = (
+            res_status_attr.value
+            if hasattr(res_status_attr, "value")
+            else str(res_status_attr or "")
+        )
+        lock_dict_status = str(ra_locks.get("edit_status") or "")
+        entity_status_attr = getattr(entity, "edit_status", None) if entity else None
+        entity_status_str = (
+            entity_status_attr.value
+            if hasattr(entity_status_attr, "value")
+            else str(entity_status_attr or "")
+        )
+
+        unlock_req = getattr(resultado, "unlock_request_id", None) or ra_locks.get("unlock_request_id")
+
+        if res_status_str == EstadoEdicionRA.LOCKED.value:
+            effective_status = EstadoEdicionRA.LOCKED.value
+        elif res_status_str == EstadoEdicionRA.EDITABLE.value and unlock_req is not None:
+            effective_status = EstadoEdicionRA.EDITABLE.value
+        elif lock_dict_status in (EstadoEdicionRA.LOCKED.value, EstadoEdicionRA.EDITABLE.value):
+            effective_status = lock_dict_status
+        elif entity_status_str == EstadoEdicionRA.LOCKED.value:
+            effective_status = EstadoEdicionRA.LOCKED.value
+        else:
+            effective_status = EstadoEdicionRA.EDITABLE.value
+
+        def _parse_uuid(val: object) -> uuid.UUID | None:
+            if isinstance(val, uuid.UUID):
+                return val
+            if isinstance(val, str) and val.strip():
+                try:
+                    return uuid.UUID(val.strip())
+                except ValueError:
+                    return None
+            return None
+
+        def _parse_dt(val: object) -> datetime | None:
+            if isinstance(val, datetime):
+                return val
+            if isinstance(val, str) and val.strip():
+                try:
+                    return datetime.fromisoformat(val.strip())
+                except ValueError:
+                    return None
+            return None
+
+        return {
+            "edit_status": effective_status,
+            "locked_at": getattr(resultado, "locked_at", None) or _parse_dt(ra_locks.get("locked_at")),
+            "locked_by": getattr(resultado, "locked_by", None) or _parse_uuid(ra_locks.get("locked_by")),
+            "unlocked_at": getattr(resultado, "unlocked_at", None) or _parse_dt(ra_locks.get("unlocked_at")),
+            "unlocked_by": getattr(resultado, "unlocked_by", None) or _parse_uuid(ra_locks.get("unlocked_by")),
+            "unlock_request_id": _parse_uuid(unlock_req),
+            "approved_version": int(
+                getattr(resultado, "approved_version", 0)
+                or ra_locks.get("approved_version")  # type: ignore[arg-type]
+                or 0
+            ),
+            "approved_at": getattr(resultado, "approved_at", None) or _parse_dt(ra_locks.get("approved_at")),
+        }
+
+    def _assert_planning_has_editable_ra(self, entity: PlaneacionPedagogica) -> None:
+        """Raise LearningResultLockedError if all RAs in the planning are LOCKED."""
+        entity_ed = getattr(entity, "edit_status", None)
+        entity_ed_str = entity_ed.value if hasattr(entity_ed, "value") else str(entity_ed or "EDITABLE")
+        if not entity.resultados:
+            if entity_ed_str == EstadoEdicionRA.LOCKED.value:
+                raise LearningResultLockedError()
+            return
+
+        statuses = [
+            self._resolve_ra_lock_metadata(entity, r)["edit_status"]
+            for r in entity.resultados
+        ]
+        if all(s == EstadoEdicionRA.LOCKED.value for s in statuses):
+            raise LearningResultLockedError(learning_result_id=entity.resultados[0].id)
+
+    def _assert_planning_can_be_deleted(self, entity: PlaneacionPedagogica) -> None:
+        """Raise LearningResultLockedError if the planning or any of its RAs is LOCKED."""
+        entity_ed = getattr(entity, "edit_status", None)
+        entity_ed_str = entity_ed.value if hasattr(entity_ed, "value") else str(entity_ed or "EDITABLE")
+        if entity_ed_str == EstadoEdicionRA.LOCKED.value:
+            raise LearningResultLockedError()
+        for r in entity.resultados:
+            meta = self._resolve_ra_lock_metadata(entity, r)
+            if meta["edit_status"] == EstadoEdicionRA.LOCKED.value:
+                raise LearningResultLockedError(learning_result_id=r.id)
+
+    async def _enforce_ra_locks_on_mutation(
+        self,
+        *,
+        entity: PlaneacionPedagogica,
+        incoming_datos: dict[str, object],
+        selected_resultados: list[ResultadoAprendizaje],
+        actor_id: uuid.UUID | None = None,
+    ) -> dict[str, object]:
+        """Validate that locked RAs are not removed or modified during draft save."""
+        existing_resultados = list(entity.resultados or [])
+        locked_ras: list[ResultadoAprendizaje] = []
+        editable_ras: list[ResultadoAprendizaje] = []
+
+        for r in existing_resultados:
+            meta = self._resolve_ra_lock_metadata(entity, r)
+            if meta["edit_status"] == EstadoEdicionRA.LOCKED.value:
+                locked_ras.append(r)
+            else:
+                editable_ras.append(r)
+
+        entity_ed = getattr(entity, "edit_status", None)
+        entity_ed_str = entity_ed.value if hasattr(entity_ed, "value") else str(entity_ed or "EDITABLE")
+
+        # If all existing RAs are locked (or entity itself is locked with no unlocked RA)
+        if (locked_ras and not editable_ras) or (
+            entity_ed_str == EstadoEdicionRA.LOCKED.value and not editable_ras
+        ):
+            first_locked_id = locked_ras[0].id if locked_ras else None
+            raise LearningResultLockedError(learning_result_id=first_locked_id)
+
+        selected_ids = {r.id for r in selected_resultados}
+        existing_ids = {r.id for r in existing_resultados}
+
+        # Check newly added RAs are not locked
+        for r in selected_resultados:
+            if r.id not in existing_ids:
+                meta = self._resolve_ra_lock_metadata(entity, r)
+                if meta["edit_status"] == EstadoEdicionRA.LOCKED.value:
+                    raise LearningResultLockedError(learning_result_id=r.id)
+
+        # In partial reopening (some RAs locked, some editable):
+        if locked_ras:
+            # 1. Locked RAs cannot be removed from the planning
+            for locked_ra in locked_ras:
+                if locked_ra.id not in selected_ids:
+                    raise LearningResultLockedError(learning_result_id=locked_ra.id)
+
+            # 2. Didactic data of locked RAs cannot be modified
+            old_datos = entity.datos_complementarios if isinstance(entity.datos_complementarios, dict) else {}
+
+            didactic_keys = (
+                "actividades_aprendizaje",
+                "estrategias_didacticas",
+                "descripcion_evidencia_aprendizaje",
+                "horas_trabajo_directo",
+                "horas_trabajo_independiente",
+                "duracion_actividad_horas",
+                "ambiente",
+                "ambientes",
+                "materiales",
+                "materiales_formacion",
+                "instructores",
+                "instructor_responsable",
+                "observaciones",
+            )
+
+            for map_key in ("raps", "rap_complementary_map"):
+                old_raps = old_datos.get(map_key) if isinstance(old_datos.get(map_key), dict) else {}
+                new_raps = incoming_datos.get(map_key) if isinstance(incoming_datos.get(map_key), dict) else {}
+                if not old_raps and not new_raps:
+                    continue
+
+                merged_raps: dict[str, object] = dict(new_raps) if isinstance(new_raps, dict) else {}
+                for locked_ra in locked_ras:
+                    ra_key = str(locked_ra.id)
+                    old_rap_data = old_raps.get(ra_key) if isinstance(old_raps, dict) else None
+                    new_rap_data = new_raps.get(ra_key) if isinstance(new_raps, dict) else None
+
+                    if isinstance(old_rap_data, dict) and isinstance(new_rap_data, dict):
+                        for k in didactic_keys:
+                            if k in new_rap_data and k in old_rap_data:
+                                old_val = str(old_rap_data.get(k) or "").strip()
+                                new_val = str(new_rap_data.get(k) or "").strip()
+                                if old_val != new_val:
+                                    raise LearningResultLockedError(learning_result_id=locked_ra.id)
+                        merged_raps[ra_key] = dict(old_rap_data)
+                    elif isinstance(old_rap_data, dict) and new_rap_data is None:
+                        merged_raps[ra_key] = dict(old_rap_data)
+
+                if merged_raps:
+                    incoming_datos[map_key] = merged_raps
+
+        # Preserve ra_locks in datos_complementarios
+        if isinstance(entity.datos_complementarios, dict) and "ra_locks" in entity.datos_complementarios:
+            incoming_datos["ra_locks"] = entity.datos_complementarios["ra_locks"]
+
+        # Record audit event LEARNING_RESULT_MODIFIED when editing reopened RAs
+        reopened_ras = [
+            r for r in editable_ras
+            if self._resolve_ra_lock_metadata(entity, r).get("unlock_request_id") is not None
+            or str(getattr(entity, "review_status", "")) in (
+                EstadoRevisionPlaneacion.CHANGES_ALLOWED.value,
+                "EstadoRevisionPlaneacion.CHANGES_ALLOWED",
+            )
+        ]
+        if reopened_ras and hasattr(self._session, "add"):
+            for r in reopened_ras:
+                meta = self._resolve_ra_lock_metadata(entity, r)
+                self._session.add(
+                    EventoAuditoria(
+                        entidad="ResultadoAprendizaje",
+                        entidad_id=r.id,
+                        accion="LEARNING_RESULT_MODIFIED",
+                        actor_usuario_id=actor_id,
+                        detalle={
+                            "planning_id": str(entity.id),
+                            "learning_result_id": str(r.id),
+                            "codigo_resultado": r.codigo_resultado,
+                            "unlock_request_id": str(meta["unlock_request_id"]) if meta.get("unlock_request_id") else None,
+                            "actor_id": str(actor_id) if actor_id else None,
+                        },
+                    )
+                )
+
+        return incoming_datos
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1678,6 +2034,9 @@ class PlaneacionPedagogicaService:
             checksum_sha256=config.checksum_sha256 if config else None,
             fecha_generacion=config.fecha_generacion if config else None,
             version=config.version if config else 1,
+            official_storage_key=getattr(config, "official_storage_key", None) if config else None,
+            official_file_name=getattr(config, "official_file_name", None) if config else None,
+            official_version=getattr(config, "official_version", None) if config else None,
         )
 
     async def _map_to_response_dto(
@@ -1710,20 +2069,46 @@ class PlaneacionPedagogicaService:
                     tipo_resultado=tipo_resultado,
                 ),
             )
+            ra_meta = self._resolve_ra_lock_metadata(entity, resultado)
             resumen.resultados.append(
                 PlaneacionResultadoResumenDTO(
                     id=resultado.id,
                     codigo_resultado=resultado.codigo_resultado,
                     descripcion=resultado.descripcion,
                     tipo_resultado=tipo_resultado,
+                    edit_status=str(ra_meta["edit_status"]),
+                    locked_at=cast(datetime | None, ra_meta["locked_at"]),
+                    locked_by=cast(uuid.UUID | None, ra_meta["locked_by"]),
+                    unlocked_at=cast(datetime | None, ra_meta["unlocked_at"]),
+                    unlocked_by=cast(uuid.UUID | None, ra_meta["unlocked_by"]),
+                    unlock_request_id=cast(uuid.UUID | None, ra_meta["unlock_request_id"]),
+                    approved_version=int(ra_meta["approved_version"]),  # type: ignore[arg-type]
+                    approved_at=cast(datetime | None, ra_meta["approved_at"]),
                 )
             )
+        rev_status = getattr(entity, "review_status", None)
+        app_status = getattr(entity, "approval_status", None)
+        ed_status = getattr(entity, "edit_status", None)
         return PlaneacionResponseDTO(
             id=entity.id,
             proyecto_id=entity.proyecto_id,
             fase_id=entity.fase_id,
             actividad_id=entity.actividad_id,
             estado=entity.estado.value,
+            review_status=(
+                rev_status.value if hasattr(rev_status, "value") else str(rev_status or "DRAFT")
+            ),
+            approval_status=(
+                app_status.value if hasattr(app_status, "value") else str(app_status or "PENDING")
+            ),
+            edit_status=(
+                ed_status.value if hasattr(ed_status, "value") else str(ed_status or "EDITABLE")
+            ),
+            locked_at=getattr(entity, "locked_at", None),
+            locked_by=getattr(entity, "locked_by", None),
+            unlocked_at=getattr(entity, "unlocked_at", None),
+            unlocked_by=getattr(entity, "unlocked_by", None),
+            unlock_request_id=getattr(entity, "unlock_request_id", None),
             datos_complementarios=entity.datos_complementarios,
             resultados_ids=[r.id for r in entity.resultados],
             conocimientos_ids=[k.id for k in entity.conocimientos],
@@ -1735,6 +2120,10 @@ class PlaneacionPedagogicaService:
             checksum_sha256=entity.checksum_sha256,
             fecha_generacion=entity.fecha_generacion,
             version=entity.version or 1,
+            official_storage_key=getattr(entity, "official_storage_key", None),
+            official_file_name=getattr(entity, "official_file_name", None),
+            official_version=getattr(entity, "official_version", None),
+            official_approved_at=getattr(entity, "official_approved_at", None),
         )
 
     @staticmethod

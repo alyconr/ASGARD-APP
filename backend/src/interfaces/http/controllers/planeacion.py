@@ -24,8 +24,13 @@ from src.application.dto.planeacion import (
     PlaneacionSaveDTO,
 )
 from src.application.services.planeacion_formato_excel import EXCEL_CONTENT_TYPE
-from src.domain.shared.enums import RolUsuario
+from src.domain.shared.enums import (
+    EstadoAprobacionPlaneacion,
+    EstadoRevisionPlaneacion,
+    RolUsuario,
+)
 from src.application.services.planeacion_service import (
+    LearningResultLockedError,
     PlaneacionAccessError,
     PlaneacionPedagogicaService,
 )
@@ -416,6 +421,9 @@ async def generar_formato_individual(
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return result
+    except LearningResultLockedError:
+        await session.rollback()
+        raise
     except (PlaneacionAccessError, ValueError) as error:
         await session.rollback()
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -456,9 +464,9 @@ async def guardar_borrador(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado al proyecto")
     try:
         is_creation = dto.planeacion_id is None
-        res = await service.guardar_borrador(dto)
-        referencia_id = await _resolve_referencia_id(session, dto.proyecto_id)
         actor_id = await _safe_actor_id(session, current_user)
+        res = await service.guardar_borrador(dto, actor_id=actor_id)
+        referencia_id = await _resolve_referencia_id(session, dto.proyecto_id)
 
         actividad_nombre = _extract_actividad_descripcion(dto.datos_complementarios)
         if not actividad_nombre and dto.actividad_id:
@@ -487,11 +495,19 @@ async def guardar_borrador(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
-        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
-        await rev_service.invalidate_approval_on_mutation(dto.proyecto_id, actor_id)
+        is_reopening = (
+            res.approval_status == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED.value
+            or res.review_status == EstadoRevisionPlaneacion.CHANGES_ALLOWED.value
+        )
+        if not is_reopening:
+            rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+            await rev_service.invalidate_approval_on_mutation(dto.proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
+    except LearningResultLockedError:
+        await session.rollback()
+        raise
     except PlaneacionAccessError as error:
         await session.rollback()
         raise HTTPException(
@@ -528,9 +544,9 @@ async def confirmar_y_generar(
     if not await scope_service.can_access_planning(current_user, planeacion_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación")
     try:
-        res = await service.confirmar_y_generar(planeacion_id)
-        referencia_id = await _resolve_referencia_id(session, res.proyecto_id)
         actor_id = await _safe_actor_id(session, current_user)
+        res = await service.confirmar_y_generar(planeacion_id, actor_id=actor_id)
+        referencia_id = await _resolve_referencia_id(session, res.proyecto_id)
 
         actividad_nombre = _extract_actividad_descripcion(res.datos_complementarios)
         if not actividad_nombre and res.actividad_id:
@@ -557,11 +573,19 @@ async def confirmar_y_generar(
             actor_usuario_id=actor_id,
             referencia_id=referencia_id,
         )
-        rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
-        await rev_service.invalidate_approval_on_mutation(res.proyecto_id, actor_id)
+        is_reopening = (
+            res.approval_status == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED.value
+            or res.review_status == EstadoRevisionPlaneacion.CHANGES_ALLOWED.value
+        )
+        if not is_reopening:
+            rev_service = RevisionCurricularService(session=session, scope_service=scope_service)
+            await rev_service.invalidate_approval_on_mutation(res.proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
         return res
+    except LearningResultLockedError:
+        await session.rollback()
+        raise
     except PlaneacionAccessError as error:
         await session.rollback()
         raise HTTPException(
@@ -618,7 +642,7 @@ async def eliminar_planeacion(
                 except Exception:
                     pass
 
-        await service.eliminar_planeacion(planeacion_id)
+        await service.eliminar_planeacion(planeacion_id, actor_id=actor_id)
 
         audit_repo = AuditRepository(session)
         await audit_repo.add_event(
@@ -638,6 +662,9 @@ async def eliminar_planeacion(
             await rev_service.invalidate_approval_on_mutation(proyecto_id, actor_id)
         await _touch_proceso(session, referencia_id)
         await session.commit()
+    except LearningResultLockedError:
+        await session.rollback()
+        raise
     except Exception as error:
         await session.rollback()
         raise HTTPException(

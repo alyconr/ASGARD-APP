@@ -15,6 +15,7 @@ import {
   type ObservacionRevision,
   type SeccionObservacionPlaneacion,
 } from "@/features/planeacion/planeacion-api";
+import { LockStatusBadge } from "@/features/planeacion/components/edit-requests-components";
 import { cn } from "@/lib/utils";
 
 interface RevisionPlanningViewerProps {
@@ -321,12 +322,20 @@ export function RevisionPlanningViewer({
             allRaps.map((rap) => (
               <div
                 key={rap.id}
-                className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-2.5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-2.5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300"
               >
-                <span className="font-mono text-[11px] font-bold text-slate-500 shrink-0">
-                  {rap.codigo ? `${rap.codigo}:` : "RAP:"}
-                </span>
-                <span className="leading-snug">{rap.descripcion}</span>
+                <div className="flex items-start gap-2">
+                  <span className="font-mono text-[11px] font-bold text-slate-500 shrink-0">
+                    {rap.codigo ? `${rap.codigo}:` : "RAP:"}
+                  </span>
+                  <span className="leading-snug">{rap.descripcion}</span>
+                </div>
+                <LockStatusBadge
+                  editStatus={rap.edit_status}
+                  unlockRequestId={rap.unlock_request_id}
+                  approvedVersion={rap.approved_version}
+                  compact
+                />
               </div>
             ))
           )}

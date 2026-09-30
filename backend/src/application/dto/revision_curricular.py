@@ -168,6 +168,14 @@ class RAPResumenDTO(BaseModel):
     codigo: str | None = None
     descripcion: str
     tipo_resultado: str | None = None
+    edit_status: str = "EDITABLE"
+    locked_at: datetime | None = None
+    locked_by: uuid.UUID | None = None
+    unlocked_at: datetime | None = None
+    unlocked_by: uuid.UUID | None = None
+    unlock_request_id: uuid.UUID | None = None
+    approved_version: int = 0
+    approved_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -205,6 +213,9 @@ class PlaneacionRevisionItemDTO(BaseModel):
 
     id: uuid.UUID
     estado: str
+    review_status: str = "DRAFT"
+    approval_status: str = "PENDING"
+    edit_status: str = "EDITABLE"
     fase: FaseResumenDTO
     actividad_proyecto: ActividadProyectoResumenDTO
     competencias: list[CompetenciaResumenDTO] = Field(default_factory=list)
@@ -239,6 +250,9 @@ class PlaneacionRevisionDetalleDTO(BaseModel):
     entrega_id: uuid.UUID
     version_entrega: int
     estado: str
+    review_status: str = "DRAFT"
+    approval_status: str = "PENDING"
+    edit_status: str = "EDITABLE"
     fase: FaseResumenDTO
     actividad_proyecto: ActividadProyectoResumenDTO
     competencias: list[CompetenciaResumenDTO] = Field(default_factory=list)
@@ -256,3 +270,111 @@ class PlaneacionRevisionDetalleDTO(BaseModel):
     observaciones: list[ObservacionDTO] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# -----------------------------------------------------------------------------
+# Planning Edit Request (Reapertura Controlada de RAs) & Version History DTOs
+# -----------------------------------------------------------------------------
+
+
+class PlanningEditRequestCreateDTO(BaseModel):
+    """Payload submitted by Team Leader to request reopening approved Learning Results."""
+
+    planning_id: uuid.UUID
+    learning_result_ids: list[uuid.UUID] = Field(..., min_length=1)
+    reason: str = Field(..., min_length=3)
+    requested_changes: str = Field(..., min_length=3)
+
+
+class PlanningEditRequestApproveDTO(BaseModel):
+    """Payload submitted by Pedagogical Admin to approve all or selected RAs."""
+
+    approved_learning_result_ids: list[uuid.UUID] = Field(..., min_length=1)
+    admin_response: str | None = None
+    expected_version: int | None = None
+
+
+class PlanningEditRequestRejectDTO(BaseModel):
+    """Payload submitted by Pedagogical Admin to reject a reopening request."""
+
+    admin_response: str | None = None
+    expected_version: int | None = None
+
+
+class PlanningEditRequestItemDTO(BaseModel):
+    """Representation of an individual RA requested in a PlanningEditRequest."""
+
+    id: uuid.UUID
+    request_id: uuid.UUID | None = None
+    learning_result_id: uuid.UUID
+    codigo_resultado: str | None = None
+    descripcion: str = ""
+    descripcion_resultado: str = ""
+    competencia_codigo: str | None = None
+    competencia_nombre: str | None = None
+    edit_status: str = "LOCKED"
+    requested: bool = True
+    approved: bool | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlanningEditRequestDTO(BaseModel):
+    """Full representation of a PlanningEditRequest for both Team Leader and Admin views."""
+
+    id: uuid.UUID
+    codigo: str = ""
+    code: str = ""
+    planning_id: uuid.UUID
+    planning_actividad: str | None = None
+    proceso_curricular_id: uuid.UUID | None = None
+    referencia_id: uuid.UUID | None = None
+    entrega_id: uuid.UUID | None = None
+    team_id: uuid.UUID | None = None
+    team_name: str = ""
+    team_nombre: str | None = None
+    programa_codigo: str = ""
+    codigo_programa: str | None = None
+    programa_nombre: str | None = ""
+    proyecto_codigo: str = ""
+    proyecto_nombre: str | None = ""
+    fase_nombre: str = ""
+    actividad_descripcion: str = ""
+    requested_by: uuid.UUID
+    requested_by_name: str = ""
+    requested_by_nombre: str | None = None
+    requested_by_email: str | None = ""
+    reason: str
+    requested_changes: str
+    status: str
+    reviewed_by: uuid.UUID | None = None
+    reviewed_by_name: str | None = None
+    reviewed_by_nombre: str | None = None
+    admin_response: str | None = None
+    created_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    version: int = 1
+    items: list[PlanningEditRequestItemDTO] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LearningResultVersionDTO(BaseModel):
+    """Snapshot version history entry for a Learning Result within a planning."""
+
+    id: uuid.UUID
+    learning_result_id: uuid.UUID
+    planning_id: uuid.UUID
+    version_number: int
+    snapshot_data: dict[str, Any] = Field(default_factory=dict)
+    approved_by: uuid.UUID | None = None
+    approved_by_name: str | None = None
+    approved_by_nombre: str | None = None
+    approved_at: datetime | None = None
+    edit_request_id: uuid.UUID | None = None
+    is_official: bool = True
+    created_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+

@@ -12,7 +12,9 @@ from src.application.dto.resultados_aprendizaje import (
     ResultadoAprendizajeListDTO,
     ResultadoAprendizajePayloadDTO,
 )
+from src.application.services.planeacion_service import LearningResultLockedError
 from src.domain.drafts.types import TipoBloqueBorrador
+from src.domain.shared.enums import EstadoEdicionRA
 from src.infrastructure.db.models.curriculum import Competencia, ResultadoAprendizaje
 from src.infrastructure.db.models.drafts import BorradorSesion
 
@@ -274,6 +276,8 @@ class ProgramaResultadoAprendizajeService:
             raise ResultadoAprendizajeNotFoundError(
                 "No existe el resultado solicitado para esta competencia"
             )
+        if getattr(resultado, "edit_status", EstadoEdicionRA.EDITABLE) == EstadoEdicionRA.LOCKED:
+            raise LearningResultLockedError()
 
         if await self._resultado_repository.descripcion_exists(
             competencia.id, command.descripcion, exclude_resultado_id=resultado_id
@@ -338,6 +342,8 @@ class ProgramaResultadoAprendizajeService:
             raise ResultadoAprendizajeNotFoundError(
                 "No existe el resultado solicitado para esta competencia"
             )
+        if getattr(resultado, "edit_status", EstadoEdicionRA.EDITABLE) == EstadoEdicionRA.LOCKED:
+            raise LearningResultLockedError()
 
         await self._resultado_repository.delete_resultado(resultado)
         resultados = await self._resultado_repository.list_by_competencia(

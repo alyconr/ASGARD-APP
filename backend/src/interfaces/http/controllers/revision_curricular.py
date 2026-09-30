@@ -14,17 +14,25 @@ from src.application.dto.revision_curricular import (
     BandejaRevisionPaginadaDTO,
     EntregaRevisionDetalleDTO,
     EnvioRevisionRequestDTO,
+    LearningResultVersionDTO,
     ObservacionCreateDTO,
     ObservacionDTO,
     PlaneacionRevisionDetalleDTO,
     PlaneacionesEntregaListDTO,
+    PlanningEditRequestApproveDTO,
+    PlanningEditRequestCreateDTO,
+    PlanningEditRequestDTO,
+    PlanningEditRequestRejectDTO,
     PreflightEnvioRevisionDTO,
 )
 from src.application.services.access_scope import AccessScopeService
 from src.application.services.revision_curricular_service import (
     RevisionCurricularService,
 )
-from src.domain.shared.enums import EstadoEntregaRevision
+from src.domain.shared.enums import (
+    EstadoEntregaRevision,
+    EstadoSolicitudReapertura,
+)
 from src.infrastructure.db.models.auth import Usuario
 from src.infrastructure.db.session import get_async_session
 from src.interfaces.http.deps import (
@@ -254,5 +262,109 @@ async def aprobar_entrega(
     service: RevisionCurricularService = Depends(get_revision_service),
     current_user: Usuario = Depends(get_current_user),
 ) -> EntregaRevisionDetalleDTO:
-    """Formally approve the delivery and authorize consolidated download."""
+    """Formally approve the delivery, authorize consolidated download, and lock Learning Results."""
     return await service.aprobar_entrega(current_user, entrega_id, dto)
+
+
+# -----------------------------------------------------------------------------
+# Solicitudes de Reapertura y Versiones de Resultados de Aprendizaje
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/solicitudes-modificacion",
+    response_model=PlanningEditRequestDTO,
+    status_code=status.HTTP_201_CREATED,
+)
+async def crear_solicitud_modificacion(
+    dto: PlanningEditRequestCreateDTO,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlanningEditRequestDTO:
+    """Create a formal request from the Executor Team Leader to reopen approved Learning Results."""
+    return await service.crear_solicitud_reapertura(current_user, dto)
+
+
+@router.get(
+    "/solicitudes-modificacion",
+    response_model=list[PlanningEditRequestDTO],
+    status_code=status.HTTP_200_OK,
+)
+async def listar_solicitudes_modificacion(
+    planning_id: uuid.UUID | None = None,
+    referencia_id: uuid.UUID | None = None,
+    status: EstadoSolicitudReapertura | None = None,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> list[PlanningEditRequestDTO]:
+    """List edit requests filtered by planning, process reference, or status."""
+    return await service.listar_solicitudes_reapertura(
+        current_user,
+        planning_id=planning_id,
+        referencia_id=referencia_id,
+        status_filter=status,
+    )
+
+
+@router.get(
+    "/solicitudes-modificacion/{request_id}",
+    response_model=PlanningEditRequestDTO,
+    status_code=status.HTTP_200_OK,
+)
+async def obtener_solicitud_modificacion(
+    request_id: uuid.UUID,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlanningEditRequestDTO:
+    """Fetch complete detail of a specific edit request."""
+    return await service.obtener_solicitud_reapertura(current_user, request_id)
+
+
+@router.post(
+    "/solicitudes-modificacion/{request_id}/aprobar",
+    response_model=PlanningEditRequestDTO,
+    status_code=status.HTTP_200_OK,
+)
+async def aprobar_solicitud_modificacion(
+    request_id: uuid.UUID,
+    dto: PlanningEditRequestApproveDTO,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlanningEditRequestDTO:
+    """Approve all or selected Learning Results in an edit request (Pedagogical Admin only)."""
+    return await service.aprobar_solicitud_reapertura(current_user, request_id, dto)
+
+
+@router.post(
+    "/solicitudes-modificacion/{request_id}/rechazar",
+    response_model=PlanningEditRequestDTO,
+    status_code=status.HTTP_200_OK,
+)
+async def rechazar_solicitud_modificacion(
+    request_id: uuid.UUID,
+    dto: PlanningEditRequestRejectDTO,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> PlanningEditRequestDTO:
+    """Reject an edit request, keeping all Learning Results locked (Pedagogical Admin only)."""
+    return await service.rechazar_solicitud_reapertura(current_user, request_id, dto)
+
+
+@router.get(
+    "/planeaciones/{planning_id}/versiones-resultados",
+    response_model=list[LearningResultVersionDTO],
+    status_code=status.HTTP_200_OK,
+)
+async def listar_versiones_resultados(
+    planning_id: uuid.UUID,
+    learning_result_id: uuid.UUID | None = None,
+    service: RevisionCurricularService = Depends(get_revision_service),
+    current_user: Usuario = Depends(get_current_user),
+) -> list[LearningResultVersionDTO]:
+    """Return approved version history snapshots for Learning Results in a planning."""
+    return await service.listar_versiones_resultado(
+        current_user,
+        planning_id=planning_id,
+        learning_result_id=learning_result_id,
+    )
+

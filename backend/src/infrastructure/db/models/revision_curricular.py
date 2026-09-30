@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.domain.shared.enums import (
     EstadoEntregaRevision,
     EstadoObservacionRevision,
+    EstadoSolicitudReapertura,
     TipoElementoObservacion,
 )
 from src.infrastructure.db.base import Base
@@ -34,16 +35,24 @@ from src.infrastructure.db.models.mixins import (
 
 if TYPE_CHECKING:
     from src.infrastructure.db.models.auth import Usuario
-    from src.infrastructure.db.models.curriculum import ProgramaFormacion
+    from src.infrastructure.db.models.curriculum import (
+        ProgramaFormacion,
+        ResultadoAprendizaje,
+    )
     from src.infrastructure.db.models.organizacion import (
         EquipoEjecutor,
         ProcesoCurricular,
     )
+    from src.infrastructure.db.models.planeacion import PlaneacionPedagogica
     from src.infrastructure.db.models.proyecto import ProyectoFormativo
 
 estado_entrega_enum = build_postgres_enum(EstadoEntregaRevision, "estado_entrega_revision")
 tipo_elemento_obs_enum = build_postgres_enum(TipoElementoObservacion, "tipo_elemento_observacion")
 estado_observacion_enum = build_postgres_enum(EstadoObservacionRevision, "estado_observacion_revision")
+estado_solicitud_reapertura_enum = build_postgres_enum(
+    EstadoSolicitudReapertura, "estado_solicitud_reapertura"
+)
+
 
 
 class EntregaRevisionCurricular(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -295,3 +304,248 @@ class ObservacionRevision(UUIDPrimaryKeyMixin, Base):
         foreign_keys=[resuelto_por_id],
         lazy="selectin",
     )
+
+
+class PlanningEditRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Formal request by a Team Leader to reopen approved Learning Results in a planning."""
+
+    __tablename__ = "planning_edit_requests"
+    __table_args__ = (
+        UniqueConstraint("codigo", name="uq_planning_edit_requests_codigo"),
+        Index("ix_planning_edit_requests_planning_id", "planning_id"),
+        Index("ix_planning_edit_requests_proceso_id", "proceso_curricular_id"),
+        Index("ix_planning_edit_requests_team_id", "team_id"),
+        Index("ix_planning_edit_requests_status", "status"),
+    )
+
+    codigo: Mapped[str] = mapped_column(String(40), nullable=False)
+    planning_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planeaciones_pedagogicas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    proceso_curricular_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("procesos_curriculares.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    entrega_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("entregas_revision_curricular.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("equipos_ejecutores.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    referencia_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_changes: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[EstadoSolicitudReapertura] = mapped_column(
+        estado_solicitud_reapertura_enum,
+        nullable=False,
+        default=EstadoSolicitudReapertura.PENDING,
+        server_default=EstadoSolicitudReapertura.PENDING.value,
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    admin_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "status" not in kwargs or kwargs["status"] is None:
+            kwargs["status"] = EstadoSolicitudReapertura.PENDING
+        if "version" not in kwargs or kwargs["version"] is None:
+            kwargs["version"] = 1
+        created = kwargs.pop("created_at", None) or kwargs.get("fecha_creacion")
+        updated = kwargs.pop("updated_at", None) or kwargs.get("fecha_actualizacion")
+        if created is not None:
+            kwargs["fecha_creacion"] = created
+        if updated is not None:
+            kwargs["fecha_actualizacion"] = updated
+        if "codigo" not in kwargs or not kwargs["codigo"]:
+            req_id = kwargs.get("id") or uuid.uuid4()
+            kwargs["id"] = req_id
+            yr = created.year if isinstance(created, datetime) else datetime.now(UTC).year
+            kwargs["codigo"] = f"REQ-{yr}-{str(req_id)[:4].upper()}"
+        super().__init__(**kwargs)
+        self.created_at = getattr(self, "fecha_creacion", None) or created
+        self.updated_at = getattr(self, "fecha_actualizacion", None) or updated
+
+    # Relationships
+    planning: Mapped[PlaneacionPedagogica] = relationship(
+        "PlaneacionPedagogica",
+        lazy="selectin",
+    )
+    proceso_curricular: Mapped[ProcesoCurricular | None] = relationship(
+        "ProcesoCurricular",
+        lazy="selectin",
+    )
+    team: Mapped[EquipoEjecutor | None] = relationship(
+        "EquipoEjecutor",
+        lazy="selectin",
+    )
+    requester: Mapped[Usuario] = relationship(
+        "Usuario",
+        foreign_keys=[requested_by],
+        lazy="selectin",
+    )
+    reviewer: Mapped[Usuario | None] = relationship(
+        "Usuario",
+        foreign_keys=[reviewed_by],
+        lazy="selectin",
+    )
+    items: Mapped[list[PlanningEditRequestItem]] = relationship(
+        "PlanningEditRequestItem",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class PlanningEditRequestItem(UUIDPrimaryKeyMixin, Base):
+    """Per-Learning-Result item inside a PlanningEditRequest."""
+
+    __tablename__ = "planning_edit_request_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "request_id",
+            "learning_result_id",
+            name="uq_planning_edit_request_item_req_ra",
+        ),
+        Index("ix_planning_edit_request_items_request_id", "request_id"),
+        Index("ix_planning_edit_request_items_learning_result_id", "learning_result_id"),
+    )
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planning_edit_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    learning_result_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    approved: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "requested" not in kwargs or kwargs["requested"] is None:
+            kwargs["requested"] = True
+        super().__init__(**kwargs)
+
+    request: Mapped[PlanningEditRequest] = relationship(
+        "PlanningEditRequest",
+        back_populates="items",
+    )
+    learning_result: Mapped[ResultadoAprendizaje] = relationship(
+        "ResultadoAprendizaje",
+        lazy="selectin",
+    )
+
+
+class LearningResultVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Immutable snapshot of a Learning Result's approved state within a planning."""
+
+    __tablename__ = "learning_result_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "planning_id",
+            "learning_result_id",
+            "version_number",
+            name="uq_learning_result_versions_plan_ra_ver",
+        ),
+        Index("ix_learning_result_versions_planning_id", "planning_id"),
+        Index("ix_learning_result_versions_learning_result_id", "learning_result_id"),
+    )
+
+    learning_result_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("resultados_aprendizaje.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    planning_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planeaciones_pedagogicas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+    snapshot_data: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    edit_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planning_edit_requests.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_official: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "version_number" not in kwargs or kwargs["version_number"] is None:
+            kwargs["version_number"] = 1
+        if "is_official" not in kwargs or kwargs["is_official"] is None:
+            kwargs["is_official"] = True
+        if "snapshot_data" not in kwargs or kwargs["snapshot_data"] is None:
+            kwargs["snapshot_data"] = {}
+        super().__init__(**kwargs)
+
+    learning_result: Mapped[ResultadoAprendizaje] = relationship(
+        "ResultadoAprendizaje",
+        lazy="selectin",
+    )
+    approver: Mapped[Usuario | None] = relationship(
+        "Usuario",
+        foreign_keys=[approved_by],
+        lazy="selectin",
+    )
+

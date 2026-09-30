@@ -44,6 +44,8 @@ import {
   type EntregaRevisionDetalle,
   type ObservacionRevision,
   type PreflightEnvioRevision,
+  type PlanningEditRequest,
+  type PlaneacionResultadoResumen,
   savePlaneacionBorrador,
   confirmarPlaneacion,
   deletePlaneacion,
@@ -59,11 +61,22 @@ import {
   fetchPreflightRevision,
   enviarProcesoARevision,
   reportarAjusteObservacion,
+  listarSolicitudesModificacion,
 } from "../planeacion-api";
 import { WizardGuideAssistant } from "@/features/guide/wizard-guide-assistant";
 import { buildPlaneacionWizardGuide } from "@/features/guide/wizard-guide-engine";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/feedback/confirm-context";
+import { useOptionalAuth } from "@/features/auth/auth-context";
+import {
+  LockStatusBadge,
+  LearningResultLockBanner,
+  EditRequestButton,
+  EditRequestModal,
+  EditRequestStatus,
+  LearningResultVersionHistory,
+} from "./edit-requests-components";
+
 
 type StepId = "dashboard" | "curricular" | "complementario" | "preview" | "confirmacion";
 type InstructionStep = "curricular" | "complementario";
@@ -500,11 +513,21 @@ function FieldObservationBanner({
 export function PlaneacionWizardShell({
   contexto,
   referenciaId,
+  isTeamLeader: isTeamLeaderProp,
 }: Readonly<{
   contexto: PlaneacionContextoResponse;
   referenciaId: string;
+  isTeamLeader?: boolean;
 }>): React.JSX.Element {
   const confirm = useConfirm();
+  const auth = useOptionalAuth();
+  const isTeamLeader = useMemo(() => {
+    if (typeof isTeamLeaderProp === "boolean") return isTeamLeaderProp;
+    if (auth?.user) {
+      return auth.hasRole("LIDER_EQUIPO_EJECUTOR", "SUPERADMIN", "ADMIN");
+    }
+    return true;
+  }, [isTeamLeaderProp, auth]);
   const [activeStep, setActiveStep] = useState<StepId>("dashboard");
   const [planningsList, setPlanningsList] = useState<PlaneacionListResponse[]>([]);
   const [selectedCompetenciaIds, setSelectedCompetenciaIds] = useState<string[]>([]);
@@ -586,6 +609,11 @@ export function PlaneacionWizardShell({
   const [ajusteObservacionId, setAjusteObservacionId] = useState<string | null>(null);
   const [detalleAjusteTexto, setDetalleAjusteTexto] = useState("");
   const [isReportingAjuste, setIsReportingAjuste] = useState(false);
+
+  // RA Lock & Controlled Reopening State
+  const [editRequests, setEditRequests] = useState<PlanningEditRequest[]>([]);
+  const [isEditRequestModalOpen, setIsEditRequestModalOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
 
   // Fases map
   const faseMap = useMemo(() => {
@@ -709,6 +737,58 @@ export function PlaneacionWizardShell({
     }
     return selectedResultadoIds[0] ?? null;
   }, [activeRapIdForComplementary, selectedResultadoIds]);
+
+  const rapLockInfoMap = useMemo(() => {
+    const map = new Map<string, PlaneacionResultadoResumen>();
+    if (confirmedPlanning?.competencias) {
+      confirmedPlanning.competencias.forEach((comp) => {
+        comp.resultados.forEach((res) => {
+          map.set(res.id, res);
+        });
+      });
+    }
+    return map;
+  }, [confirmedPlanning]);
+
+  const currentRapLockInfo = useMemo(() => {
+    if (!currentRapId) return undefined;
+    return rapLockInfoMap.get(currentRapId);
+  }, [currentRapId, rapLockInfoMap]);
+
+  const isCurrentRapLocked = useMemo(() => {
+    if (currentRapLockInfo?.edit_status) {
+      return currentRapLockInfo.edit_status === "LOCKED";
+    }
+    return confirmedPlanning?.edit_status === "LOCKED";
+  }, [currentRapLockInfo, confirmedPlanning]);
+
+  const isPlanningApproved = useMemo(() => {
+    return Boolean(
+      confirmedPlanning?.approval_status === "APPROVED" ||
+        confirmedPlanning?.review_status === "APPROVED" ||
+        entregaActual?.estado === "APROBADO",
+    );
+  }, [confirmedPlanning, entregaActual]);
+
+  const isDownloadEnabled = useMemo(() => {
+    return Boolean(
+      entregaActual?.descarga_habilitada ||
+        confirmedPlanning?.approval_status === "APPROVED",
+    );
+  }, [entregaActual, confirmedPlanning]);
+
+  const hasLockedLearningResults = useMemo(() => {
+    if (!confirmedPlanning) return false;
+    if (confirmedPlanning.edit_status === "LOCKED") return true;
+    return confirmedPlanning.competencias.some((c) =>
+      c.resultados.some((r) => r.edit_status === "LOCKED"),
+    );
+  }, [confirmedPlanning]);
+
+  const hasPendingEditRequest = useMemo(() => {
+    return editRequests.some((r) => r.status === "PENDING");
+  }, [editRequests]);
+
 
   const applyRapDataToForm = (targetData: ComplementaryDataPerRap | undefined) => {
     const data = targetData ?? {};
@@ -900,6 +980,27 @@ export function PlaneacionWizardShell({
     }
   }, [referenciaId]);
 
+  const loadEditRequests = useCallback(
+    async (planningId?: string | null) => {
+      const targetId = planningId ?? activePlanningId;
+      if (!targetId) {
+        setEditRequests([]);
+        return;
+      }
+      try {
+        if (typeof listarSolicitudesModificacion !== "function") {
+          setEditRequests([]);
+          return;
+        }
+        const reqs = await listarSolicitudesModificacion({ planning_id: targetId });
+        setEditRequests(Array.isArray(reqs) ? reqs : []);
+      } catch {
+        // Ignore if not available
+      }
+    },
+    [activePlanningId],
+  );
+
   useEffect(() => {
     void loadPlannings();
     void loadOfficialFormat();
@@ -975,6 +1076,7 @@ export function PlaneacionWizardShell({
     setActivePlanningId(null);
     setConfirmedPlanning(null);
     setOfficialStatus(null);
+    setEditRequests([]);
   };
 
   // Start creating a new learning activity under the currently selected activity
@@ -1005,6 +1107,7 @@ export function PlaneacionWizardShell({
     setReadComplementaryFields(new Set());
     setConfirmedPlanning(null);
     setOfficialStatus(null);
+    setEditRequests([]);
     setActiveStep("curricular");
   };
 
@@ -1015,6 +1118,8 @@ export function PlaneacionWizardShell({
     try {
       const details = await fetchPlaneacionDetalle(planning.id);
       setActivePlanningId(details.id);
+      setConfirmedPlanning(details);
+      void loadEditRequests(details.id);
       setFaseId(details.fase_id ?? "");
       setActividadId(details.actividad_id ?? "");
       setSelectedResultadoIds(details.resultados_ids);
@@ -1072,7 +1177,6 @@ export function PlaneacionWizardShell({
       }
 
       if (details.estado === "COMPLETO") {
-        setConfirmedPlanning(details);
         setActiveStep("confirmacion");
       } else {
         setActiveStep("curricular");
@@ -1093,6 +1197,8 @@ export function PlaneacionWizardShell({
     try {
       const details = await fetchPlaneacionDetalle(planningId);
       setActivePlanningId(details.id);
+      setConfirmedPlanning(details);
+      void loadEditRequests(details.id);
       setFaseId(details.fase_id ?? "");
       setActividadId(details.actividad_id ?? "");
       setSelectedResultadoIds(details.resultados_ids);
@@ -3420,6 +3526,12 @@ export function PlaneacionWizardShell({
                   );
                 })()}
 
+                {editRequests.length > 0 && (
+                  <div className="mb-4">
+                    <EditRequestStatus requests={editRequests} />
+                  </div>
+                )}
+
                 {/* Selector de RAP para Diligenciamiento Individual */}
                 {selectedResultados.length > 0 && (
                   <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
@@ -3433,7 +3545,7 @@ export function PlaneacionWizardShell({
                           Selecciona un RAP para diligenciar de manera individual su orientación didáctica e intensidad horaria:
                         </p>
                       </div>
-                      {selectedResultados.length > 1 && (
+                      {selectedResultados.length > 1 && !isCurrentRapLocked && (
                         <button
                           type="button"
                           onClick={handleCopyCurrentRapDataToAll}
@@ -3449,6 +3561,10 @@ export function PlaneacionWizardShell({
                     <div className="flex flex-wrap gap-2">
                       {selectedResultados.map((res) => {
                         const isSelected = res.id === currentRapId;
+                        const rapLockInfo = rapLockInfoMap.get(res.id);
+                        const isThisRapLocked =
+                          rapLockInfo?.edit_status === "LOCKED" ||
+                          (!rapLockInfo && confirmedPlanning?.edit_status === "LOCKED");
                         const rapData = isSelected
                           ? {
                               actividades_aprendizaje: actividadesAprendizaje,
@@ -3491,6 +3607,14 @@ export function PlaneacionWizardShell({
                               />
                               <span className="font-mono">{res.codigo_resultado || "RAP"}</span>
                               <span className="max-w-[200px] truncate opacity-90">{res.descripcion}</span>
+                              {rapLockInfo?.edit_status && (
+                                <LockStatusBadge
+                                  editStatus={rapLockInfo.edit_status}
+                                  unlockRequestId={rapLockInfo.unlock_request_id}
+                                  approvedVersion={rapLockInfo.approved_version}
+                                  compact
+                                />
+                              )}
                               <span
                                 className={cn(
                                   "rounded px-1.5 py-0.5 text-[10px] uppercase font-bold",
@@ -3506,10 +3630,12 @@ export function PlaneacionWizardShell({
                             </button>
                             <button
                               type="button"
-                              disabled={selectedResultados.length <= 1}
+                              disabled={selectedResultados.length <= 1 || isThisRapLocked}
                               onClick={(event) => void handleRemoveRap(res.id, event)}
                               title={
-                                selectedResultados.length <= 1
+                                isThisRapLocked
+                                  ? "Este resultado de aprendizaje está bloqueado y no puede quitarse"
+                                  : selectedResultados.length <= 1
                                   ? "Debes conservar al menos un RAP en la planeación"
                                   : "Quitar este RAP de la planeación"
                               }
@@ -3527,6 +3653,27 @@ export function PlaneacionWizardShell({
                         );
                       })}
                     </div>
+
+                    {currentRapLockInfo && (
+                      <div className="mt-3">
+                        <LearningResultLockBanner
+                          ra={{
+                            id: currentRapLockInfo.id,
+                            codigo: currentRapLockInfo.codigo_resultado,
+                            descripcion: currentRapLockInfo.descripcion,
+                            edit_status: currentRapLockInfo.edit_status,
+                            approved_version: currentRapLockInfo.approved_version,
+                            approved_at: currentRapLockInfo.locked_at ?? currentRapLockInfo.approved_at,
+                            unlock_request_id: currentRapLockInfo.unlock_request_id,
+                          }}
+                          requestCode={
+                            currentRapLockInfo.unlock_request_id
+                              ? `REQ-${currentRapLockInfo.unlock_request_id.slice(0, 8).toUpperCase()}`
+                              : null
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -3604,12 +3751,14 @@ export function PlaneacionWizardShell({
                           <textarea
                             id={field.id}
                             value={String(value)}
-                            disabled={!hasReadInstruction}
+                            disabled={!hasReadInstruction || isCurrentRapLocked}
                             onChange={(event) =>
                               updateComplementaryField(field.id, event.target.value)
                             }
                             placeholder={
-                              hasReadInstruction
+                              isCurrentRapLocked
+                                ? "Este resultado de aprendizaje se encuentra aprobado y bloqueado para edición."
+                                : hasReadInstruction
                                 ? field.placeholder
                                 : "Lee la instrucción para habilitar este campo."
                             }
@@ -3621,12 +3770,14 @@ export function PlaneacionWizardShell({
                             id={field.id}
                             type={field.type}
                             value={value}
-                            disabled={!hasReadInstruction}
+                            disabled={!hasReadInstruction || isCurrentRapLocked}
                             onChange={(event) =>
                               updateComplementaryField(field.id, event.target.value)
                             }
                             placeholder={
-                              hasReadInstruction
+                              isCurrentRapLocked
+                                ? "Este resultado de aprendizaje se encuentra aprobado y bloqueado para edición."
+                                : hasReadInstruction
                                 ? field.placeholder
                                 : "Lee la instrucción para habilitar este campo."
                             }
@@ -4003,22 +4154,65 @@ export function PlaneacionWizardShell({
                           </div>
                         </div>
 
+                        {editRequests.length > 0 && (
+                          <div className="border-b border-slate-100 pb-4">
+                            <EditRequestStatus requests={editRequests} />
+                          </div>
+                        )}
+
                         {/* Resultados de Aprendizaje */}
                         <div className="border-b border-slate-100 pb-4">
                           <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                             Resultados de Aprendizaje Integrados ({confirmedPlanning.competencias.flatMap((c) => c.resultados).length})
                           </span>
-                          <div className="grid gap-2">
+                          <div className="grid gap-3">
                             {confirmedPlanning.competencias.map((comp) => (
                               <div key={comp.competencia_id} className="rounded-lg bg-slate-50 p-3">
-                                <p className="text-xs font-bold text-slate-600 mb-1">
+                                <p className="text-xs font-bold text-slate-600 mb-2">
                                   {comp.codigo_competencia} — {comp.nombre_competencia}
                                 </p>
-                                <ul className="list-disc pl-5 text-sm text-slate-800 grid gap-1">
+                                <div className="grid gap-2">
                                   {comp.resultados.map((res) => (
-                                    <li key={res.id}>{res.descripcion}</li>
+                                    <div key={res.id} className="rounded-md bg-white p-3 border border-slate-100 grid gap-2">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="text-sm font-medium text-slate-800">
+                                          {res.codigo_resultado ? `${res.codigo_resultado} — ` : ""}
+                                          {res.descripcion}
+                                        </span>
+                                        <LockStatusBadge
+                                          editStatus={res.edit_status ?? confirmedPlanning.edit_status}
+                                          unlockRequestId={res.unlock_request_id}
+                                          approvedVersion={res.approved_version}
+                                          compact
+                                        />
+                                      </div>
+                                      <LearningResultLockBanner
+                                        ra={{
+                                          id: res.id,
+                                          codigo: res.codigo_resultado,
+                                          descripcion: res.descripcion,
+                                          edit_status: res.edit_status ?? confirmedPlanning.edit_status,
+                                          approved_version: res.approved_version,
+                                          approved_at: res.locked_at ?? res.approved_at,
+                                          unlock_request_id: res.unlock_request_id,
+                                        }}
+                                        requestCode={
+                                          res.unlock_request_id
+                                            ? `REQ-${res.unlock_request_id.slice(0, 8).toUpperCase()}`
+                                            : null
+                                        }
+                                        onFocusEdit={
+                                          res.edit_status === "EDITABLE" && res.unlock_request_id
+                                            ? () => {
+                                                setActiveRapIdForComplementary(res.id);
+                                                setActiveStep("complementario");
+                                              }
+                                            : undefined
+                                        }
+                                      />
+                                    </div>
                                   ))}
-                                </ul>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -4108,7 +4302,7 @@ export function PlaneacionWizardShell({
                     </div>
                   )}
 
-                  <div className="mt-8 flex flex-col sm:flex-row gap-4 w-full justify-center">
+                  <div className="mt-8 flex flex-wrap gap-4 w-full justify-center">
                     <button
                       type="button"
                       onClick={() => {
@@ -4126,15 +4320,43 @@ export function PlaneacionWizardShell({
                       <FileSpreadsheet className="h-4 w-4" />
                       Ir a Configuración Documental (Consolidado)
                     </button>
+                    <EditRequestButton
+                      planningApproved={isPlanningApproved}
+                      downloadEnabled={isDownloadEnabled}
+                      learningResultsLocked={hasLockedLearningResults}
+                      isTeamLeader={isTeamLeader}
+                      hasPendingRequest={hasPendingEditRequest}
+                      onClick={() => setIsEditRequestModalOpen(true)}
+                    />
+                    {activePlanningId && (
+                      <button
+                        type="button"
+                        onClick={() => setIsVersionHistoryOpen(true)}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <RefreshCcw className="h-4 w-4" />
+                        Historial de versiones
+                      </button>
+                    )}
                     <button
                       type="button"
+                      disabled={confirmedPlanning?.edit_status === "LOCKED"}
                       onClick={() => {
                         toast.info(
                           "Al guardar cambios, la planeación vuelve a borrador y deberás confirmarla de nuevo para que sea incluida en el formato consolidado.",
                         );
-                        setActiveStep("curricular");
+                        setActiveStep(
+                          confirmedPlanning?.review_status === "CHANGES_ALLOWED"
+                            ? "complementario"
+                            : "curricular",
+                        );
                       }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-strong)] hover:bg-white transition"
+                      title={
+                        confirmedPlanning?.edit_status === "LOCKED"
+                          ? "Esta planeación está aprobada y bloqueada. Solicita modificación para editar resultados específicos."
+                          : "Editar planeación"
+                      }
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-strong)] hover:bg-white transition disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Pencil className="h-4 w-4" />
                       Editar planeación
@@ -4142,8 +4364,9 @@ export function PlaneacionWizardShell({
                     {activePlanningId && (
                       <button
                         type="button"
+                        disabled={confirmedPlanning?.edit_status === "LOCKED" || hasLockedLearningResults}
                         onClick={(e) => void handleDeletePlanning(activePlanningId, e)}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition"
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar planeación
@@ -4763,6 +4986,42 @@ export function PlaneacionWizardShell({
           </div>
         </div>
       )}
+
+      {activePlanningId && confirmedPlanning && (
+        <>
+          <EditRequestModal
+            isOpen={isEditRequestModalOpen}
+            onClose={() => setIsEditRequestModalOpen(false)}
+            planningId={activePlanningId}
+            learningResults={confirmedPlanning.competencias.flatMap((c) =>
+              c.resultados.map((r) => ({
+                id: r.id,
+                codigo: r.codigo_resultado,
+                descripcion: r.descripcion,
+                competencia_codigo: c.codigo_competencia,
+                competencia_nombre: c.nombre_competencia,
+                edit_status: r.edit_status ?? confirmedPlanning.edit_status,
+                approved_version: r.approved_version,
+                approved_at: r.locked_at ?? r.approved_at,
+                unlock_request_id: r.unlock_request_id,
+              })),
+            )}
+            pendingRaIds={editRequests
+              .filter((r) => r.status === "PENDING")
+              .flatMap((r) => r.items.map((item) => item.learning_result_id))}
+            onSuccess={() => {
+              void loadEditRequests(activePlanningId);
+              void loadPlanningDetails({ id: activePlanningId } as PlaneacionListResponse);
+            }}
+          />
+          <LearningResultVersionHistory
+            isOpen={isVersionHistoryOpen}
+            onClose={() => setIsVersionHistoryOpen(false)}
+            planningId={activePlanningId}
+          />
+        </>
+      )}
     </div>
   );
 }
+

@@ -1,11 +1,41 @@
 import { authFetch, getApiBaseUrl } from "@/lib/api";
 
+export type EstadoRevisionPlaneacion =
+  | "DRAFT"
+  | "IN_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "CHANGES_ALLOWED"
+  | "APPROVED";
+
+export type EstadoAprobacionPlaneacion =
+  | "PENDING"
+  | "APPROVED"
+  | "PREVIOUS_VERSION_APPROVED";
+
+export type EstadoEdicionRA = "EDITABLE" | "LOCKED";
+
+export type EstadoSolicitudReapertura =
+  | "PENDING"
+  | "APPROVED"
+  | "PARTIALLY_APPROVED"
+  | "REJECTED"
+  | "COMPLETED"
+  | "CANCELLED";
+
 export interface ContextoResultado {
   id: string;
   codigo_resultado?: string | null;
   descripcion: string;
   tipo_resultado: string | null;
   orden_resultado?: number | null;
+  edit_status?: EstadoEdicionRA | string;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  unlocked_at?: string | null;
+  unlocked_by?: string | null;
+  unlock_request_id?: string | null;
+  approved_version?: number;
+  approved_at?: string | null;
 }
 
 export interface ContextoConocimiento {
@@ -70,6 +100,14 @@ export interface PlaneacionResultadoResumen {
   codigo_resultado?: string | null;
   descripcion: string;
   tipo_resultado: string | null;
+  edit_status?: EstadoEdicionRA | string;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  unlocked_at?: string | null;
+  unlocked_by?: string | null;
+  unlock_request_id?: string | null;
+  approved_version?: number;
+  approved_at?: string | null;
 }
 
 export interface PlaneacionCompetenciaResumen {
@@ -92,6 +130,14 @@ export interface PlaneacionResponse {
   fase_id: string | null;
   actividad_id: string | null;
   estado: string;
+  review_status?: EstadoRevisionPlaneacion | string;
+  approval_status?: EstadoAprobacionPlaneacion | string;
+  edit_status?: EstadoEdicionRA | string;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  unlocked_at?: string | null;
+  unlocked_by?: string | null;
+  unlock_request_id?: string | null;
   datos_complementarios: Record<string, unknown>;
   resultados_ids: string[];
   conocimientos_ids: string[];
@@ -114,6 +160,9 @@ export interface PlaneacionListResponse {
   descripcion_actividad?: string | null;
   actividades_aprendizaje?: string | null;
   estado: string;
+  review_status?: EstadoRevisionPlaneacion | string;
+  approval_status?: EstadoAprobacionPlaneacion | string;
+  edit_status?: EstadoEdicionRA | string;
   competencias?: PlaneacionListCompetencia[];
   competencias_count: number;
   resultados_count: number;
@@ -591,6 +640,14 @@ export interface RAPResumen {
   codigo?: string | null;
   descripcion: string;
   tipo_resultado?: string | null;
+  edit_status?: EstadoEdicionRA | string;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  unlocked_at?: string | null;
+  unlocked_by?: string | null;
+  unlock_request_id?: string | null;
+  approved_version?: number;
+  approved_at?: string | null;
 }
 
 export interface CompetenciaResumen {
@@ -625,6 +682,9 @@ export interface HorasPlaneacion {
 export interface PlaneacionRevisionItem {
   id: string;
   estado: string;
+  review_status?: EstadoRevisionPlaneacion | string;
+  approval_status?: EstadoAprobacionPlaneacion | string;
+  edit_status?: EstadoEdicionRA | string;
   fase: FaseResumen;
   actividad_proyecto: ActividadProyectoResumen;
   competencias: CompetenciaResumen[];
@@ -657,6 +717,9 @@ export interface PlaneacionRevisionDetalle {
   entrega_id: string;
   version_entrega: number;
   estado: string;
+  review_status?: EstadoRevisionPlaneacion | string;
+  approval_status?: EstadoAprobacionPlaneacion | string;
+  edit_status?: EstadoEdicionRA | string;
   fase: FaseResumen;
   actividad_proyecto: ActividadProyectoResumen;
   competencias: CompetenciaResumen[];
@@ -683,6 +746,93 @@ export interface ObservacionCreatePayload {
 
 export interface AjusteReportarPayload {
   comentario_ajuste: string;
+}
+
+// ----------------------------------------------------------------------------
+// Solicitudes de Modificación / Reapertura Controlada de RA (PlanningEditRequest)
+// ----------------------------------------------------------------------------
+
+export interface PlanningEditRequestItem {
+  id: string;
+  request_id?: string | null;
+  learning_result_id: string;
+  codigo_resultado?: string | null;
+  descripcion: string;
+  descripcion_resultado?: string;
+  competencia_codigo?: string | null;
+  competencia_nombre?: string | null;
+  edit_status: EstadoEdicionRA | string;
+  requested: boolean;
+  approved?: boolean | null;
+}
+
+export interface PlanningEditRequest {
+  id: string;
+  codigo: string;
+  code?: string;
+  planning_id: string;
+  planning_actividad?: string | null;
+  proceso_curricular_id?: string | null;
+  referencia_id?: string | null;
+  entrega_id?: string | null;
+  team_id?: string | null;
+  team_name: string;
+  team_nombre?: string | null;
+  programa_codigo: string;
+  codigo_programa?: string | null;
+  programa_nombre: string;
+  proyecto_codigo: string;
+  proyecto_nombre: string;
+  fase_nombre: string;
+  actividad_descripcion: string;
+  requested_by: string;
+  requested_by_name: string;
+  requested_by_nombre?: string | null;
+  requested_by_email: string;
+  reason: string;
+  requested_changes: string;
+  status: EstadoSolicitudReapertura | string;
+  reviewed_by?: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_by_nombre?: string | null;
+  admin_response?: string | null;
+  created_at: string;
+  reviewed_at?: string | null;
+  version: number;
+  items: PlanningEditRequestItem[];
+}
+
+export interface PlanningEditRequestCreatePayload {
+  planning_id: string;
+  learning_result_ids: string[];
+  reason: string;
+  requested_changes: string;
+}
+
+export interface PlanningEditRequestApprovePayload {
+  approved_learning_result_ids: string[];
+  admin_response?: string | null;
+  expected_version?: number | null;
+}
+
+export interface PlanningEditRequestRejectPayload {
+  admin_response?: string | null;
+  expected_version?: number | null;
+}
+
+export interface LearningResultVersion {
+  id: string;
+  learning_result_id: string;
+  planning_id: string;
+  version_number: number;
+  snapshot_data: Record<string, unknown>;
+  approved_by?: string | null;
+  approved_by_name?: string | null;
+  approved_by_nombre?: string | null;
+  approved_at?: string | null;
+  edit_request_id?: string | null;
+  is_official: boolean;
+  created_at?: string | null;
 }
 
 export async function fetchPreflightRevision(
@@ -825,4 +975,81 @@ export async function fetchPlaneacionRevisionDetalle(
     `/revision-curricular/entregas/${entrega_id}/planeaciones/${planeacion_id}`,
   );
 }
+
+export async function crearSolicitudModificacion(
+  payload: PlanningEditRequestCreatePayload,
+): Promise<PlanningEditRequest> {
+  return requestJson<PlanningEditRequest>(
+    `/revision-curricular/solicitudes-modificacion`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listarSolicitudesModificacion(params?: {
+  planning_id?: string | null;
+  referencia_id?: string | null;
+  status?: EstadoSolicitudReapertura | string | null;
+}): Promise<PlanningEditRequest[]> {
+  const query = new URLSearchParams();
+  if (params?.planning_id) query.set("planning_id", params.planning_id);
+  if (params?.referencia_id) query.set("referencia_id", params.referencia_id);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return requestJson<PlanningEditRequest[]>(
+    `/revision-curricular/solicitudes-modificacion${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function obtenerSolicitudModificacion(
+  request_id: string,
+): Promise<PlanningEditRequest> {
+  return requestJson<PlanningEditRequest>(
+    `/revision-curricular/solicitudes-modificacion/${request_id}`,
+  );
+}
+
+export async function aprobarSolicitudModificacion(
+  request_id: string,
+  payload: PlanningEditRequestApprovePayload,
+): Promise<PlanningEditRequest> {
+  return requestJson<PlanningEditRequest>(
+    `/revision-curricular/solicitudes-modificacion/${request_id}/aprobar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function rechazarSolicitudModificacion(
+  request_id: string,
+  payload: PlanningEditRequestRejectPayload,
+): Promise<PlanningEditRequest> {
+  return requestJson<PlanningEditRequest>(
+    `/revision-curricular/solicitudes-modificacion/${request_id}/rechazar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listarVersionesResultados(
+  planning_id: string,
+  learning_result_id?: string | null,
+): Promise<LearningResultVersion[]> {
+  const query = new URLSearchParams();
+  if (learning_result_id) query.set("learning_result_id", learning_result_id);
+  const qs = query.toString();
+  return requestJson<LearningResultVersion[]>(
+    `/revision-curricular/planeaciones/${planning_id}/versiones-resultados${qs ? `?${qs}` : ""}`,
+  );
+}
+
 

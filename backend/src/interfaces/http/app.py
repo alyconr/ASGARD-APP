@@ -74,6 +74,9 @@ from src.interfaces.http.controllers.revision_curricular import (
 
 
 
+from src.application.services.planeacion_service import LearningResultLockedError
+
+
 def create_application() -> FastAPI:
     """Build and configure the FastAPI application."""
     settings = get_settings()
@@ -91,6 +94,26 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @application.exception_handler(LearningResultLockedError)
+    async def learning_result_locked_handler(
+        request: Request, exc: LearningResultLockedError
+    ) -> JSONResponse:
+        current_settings = get_settings()
+        response = JSONResponse(
+            status_code=423,
+            content={
+                "code": exc.code,
+                "message": exc.message,
+                "detail": exc.message,
+            },
+        )
+        origin = request.headers.get("origin")
+        if origin and origin in current_settings.cors_allow_origin_list:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+        return response
 
     @application.exception_handler(Exception)
     async def unhandled_exception_handler(

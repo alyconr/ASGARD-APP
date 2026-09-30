@@ -145,3 +145,8 @@ export function useAuth(): AuthContextType {
   }
   return context;
 }
+
+export function useOptionalAuth(): AuthContextType | undefined {
+  return useContext(AuthContext);
+}
+

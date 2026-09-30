@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -16,12 +18,14 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.domain.shared.enums import (
     EstadoBloque,
     EstadoCampo,
     EstadoConciliacionPendiente,
+    EstadoEdicionRA,
     MotivoFalloExtraccion,
     MotivoPendienteAsignacion,
     TipoConocimiento,
@@ -41,6 +45,7 @@ if TYPE_CHECKING:
 
 estado_bloque_enum = build_postgres_enum(EstadoBloque, "estado_bloque")
 estado_campo_enum = build_postgres_enum(EstadoCampo, "estado_campo")
+estado_edicion_ra_enum = build_postgres_enum(EstadoEdicionRA, "estado_edicion_ra")
 fuente_cargue_enum = build_postgres_enum(TipoFuenteCargue, "tipo_fuente_cargue")
 tipo_conocimiento_enum = build_postgres_enum(TipoConocimiento, "tipo_conocimiento")
 tipo_elemento_pendiente_enum = build_postgres_enum(
@@ -198,6 +203,53 @@ class ResultadoAprendizaje(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         motivo_fallo_enum,
         nullable=True,
     )
+
+    # Learning Result Locking & Controlled Reopening
+    edit_status: Mapped[EstadoEdicionRA] = mapped_column(
+        estado_edicion_ra_enum,
+        nullable=False,
+        default=EstadoEdicionRA.EDITABLE,
+        server_default=EstadoEdicionRA.EDITABLE.value,
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    locked_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    unlocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    unlocked_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    unlock_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    approved_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "edit_status" not in kwargs or kwargs["edit_status"] is None:
+            kwargs["edit_status"] = EstadoEdicionRA.EDITABLE
+        if "approved_version" not in kwargs or kwargs["approved_version"] is None:
+            kwargs["approved_version"] = 0
+        super().__init__(**kwargs)
 
     competencia: Mapped[Competencia] = relationship(back_populates="resultados")
     conocimientos: Mapped[list["Conocimiento"]] = relationship(

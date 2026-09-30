@@ -9,7 +9,8 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from copy import deepcopy
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,20 +28,31 @@ from src.application.dto.revision_curricular import (
     EnvioRevisionRequestDTO,
     FaseResumenDTO,
     HorasPlaneacionDTO,
+    LearningResultVersionDTO,
     ObservacionCreateDTO,
     ObservacionDTO,
     PlaneacionRevisionDetalleDTO,
     PlaneacionRevisionItemDTO,
     PlaneacionesEntregaListDTO,
+    PlanningEditRequestApproveDTO,
+    PlanningEditRequestCreateDTO,
+    PlanningEditRequestDTO,
+    PlanningEditRequestItemDTO,
+    PlanningEditRequestRejectDTO,
     PreflightEnvioRevisionDTO,
     RAPResumenDTO,
 )
 from src.application.services.access_scope import AccessScopeService
+from src.application.services.notification_events import notification_dispatcher
 from src.domain.shared.enums import (
+    EstadoAprobacionPlaneacion,
     EstadoBloque,
+    EstadoEdicionRA,
     EstadoEntregaRevision,
     EstadoEquipo,
     EstadoObservacionRevision,
+    EstadoRevisionPlaneacion,
+    EstadoSolicitudReapertura,
     RolUsuario,
     SeccionObservacionPlaneacion,
     TipoElementoObservacion,
@@ -55,6 +67,7 @@ from src.infrastructure.db.models.organizacion import (
 from src.infrastructure.db.models.planeacion import (
     PlaneacionDocumentoConfig,
     PlaneacionPedagogica,
+    planeacion_resultados,
 )
 from src.infrastructure.db.models.proyecto import (
     ActividadProyecto,
@@ -62,7 +75,10 @@ from src.infrastructure.db.models.proyecto import (
 )
 from src.infrastructure.db.models.revision_curricular import (
     EntregaRevisionCurricular,
+    LearningResultVersion,
     ObservacionRevision,
+    PlanningEditRequest,
+    PlanningEditRequestItem,
 )
 
 
@@ -266,6 +282,7 @@ class RevisionCurricularService:
 
         # Build snapshot metadata for tampering detection
         snapshot = await self._build_snapshot_metadatos(proceso.proyecto_id)
+        now = datetime.now(UTC)
 
         nueva_entrega = EntregaRevisionCurricular(
             id=uuid.uuid4(),
@@ -277,12 +294,105 @@ class RevisionCurricularService:
             version=new_version,
             estado=new_state,
             enviado_por_id=actor.id,
-            fecha_envio=datetime.now(UTC),
+            fecha_envio=now,
             descarga_habilitada=False,
             snapshot_metadatos=snapshot,
             notas_entrega=dto.notas_entrega,
         )
         self.session.add(nueva_entrega)
+
+        # Re-lock RAs and transition plannings to IN_REVIEW / LOCKED
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(PlaneacionPedagogica.proyecto_id == proceso.proyecto_id)
+            .options(selectinload(PlaneacionPedagogica.resultados))
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        plans = list(plan_res.scalars().all())
+
+        relocked_ra_ids: list[str] = []
+        for p in plans:
+            was_reopened = (
+                p.review_status == EstadoRevisionPlaneacion.CHANGES_ALLOWED
+                or p.approval_status == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED
+                or p.unlock_request_id is not None
+            )
+            p.review_status = EstadoRevisionPlaneacion.IN_REVIEW
+            p.edit_status = EstadoEdicionRA.LOCKED
+            p.locked_at = now
+            p.locked_by = actor.id
+
+            datos = deepcopy(p.datos_complementarios or {})
+            ra_locks = datos.get("ra_locks") if isinstance(datos.get("ra_locks"), dict) else {}
+
+            for r in p.resultados:
+                was_ra_unlocked = (
+                    getattr(r, "edit_status", EstadoEdicionRA.EDITABLE) == EstadoEdicionRA.EDITABLE
+                    and (getattr(r, "unlock_request_id", None) is not None or (getattr(r, "approved_version", 0) or 0) >= 1 or was_reopened)
+                )
+                r.edit_status = EstadoEdicionRA.LOCKED
+                r.locked_at = now
+                r.locked_by = actor.id
+
+                ra_key = str(r.id)
+                prev_lock = ra_locks.get(ra_key, {}) if isinstance(ra_locks.get(ra_key), dict) else {}
+                ra_locks[ra_key] = {
+                    **prev_lock,
+                    "edit_status": EstadoEdicionRA.LOCKED.value,
+                    "locked_at": now.isoformat(),
+                    "locked_by": str(actor.id),
+                }
+                await self.session.execute(
+                    update(planeacion_resultados)
+                    .where(
+                        planeacion_resultados.c.planeacion_id == p.id,
+                        planeacion_resultados.c.resultado_id == r.id,
+                    )
+                    .values(
+                        edit_status=EstadoEdicionRA.LOCKED,
+                        locked_at=now,
+                        locked_by=actor.id,
+                    )
+                )
+                if was_ra_unlocked:
+                    relocked_ra_ids.append(ra_key)
+                    await self._audit(
+                        actor_id=actor.id,
+                        referencia_id=referencia_id,
+                        entidad="ResultadoAprendizaje",
+                        entidad_id=r.id,
+                        accion="LEARNING_RESULT_RELOCKED",
+                        detalle={
+                            "planeacion_id": str(p.id),
+                            "learning_result_id": ra_key,
+                            "version": new_version,
+                            "motivo": "Reenvío de planeación a revisión pedagógica",
+                        },
+                    )
+
+            datos["ra_locks"] = ra_locks
+            p.datos_complementarios = datos
+
+        # Complete any active APPROVED / PARTIALLY_APPROVED edit requests for these plannings
+        if plans:
+            plan_ids = [p.id for p in plans]
+            req_stmt = (
+                select(PlanningEditRequest)
+                .where(
+                    PlanningEditRequest.planning_id.in_(plan_ids),
+                    PlanningEditRequest.status.in_([
+                        EstadoSolicitudReapertura.APPROVED,
+                        EstadoSolicitudReapertura.PARTIALLY_APPROVED,
+                    ]),
+                )
+                .with_for_update()
+            )
+            req_res = await self.session.execute(req_stmt)
+            active_requests = list(req_res.scalars().all())
+            for req in active_requests:
+                req.status = EstadoSolicitudReapertura.COMPLETED
+                req.version = (req.version or 1) + 1
+                req.updated_at = now
 
         # Audit
         action = "ENTREGA_CURRICULAR_REENVIADA" if new_version > 1 else "ENTREGA_CURRICULAR_ENVIADA"
@@ -297,8 +407,33 @@ class RevisionCurricularService:
                 "estado": new_state.value,
                 "notas_entrega": dto.notas_entrega,
                 "snapshot_checksum": snapshot.get("checksum_consolidado"),
+                "relocked_ra_ids": relocked_ra_ids,
             },
         )
+        if new_version > 1:
+            await self._audit(
+                actor_id=actor.id,
+                referencia_id=referencia_id,
+                entidad="EntregaRevisionCurricular",
+                entidad_id=nueva_entrega.id,
+                accion="PLANNING_RESUBMITTED",
+                detalle={
+                    "version": new_version,
+                    "relocked_ra_ids": relocked_ra_ids,
+                    "notas_entrega": dto.notas_entrega,
+                },
+            )
+            notification_dispatcher.emit(
+                event_type="planning.resubmitted",
+                actor_id=actor.id,
+                referencia_id=referencia_id,
+                team_id=proceso.equipo_ejecutor_id,
+                payload={
+                    "entrega_id": str(nueva_entrega.id),
+                    "version": new_version,
+                    "relocked_ra_ids": relocked_ra_ids,
+                },
+            )
 
         await self.session.commit()
         return await self.obtener_detalle_entrega(actor, nueva_entrega.id)
@@ -608,6 +743,7 @@ class RevisionCurricularService:
 
             comp_map: dict[UUID, CompetenciaResumenDTO] = {}
             all_raps: list[RAPResumenDTO] = []
+            ra_locks_meta = data.get("ra_locks") if isinstance(data.get("ra_locks"), dict) else {}
             for r in p.resultados:
                 comp = getattr(r, "competencia", None)
                 if comp is None:
@@ -616,11 +752,23 @@ class RevisionCurricularService:
                 comp_cod = comp.codigo_competencia if comp else "N/A"
                 comp_nom = comp.nombre_competencia if comp else "Competencia"
 
+                ra_meta = ra_locks_meta.get(str(r.id), {}) if isinstance(ra_locks_meta.get(str(r.id)), dict) else {}
+                raw_edit_st = ra_meta.get("edit_status") or getattr(r, "edit_status", EstadoEdicionRA.EDITABLE)
+                edit_st_str = raw_edit_st.value if hasattr(raw_edit_st, "value") else str(raw_edit_st)
+
                 rap_dto = RAPResumenDTO(
                     id=r.id,
                     codigo=r.codigo_resultado,
                     descripcion=r.descripcion,
                     tipo_resultado=None,
+                    edit_status=edit_st_str,
+                    locked_at=getattr(r, "locked_at", None),
+                    locked_by=getattr(r, "locked_by", None),
+                    unlocked_at=getattr(r, "unlocked_at", None),
+                    unlocked_by=getattr(r, "unlocked_by", None),
+                    unlock_request_id=getattr(r, "unlock_request_id", None),
+                    approved_version=getattr(r, "approved_version", 0) or 0,
+                    approved_at=getattr(r, "approved_at", None),
                 )
                 all_raps.append(rap_dto)
 
@@ -652,9 +800,17 @@ class RevisionCurricularService:
                 or ""
             ).strip() or None
 
+            rev_st = getattr(p, "review_status", EstadoRevisionPlaneacion.DRAFT)
+            app_st = getattr(p, "approval_status", EstadoAprobacionPlaneacion.PENDING)
+            ed_st = getattr(p, "edit_status", EstadoEdicionRA.EDITABLE)
+
             item_dto = PlaneacionRevisionItemDTO(
                 id=p.id,
                 estado=p.estado.value if hasattr(p.estado, "value") else str(p.estado),
+                review_status=rev_st.value if hasattr(rev_st, "value") else str(rev_st),
+                approval_status=app_st.value if hasattr(app_st, "value") else str(app_st),
+                edit_status=ed_st.value if hasattr(ed_st, "value") else str(ed_st),
+                official_version=getattr(p, "official_version", 0) or 0,
                 fase=FaseResumenDTO(
                     id=p.fase.id if p.fase else None,
                     nombre=p.fase.nombre_fase if p.fase else "Fase",
@@ -793,6 +949,7 @@ class RevisionCurricularService:
         h_total = self._parse_float(data.get("duracion_actividad_horas") or data.get("duracion_horas")) or (h_direct + h_indep)
 
         comp_map: dict[UUID, CompetenciaResumenDTO] = {}
+        ra_locks_meta = data.get("ra_locks") if isinstance(data.get("ra_locks"), dict) else {}
         for r in p.resultados:
             comp = getattr(r, "competencia", None)
             if comp is None:
@@ -801,11 +958,23 @@ class RevisionCurricularService:
             comp_cod = comp.codigo_competencia if comp else "N/A"
             comp_nom = comp.nombre_competencia if comp else "Competencia"
 
+            ra_meta = ra_locks_meta.get(str(r.id), {}) if isinstance(ra_locks_meta.get(str(r.id)), dict) else {}
+            raw_edit_st = ra_meta.get("edit_status") or getattr(r, "edit_status", EstadoEdicionRA.EDITABLE)
+            edit_st_str = raw_edit_st.value if hasattr(raw_edit_st, "value") else str(raw_edit_st)
+
             rap_dto = RAPResumenDTO(
                 id=r.id,
                 codigo=r.codigo_resultado,
                 descripcion=r.descripcion,
                 tipo_resultado=None,
+                edit_status=edit_st_str,
+                locked_at=getattr(r, "locked_at", None),
+                locked_by=getattr(r, "locked_by", None),
+                unlocked_at=getattr(r, "unlocked_at", None),
+                unlocked_by=getattr(r, "unlocked_by", None),
+                unlock_request_id=getattr(r, "unlock_request_id", None),
+                approved_version=getattr(r, "approved_version", 0) or 0,
+                approved_at=getattr(r, "approved_at", None),
             )
             if comp_id not in comp_map:
                 comp_map[comp_id] = CompetenciaResumenDTO(
@@ -864,11 +1033,19 @@ class RevisionCurricularService:
         evidencia_text = str(data.get("descripcion_evidencia_aprendizaje") or "").strip()
         observaciones_didacticas = str(data.get("observaciones") or "").strip() or None
 
+        rev_st = getattr(p, "review_status", EstadoRevisionPlaneacion.DRAFT)
+        app_st = getattr(p, "approval_status", EstadoAprobacionPlaneacion.PENDING)
+        ed_st = getattr(p, "edit_status", EstadoEdicionRA.EDITABLE)
+
         return PlaneacionRevisionDetalleDTO(
             id=p.id,
             entrega_id=entrega.id,
             version_entrega=entrega.version,
             estado=p.estado.value if hasattr(p.estado, "value") else str(p.estado),
+            review_status=rev_st.value if hasattr(rev_st, "value") else str(rev_st),
+            approval_status=app_st.value if hasattr(app_st, "value") else str(app_st),
+            edit_status=ed_st.value if hasattr(ed_st, "value") else str(ed_st),
+            official_version=getattr(p, "official_version", 0) or 0,
             fase=FaseResumenDTO(
                 id=p.fase.id if p.fase else None,
                 nombre=p.fase.nombre_fase if p.fase else "Fase",
@@ -1100,10 +1277,25 @@ class RevisionCurricularService:
                 detail="Debes crear al menos una observación antes de solicitar ajustes.",
             )
 
+        now = datetime.now(UTC)
         entrega.estado = EstadoEntregaRevision.AJUSTES_SOLICITADOS
         entrega.ajustes_solicitados_por_id = actor.id
-        entrega.fecha_ajustes_solicitados = datetime.now(UTC)
+        entrega.fecha_ajustes_solicitados = now
         entrega.descarga_habilitada = False
+
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(PlaneacionPedagogica.proyecto_id == entrega.proyecto_id)
+            .options(selectinload(PlaneacionPedagogica.resultados))
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        for p in plan_res.scalars().all():
+            p.review_status = EstadoRevisionPlaneacion.OBSERVED
+            if p.approval_status == EstadoAprobacionPlaneacion.PENDING:
+                p.edit_status = EstadoEdicionRA.EDITABLE
+                for r in p.resultados:
+                    if (getattr(r, "approved_version", 0) or 0) == 0:
+                        r.edit_status = EstadoEdicionRA.EDITABLE
 
         await self._audit(
             actor_id=actor.id,
@@ -1126,7 +1318,7 @@ class RevisionCurricularService:
         entrega_id: UUID,
         dto: AprobacionRequestDTO,
     ) -> EntregaRevisionDetalleDTO:
-        """Formally approve the delivery and authorize consolidated download."""
+        """Formally approve the delivery, authorize download, and transactionally lock all associated Learning Results."""
         self._require_pedagogical_reviewer(actor)
 
         stmt = (
@@ -1168,6 +1360,195 @@ class RevisionCurricularService:
         entrega.fecha_descarga_habilitada = now
         entrega.notas_aprobacion = dto.notas_aprobacion
 
+        # Preserve official consolidated document metadata on PlaneacionDocumentoConfig
+        config_stmt = (
+            select(PlaneacionDocumentoConfig)
+            .where(PlaneacionDocumentoConfig.proyecto_id == entrega.proyecto_id)
+            .with_for_update()
+        )
+        config_res = await self.session.execute(config_stmt)
+        doc_config = config_res.scalar_one_or_none()
+        if doc_config:
+            doc_config.official_storage_key = doc_config.storage_key
+            doc_config.official_file_name = doc_config.file_name
+            doc_config.official_checksum_sha256 = doc_config.checksum_sha256
+            doc_config.official_version = entrega.version
+
+        # Transactionally lock all plannings and Learning Results (RAs)
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(
+                PlaneacionPedagogica.proyecto_id == entrega.proyecto_id,
+                PlaneacionPedagogica.estado == EstadoBloque.COMPLETO,
+            )
+            .options(
+                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.conocimientos),
+                selectinload(PlaneacionPedagogica.criterios),
+            )
+            .with_for_update()
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        plans = list(plan_res.scalars().all())
+
+        is_reapproval = entrega.version > 1
+        locked_ra_ids: list[str] = []
+
+        for p in plans:
+            was_reopened = (
+                p.approval_status == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED
+                or (getattr(p, "official_version", 0) or 0) >= 1
+                or is_reapproval
+            )
+            p.review_status = EstadoRevisionPlaneacion.APPROVED
+            p.approval_status = EstadoAprobacionPlaneacion.APPROVED
+            p.edit_status = EstadoEdicionRA.LOCKED
+            p.locked_at = now
+            p.locked_by = actor.id
+            p.unlock_request_id = None
+            p.official_storage_key = p.storage_key
+            p.official_file_name = p.file_name
+            p.official_checksum_sha256 = p.checksum_sha256
+            p.official_version = entrega.version
+            p.official_approved_at = now
+            p.official_approved_by = actor.id
+
+            # Mark older versions of RAs in this planning as non-official
+            await self.session.execute(
+                update(LearningResultVersion)
+                .where(LearningResultVersion.planning_id == p.id)
+                .values(is_official=False)
+            )
+
+            datos = deepcopy(p.datos_complementarios or {})
+            ra_locks = datos.get("ra_locks") if isinstance(datos.get("ra_locks"), dict) else {}
+
+            for r in p.resultados:
+                r.edit_status = EstadoEdicionRA.LOCKED
+                r.locked_at = now
+                r.locked_by = actor.id
+                r.unlock_request_id = None
+                r.approved_version = entrega.version
+                r.approved_at = now
+
+                ra_key = str(r.id)
+                locked_ra_ids.append(ra_key)
+                ra_locks[ra_key] = {
+                    "edit_status": EstadoEdicionRA.LOCKED.value,
+                    "locked_at": now.isoformat(),
+                    "locked_by": str(actor.id),
+                    "unlocked_at": r.unlocked_at.isoformat() if r.unlocked_at else None,
+                    "unlocked_by": str(r.unlocked_by) if r.unlocked_by else None,
+                    "unlock_request_id": None,
+                    "approved_version": entrega.version,
+                    "approved_at": now.isoformat(),
+                }
+
+                await self.session.execute(
+                    update(planeacion_resultados)
+                    .where(
+                        planeacion_resultados.c.planeacion_id == p.id,
+                        planeacion_resultados.c.resultado_id == r.id,
+                    )
+                    .values(
+                        edit_status=EstadoEdicionRA.LOCKED,
+                        locked_at=now,
+                        locked_by=actor.id,
+                        unlock_request_id=None,
+                        approved_version=entrega.version,
+                        approved_at=now,
+                    )
+                )
+
+                version_record = LearningResultVersion(
+                    id=uuid.uuid4(),
+                    planning_id=p.id,
+                    learning_result_id=r.id,
+                    version_number=entrega.version,
+                    snapshot_data=self._extract_ra_snapshot(p, r),
+                    approved_by=actor.id,
+                    approved_at=now,
+                    is_official=True,
+                )
+                self.session.add(version_record)
+
+                await self._audit(
+                    actor_id=actor.id,
+                    referencia_id=entrega.referencia_id,
+                    entidad="ResultadoAprendizaje",
+                    entidad_id=r.id,
+                    accion="LEARNING_RESULT_LOCKED",
+                    detalle={
+                        "planeacion_id": str(p.id),
+                        "learning_result_id": ra_key,
+                        "codigo_resultado": r.codigo_resultado,
+                        "version": entrega.version,
+                    },
+                )
+                if was_reopened:
+                    await self._audit(
+                        actor_id=actor.id,
+                        referencia_id=entrega.referencia_id,
+                        entidad="ResultadoAprendizaje",
+                        entidad_id=r.id,
+                        accion="LEARNING_RESULT_REAPPROVED",
+                        detalle={
+                            "planeacion_id": str(p.id),
+                            "learning_result_id": ra_key,
+                            "version": entrega.version,
+                        },
+                    )
+                    await self._audit(
+                        actor_id=actor.id,
+                        referencia_id=entrega.referencia_id,
+                        entidad="ResultadoAprendizaje",
+                        entidad_id=r.id,
+                        accion="LEARNING_RESULT_RELOCKED",
+                        detalle={
+                            "planeacion_id": str(p.id),
+                            "learning_result_id": ra_key,
+                            "version": entrega.version,
+                        },
+                    )
+
+            datos["ra_locks"] = ra_locks
+            p.datos_complementarios = datos
+
+            await self._audit(
+                actor_id=actor.id,
+                referencia_id=entrega.referencia_id,
+                entidad="PlaneacionPedagogica",
+                entidad_id=p.id,
+                accion="PLANNING_APPROVED",
+                detalle={
+                    "planeacion_id": str(p.id),
+                    "version": entrega.version,
+                    "review_status": EstadoRevisionPlaneacion.APPROVED.value,
+                    "approval_status": EstadoAprobacionPlaneacion.APPROVED.value,
+                    "edit_status": EstadoEdicionRA.LOCKED.value,
+                },
+            )
+
+        # Complete any remaining open APPROVED/PARTIALLY_APPROVED edit requests
+        if plans:
+            plan_ids = [p.id for p in plans]
+            req_stmt = (
+                select(PlanningEditRequest)
+                .where(
+                    PlanningEditRequest.planning_id.in_(plan_ids),
+                    PlanningEditRequest.status.in_([
+                        EstadoSolicitudReapertura.APPROVED,
+                        EstadoSolicitudReapertura.PARTIALLY_APPROVED,
+                    ]),
+                )
+                .with_for_update()
+            )
+            req_res = await self.session.execute(req_stmt)
+            for req in req_res.scalars().all():
+                req.status = EstadoSolicitudReapertura.COMPLETED
+                req.version = (req.version or 1) + 1
+                req.updated_at = now
+
         # Refresh snapshot with finalized checksums
         entrega.snapshot_metadatos = await self._build_snapshot_metadatos(entrega.proyecto_id)
 
@@ -1181,6 +1562,7 @@ class RevisionCurricularService:
                 "version": entrega.version,
                 "notas_aprobacion": dto.notas_aprobacion,
                 "checksum_aprobado": entrega.snapshot_metadatos.get("checksum_consolidado"),
+                "locked_ra_ids": locked_ra_ids,
             },
         )
         await self._audit(
@@ -1191,6 +1573,19 @@ class RevisionCurricularService:
             accion="DESCARGA_CONSOLIDADO_HABILITADA",
             detalle={"version": entrega.version},
         )
+
+        if is_reapproval:
+            notification_dispatcher.emit(
+                event_type="planning.reapproved",
+                actor_id=actor.id,
+                referencia_id=entrega.referencia_id,
+                team_id=entrega.equipo_ejecutor_id,
+                payload={
+                    "entrega_id": str(entrega.id),
+                    "version": entrega.version,
+                    "locked_ra_ids": locked_ra_ids,
+                },
+            )
 
         await self.session.commit()
         return await self.obtener_detalle_entrega(actor, entrega.id)
@@ -1209,6 +1604,7 @@ class RevisionCurricularService:
                 EntregaRevisionCurricular.descarga_habilitada.is_(True),
             )
             .order_by(EntregaRevisionCurricular.version.desc())
+            .limit(1)
         )
         res = await self.session.execute(stmt)
         approved = res.scalar_one_or_none()
@@ -1217,13 +1613,16 @@ class RevisionCurricularService:
 
         # Anti-tampering check: verify that current planning count and checksum match the approved snapshot
         current_snapshot = await self._build_snapshot_metadatos(proyecto_id)
+        if current_snapshot.get("has_authorized_reopening"):
+            return True, None
+
         approved_snapshot = approved.snapshot_metadatos or {}
 
         if (
             current_snapshot.get("planeaciones_count") != approved_snapshot.get("planeaciones_count")
             or current_snapshot.get("checksum_consolidado") != approved_snapshot.get("checksum_consolidado")
         ):
-            # Invalidate approval because contents changed after approval
+            # Invalidate approval because contents changed after approval without authorized reopening
             approved.descarga_habilitada = False
             approved.estado = EstadoEntregaRevision.BORRADOR
             await self._audit(
@@ -1266,8 +1665,723 @@ class RevisionCurricularService:
             )
 
     # -------------------------------------------------------------------------
+    # Controlled Reopening & Edit Requests (PlanningEditRequest)
+    # -------------------------------------------------------------------------
+
+    async def crear_solicitud_reapertura(
+        self,
+        actor: Usuario,
+        dto: PlanningEditRequestCreateDTO,
+    ) -> PlanningEditRequestDTO:
+        """Create a formal request from the Executor Team Leader to unlock specific approved Learning Results."""
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(PlaneacionPedagogica.id == dto.planning_id)
+            .options(
+                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlaneacionPedagogica.actividad),
+            )
+            .with_for_update()
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        planeacion = plan_res.scalar_one_or_none()
+        if not planeacion:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planeación pedagógica no encontrada.")
+
+        # Resolve ProcesoCurricular and EquipoEjecutor
+        proc_stmt = (
+            select(ProcesoCurricular)
+            .where(ProcesoCurricular.proyecto_id == planeacion.proyecto_id)
+            .options(
+                selectinload(ProcesoCurricular.equipo_ejecutor).selectinload(EquipoEjecutor.lider),
+                selectinload(ProcesoCurricular.programa),
+                selectinload(ProcesoCurricular.proyecto),
+            )
+        )
+        proc_res = await self.session.execute(proc_stmt)
+        proceso = proc_res.scalar_one_or_none()
+        if not proceso or not proceso.equipo_ejecutor:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La planeación no está vinculada a un proceso curricular con Equipo Ejecutor activo.",
+            )
+
+        # Only the Team Leader of the owning Executor Team can create an edit request
+        is_team_leader = (
+            actor.has_role(RolUsuario.LIDER_EQUIPO_EJECUTOR.value)
+            and (
+                getattr(proceso, "lider_id", None) == actor.id
+                or getattr(proceso, "usuario_lider_id", None) == actor.id
+                or proceso.equipo_ejecutor.lider_id == actor.id
+            )
+        )
+        if not is_team_leader:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo el Líder del Equipo Ejecutor titular puede solicitar la reapertura de Resultados de Aprendizaje aprobados.",
+            )
+
+        # Verify planning is approved and download is enabled
+        latest_approved_stmt = (
+            select(EntregaRevisionCurricular)
+            .where(
+                EntregaRevisionCurricular.proyecto_id == planeacion.proyecto_id,
+                EntregaRevisionCurricular.estado == EstadoEntregaRevision.APROBADO,
+                EntregaRevisionCurricular.descarga_habilitada.is_(True),
+            )
+            .order_by(EntregaRevisionCurricular.version.desc())
+        )
+        approved_delivery = (await self.session.execute(latest_approved_stmt)).scalars().first()
+        is_planning_approved = (
+            planeacion.approval_status in (
+                EstadoAprobacionPlaneacion.APPROVED,
+                EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED,
+            )
+            or approved_delivery is not None
+        )
+        if not is_planning_approved:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Solo se puede solicitar modificación sobre una planeación aprobada con descarga habilitada.",
+            )
+
+        # Validate requested learning results belong to this planning and are currently LOCKED
+        plan_ra_map = {r.id: r for r in planeacion.resultados}
+        requested_ids: list[UUID] = []
+        seen: set[UUID] = set()
+        for ra_id in dto.learning_result_ids:
+            if ra_id in seen:
+                continue
+            seen.add(ra_id)
+            if ra_id not in plan_ra_map:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El Resultado de Aprendizaje {ra_id} no pertenece a esta planeación pedagógica.",
+                )
+            ra_obj = plan_ra_map[ra_id]
+            if getattr(ra_obj, "edit_status", EstadoEdicionRA.EDITABLE) != EstadoEdicionRA.LOCKED:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"El Resultado de Aprendizaje '{ra_obj.codigo_resultado or ra_obj.id}' ya se encuentra habilitado para edición.",
+                )
+            requested_ids.append(ra_id)
+
+        if not requested_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Debe seleccionar al menos un Resultado de Aprendizaje para solicitar modificación.",
+            )
+
+        # Prevent duplicate PENDING requests for any of the requested RAs
+        dup_stmt = (
+            select(PlanningEditRequest)
+            .join(PlanningEditRequestItem, PlanningEditRequestItem.request_id == PlanningEditRequest.id)
+            .where(
+                PlanningEditRequest.planning_id == planeacion.id,
+                PlanningEditRequest.status == EstadoSolicitudReapertura.PENDING,
+                PlanningEditRequestItem.learning_result_id.in_(requested_ids),
+            )
+        )
+        dup_existing = (await self.session.execute(dup_stmt)).scalars().first()
+        if dup_existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "DUPLICATE_PENDING_EDIT_REQUEST",
+                    "message": "Ya existe una solicitud de modificación pendiente de revisión para uno o más de los Resultados de Aprendizaje seleccionados.",
+                },
+            )
+
+        now = datetime.now(UTC)
+        edit_req = PlanningEditRequest(
+            id=uuid.uuid4(),
+            planning_id=planeacion.id,
+            team_id=proceso.equipo_ejecutor.id,
+            referencia_id=proceso.referencia_id,
+            requested_by=actor.id,
+            reason=dto.reason.strip(),
+            requested_changes=dto.requested_changes.strip(),
+            status=EstadoSolicitudReapertura.PENDING,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(edit_req)
+
+        for ra_id in requested_ids:
+            item = PlanningEditRequestItem(
+                id=uuid.uuid4(),
+                request_id=edit_req.id,
+                learning_result_id=ra_id,
+                requested=True,
+                approved=False,
+            )
+            self.session.add(item)
+
+        await self._audit(
+            actor_id=actor.id,
+            referencia_id=proceso.referencia_id,
+            entidad="PlanningEditRequest",
+            entidad_id=edit_req.id,
+            accion="EDIT_REQUEST_CREATED",
+            detalle={
+                "request_id": str(edit_req.id),
+                "planning_id": str(planeacion.id),
+                "learning_result_ids": [str(rid) for rid in requested_ids],
+                "reason": edit_req.reason,
+                "requested_changes": edit_req.requested_changes,
+            },
+        )
+
+        notification_dispatcher.emit(
+            event_type="edit_request.created",
+            actor_id=actor.id,
+            referencia_id=proceso.referencia_id,
+            planning_id=planeacion.id,
+            request_id=edit_req.id,
+            team_id=proceso.equipo_ejecutor.id,
+            payload={
+                "learning_result_ids": [str(rid) for rid in requested_ids],
+                "reason": edit_req.reason,
+            },
+        )
+
+        await self.session.commit()
+        return await self.obtener_solicitud_reapertura(actor, edit_req.id)
+
+    async def listar_solicitudes_reapertura(
+        self,
+        actor: Usuario,
+        planning_id: UUID | None = None,
+        referencia_id: UUID | None = None,
+        status_filter: EstadoSolicitudReapertura | None = None,
+    ) -> list[PlanningEditRequestDTO]:
+        """List edit requests visible to the actor (Pedagogical Admin or Executor Team member)."""
+        is_reviewer = actor.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value)
+        if not is_reviewer:
+            if planning_id:
+                if not await self.scope_service.can_access_planning(actor, planning_id):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación.")
+            elif referencia_id:
+                await self.scope_service.require_process_access(actor, referencia_id)
+            else:
+                team_ids = await self.scope_service.get_user_team_ids(actor.id)
+                if not team_ids:
+                    return []
+
+        stmt = (
+            select(PlanningEditRequest)
+            .options(
+                selectinload(PlanningEditRequest.items).selectinload(PlanningEditRequestItem.learning_result),
+                selectinload(PlanningEditRequest.planning).selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlanningEditRequest.planning).selectinload(PlaneacionPedagogica.actividad),
+                selectinload(PlanningEditRequest.team),
+                selectinload(PlanningEditRequest.requester),
+                selectinload(PlanningEditRequest.reviewer),
+            )
+            .order_by(PlanningEditRequest.fecha_creacion.desc())
+        )
+
+        if planning_id:
+            stmt = stmt.where(PlanningEditRequest.planning_id == planning_id)
+        if referencia_id:
+            stmt = stmt.where(PlanningEditRequest.referencia_id == referencia_id)
+        if status_filter:
+            stmt = stmt.where(PlanningEditRequest.status == status_filter)
+        if not is_reviewer and not planning_id and not referencia_id:
+            team_ids = await self.scope_service.get_user_team_ids(actor.id)
+            stmt = stmt.where(PlanningEditRequest.team_id.in_(team_ids))
+
+        res = await self.session.execute(stmt)
+        requests = list(res.scalars().all())
+        return [await self._to_edit_request_dto(r) for r in requests]
+
+    async def obtener_solicitud_reapertura(
+        self,
+        actor: Usuario,
+        request_id: UUID,
+    ) -> PlanningEditRequestDTO:
+        """Fetch one edit request with its learning result items and context."""
+        stmt = (
+            select(PlanningEditRequest)
+            .where(PlanningEditRequest.id == request_id)
+            .options(
+                selectinload(PlanningEditRequest.items).selectinload(PlanningEditRequestItem.learning_result),
+                selectinload(PlanningEditRequest.planning).selectinload(PlaneacionPedagogica.fase),
+                selectinload(PlanningEditRequest.planning).selectinload(PlaneacionPedagogica.actividad),
+                selectinload(PlanningEditRequest.team),
+                selectinload(PlanningEditRequest.requester),
+                selectinload(PlanningEditRequest.reviewer),
+            )
+        )
+        res = await self.session.execute(stmt)
+        req = res.scalar_one_or_none()
+        if not req:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud de modificación no encontrada.")
+
+        if not actor.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+            if not await self.scope_service.can_access_planning(actor, req.planning_id):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la solicitud.")
+
+        return await self._to_edit_request_dto(req)
+
+    async def aprobar_solicitud_reapertura(
+        self,
+        actor: Usuario,
+        request_id: UUID,
+        dto: PlanningEditRequestApproveDTO,
+    ) -> PlanningEditRequestDTO:
+        """Approve all or a subset of requested Learning Results, unlocking only the authorized ones."""
+        self._require_pedagogical_reviewer(actor)
+
+        stmt = (
+            select(PlanningEditRequest)
+            .where(PlanningEditRequest.id == request_id)
+            .options(selectinload(PlanningEditRequest.items))
+            .with_for_update()
+        )
+        res = await self.session.execute(stmt)
+        req = res.scalar_one_or_none()
+        if not req:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud de modificación no encontrada.")
+
+        if req.status != EstadoSolicitudReapertura.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "EDIT_REQUEST_ALREADY_PROCESSED",
+                    "message": f"La solicitud ya fue procesada (estado actual: {req.status.value}).",
+                },
+            )
+
+        requested_map = {item.learning_result_id: item for item in req.items if item.requested}
+        approved_set = set(dto.approved_learning_result_ids)
+        if not approved_set:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Debe seleccionar al menos un Resultado de Aprendizaje para autorizar.",
+            )
+        invalid_ids = approved_set - set(requested_map.keys())
+        if invalid_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uno o más Resultados de Aprendizaje seleccionados no forman parte de la solicitud original.",
+            )
+
+        is_partial = len(approved_set) < len(requested_map)
+        new_status = (
+            EstadoSolicitudReapertura.PARTIALLY_APPROVED
+            if is_partial
+            else EstadoSolicitudReapertura.APPROVED
+        )
+
+        now = datetime.now(UTC)
+        for item in req.items:
+            item.approved = item.learning_result_id in approved_set
+
+        req.status = new_status
+        req.reviewed_by = actor.id
+        req.admin_response = dto.admin_response.strip() if dto.admin_response else None
+        req.reviewed_at = now
+        req.version = (req.version or 1) + 1
+        req.updated_at = now
+
+        # Load planning and its RAs with row lock
+        plan_stmt = (
+            select(PlaneacionPedagogica)
+            .where(PlaneacionPedagogica.id == req.planning_id)
+            .options(
+                selectinload(PlaneacionPedagogica.resultados),
+                selectinload(PlaneacionPedagogica.conocimientos),
+                selectinload(PlaneacionPedagogica.criterios),
+            )
+            .with_for_update()
+        )
+        plan_res = await self.session.execute(plan_stmt)
+        planeacion = plan_res.scalar_one_or_none()
+        if not planeacion:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Planeación pedagógica no encontrada.")
+
+        # Preserve official storage key on planning and document config before allowing changes
+        if not planeacion.official_storage_key and planeacion.storage_key:
+            planeacion.official_storage_key = planeacion.storage_key
+            planeacion.official_file_name = planeacion.file_name
+            planeacion.official_checksum_sha256 = planeacion.checksum_sha256
+            if not planeacion.official_version:
+                planeacion.official_version = 1
+
+        config_stmt = (
+            select(PlaneacionDocumentoConfig)
+            .where(PlaneacionDocumentoConfig.proyecto_id == planeacion.proyecto_id)
+            .with_for_update()
+        )
+        doc_config = (await self.session.execute(config_stmt)).scalar_one_or_none()
+        if doc_config and not doc_config.official_storage_key and doc_config.storage_key:
+            doc_config.official_storage_key = doc_config.storage_key
+            doc_config.official_file_name = doc_config.file_name
+            doc_config.official_checksum_sha256 = doc_config.checksum_sha256
+            if not doc_config.official_version:
+                doc_config.official_version = doc_config.version or 1
+
+        planeacion.review_status = EstadoRevisionPlaneacion.CHANGES_ALLOWED
+        planeacion.approval_status = EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED
+        planeacion.edit_status = EstadoEdicionRA.EDITABLE
+        planeacion.unlocked_at = now
+        planeacion.unlocked_by = actor.id
+        planeacion.unlock_request_id = req.id
+
+        datos = deepcopy(planeacion.datos_complementarios or {})
+        ra_locks = datos.get("ra_locks") if isinstance(datos.get("ra_locks"), dict) else {}
+
+        for r in planeacion.resultados:
+            ra_key = str(r.id)
+            if r.id in approved_set:
+                # Ensure a snapshot of the approved RA state exists in LearningResultVersion before unlocking
+                ver_exists_stmt = select(LearningResultVersion.id).where(
+                    LearningResultVersion.planning_id == planeacion.id,
+                    LearningResultVersion.learning_result_id == r.id,
+                )
+                if (await self.session.execute(ver_exists_stmt)).scalars().first() is None:
+                    self.session.add(
+                        LearningResultVersion(
+                            id=uuid.uuid4(),
+                            planning_id=planeacion.id,
+                            learning_result_id=r.id,
+                            version_number=max(getattr(r, "approved_version", 1) or 1, 1),
+                            snapshot_data=self._extract_ra_snapshot(planeacion, r),
+                            approved_by=getattr(r, "locked_by", None) or actor.id,
+                            approved_at=getattr(r, "approved_at", None) or now,
+                            is_official=True,
+                        )
+                    )
+
+                r.edit_status = EstadoEdicionRA.EDITABLE
+                r.unlocked_at = now
+                r.unlocked_by = actor.id
+                r.unlock_request_id = req.id
+
+                prev_meta = ra_locks.get(ra_key, {}) if isinstance(ra_locks.get(ra_key), dict) else {}
+                ra_locks[ra_key] = {
+                    **prev_meta,
+                    "edit_status": EstadoEdicionRA.EDITABLE.value,
+                    "unlocked_at": now.isoformat(),
+                    "unlocked_by": str(actor.id),
+                    "unlock_request_id": str(req.id),
+                }
+                await self.session.execute(
+                    update(planeacion_resultados)
+                    .where(
+                        planeacion_resultados.c.planeacion_id == planeacion.id,
+                        planeacion_resultados.c.resultado_id == r.id,
+                    )
+                    .values(
+                        edit_status=EstadoEdicionRA.EDITABLE,
+                        unlocked_at=now,
+                        unlocked_by=actor.id,
+                        unlock_request_id=req.id,
+                    )
+                )
+                await self._audit(
+                    actor_id=actor.id,
+                    referencia_id=req.referencia_id,
+                    entidad="ResultadoAprendizaje",
+                    entidad_id=r.id,
+                    accion="LEARNING_RESULT_UNLOCKED",
+                    detalle={
+                        "request_id": str(req.id),
+                        "planning_id": str(planeacion.id),
+                        "learning_result_id": ra_key,
+                        "codigo_resultado": r.codigo_resultado,
+                    },
+                )
+            else:
+                # Ensure non-authorized RAs remain strictly LOCKED
+                if getattr(r, "edit_status", EstadoEdicionRA.LOCKED) != EstadoEdicionRA.EDITABLE:
+                    r.edit_status = EstadoEdicionRA.LOCKED
+                    prev_meta = ra_locks.get(ra_key, {}) if isinstance(ra_locks.get(ra_key), dict) else {}
+                    ra_locks[ra_key] = {
+                        **prev_meta,
+                        "edit_status": EstadoEdicionRA.LOCKED.value,
+                    }
+
+        datos["ra_locks"] = ra_locks
+        planeacion.datos_complementarios = datos
+
+        audit_action = (
+            "EDIT_REQUEST_PARTIALLY_APPROVED"
+            if is_partial
+            else "EDIT_REQUEST_APPROVED"
+        )
+        await self._audit(
+            actor_id=actor.id,
+            referencia_id=req.referencia_id,
+            entidad="PlanningEditRequest",
+            entidad_id=req.id,
+            accion=audit_action,
+            detalle={
+                "request_id": str(req.id),
+                "planning_id": str(planeacion.id),
+                "status": new_status.value,
+                "approved_learning_result_ids": [str(rid) for rid in approved_set],
+                "admin_response": req.admin_response,
+            },
+        )
+
+        event_type = (
+            "edit_request.partially_approved"
+            if is_partial
+            else "edit_request.approved"
+        )
+        notification_dispatcher.emit(
+            event_type=event_type,
+            actor_id=actor.id,
+            recipient_ids=[req.requested_by],
+            referencia_id=req.referencia_id,
+            planning_id=planeacion.id,
+            request_id=req.id,
+            team_id=req.team_id,
+            payload={
+                "status": new_status.value,
+                "approved_learning_result_ids": [str(rid) for rid in approved_set],
+                "admin_response": req.admin_response,
+            },
+        )
+
+        await self.session.commit()
+        return await self.obtener_solicitud_reapertura(actor, req.id)
+
+    async def rechazar_solicitud_reapertura(
+        self,
+        actor: Usuario,
+        request_id: UUID,
+        dto: PlanningEditRequestRejectDTO,
+    ) -> PlanningEditRequestDTO:
+        """Reject an edit request, keeping all Learning Results LOCKED."""
+        self._require_pedagogical_reviewer(actor)
+
+        stmt = (
+            select(PlanningEditRequest)
+            .where(PlanningEditRequest.id == request_id)
+            .options(selectinload(PlanningEditRequest.items))
+            .with_for_update()
+        )
+        res = await self.session.execute(stmt)
+        req = res.scalar_one_or_none()
+        if not req:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud de modificación no encontrada.")
+
+        if req.status != EstadoSolicitudReapertura.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "EDIT_REQUEST_ALREADY_PROCESSED",
+                    "message": f"La solicitud ya fue procesada (estado actual: {req.status.value}).",
+                },
+            )
+
+        now = datetime.now(UTC)
+        for item in req.items:
+            item.approved = False
+
+        req.status = EstadoSolicitudReapertura.REJECTED
+        req.reviewed_by = actor.id
+        req.admin_response = dto.admin_response.strip() if dto.admin_response else None
+        req.reviewed_at = now
+        req.version = (req.version or 1) + 1
+        req.updated_at = now
+
+        await self._audit(
+            actor_id=actor.id,
+            referencia_id=req.referencia_id,
+            entidad="PlanningEditRequest",
+            entidad_id=req.id,
+            accion="EDIT_REQUEST_REJECTED",
+            detalle={
+                "request_id": str(req.id),
+                "planning_id": str(req.planning_id),
+                "admin_response": req.admin_response,
+            },
+        )
+
+        notification_dispatcher.emit(
+            event_type="edit_request.rejected",
+            actor_id=actor.id,
+            recipient_ids=[req.requested_by],
+            referencia_id=req.referencia_id,
+            planning_id=req.planning_id,
+            request_id=req.id,
+            team_id=req.team_id,
+            payload={
+                "status": EstadoSolicitudReapertura.REJECTED.value,
+                "admin_response": req.admin_response,
+            },
+        )
+
+        await self.session.commit()
+        return await self.obtener_solicitud_reapertura(actor, req.id)
+
+    async def listar_versiones_resultado(
+        self,
+        actor: Usuario,
+        planning_id: UUID,
+        learning_result_id: UUID | None = None,
+    ) -> list[LearningResultVersionDTO]:
+        """Return approved version history snapshots for Learning Results in a planning."""
+        if not actor.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
+            if not await self.scope_service.can_access_planning(actor, planning_id):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a la planeación.")
+
+        stmt = (
+            select(LearningResultVersion)
+            .where(LearningResultVersion.planning_id == planning_id)
+            .options(selectinload(LearningResultVersion.approver))
+            .order_by(LearningResultVersion.version_number.desc(), LearningResultVersion.approved_at.desc())
+        )
+        if learning_result_id:
+            stmt = stmt.where(LearningResultVersion.learning_result_id == learning_result_id)
+
+        res = await self.session.execute(stmt)
+        versions = list(res.scalars().all())
+        return [
+            LearningResultVersionDTO(
+                id=v.id,
+                planning_id=v.planning_id,
+                learning_result_id=v.learning_result_id,
+                version_number=v.version_number,
+                snapshot_data=v.snapshot_data or {},
+                approved_by=v.approved_by,
+                approved_by_name=f"{v.approver.nombre} {v.approver.apellido}" if v.approver else None,
+                approved_by_nombre=f"{v.approver.nombre} {v.approver.apellido}" if v.approver else None,
+                approved_at=v.approved_at,
+                edit_request_id=getattr(v, "edit_request_id", None),
+                is_official=v.is_official,
+                created_at=getattr(v, "created_at", None),
+            )
+            for v in versions
+        ]
+
+    # -------------------------------------------------------------------------
     # Private Helpers
     # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_ra_snapshot(planeacion: PlaneacionPedagogica, resultado: ResultadoAprendizaje) -> dict[str, Any]:
+        """Build a self-contained snapshot of a Learning Result and its didactic configuration within a planning."""
+        datos = planeacion.datos_complementarios or {}
+        rap_map = datos.get("rap_complementary_map") if isinstance(datos.get("rap_complementary_map"), dict) else {}
+        if not rap_map and isinstance(datos.get("raps"), dict):
+            rap_map = datos.get("raps")  # type: ignore[assignment]
+        ra_specific = rap_map.get(str(resultado.id), {}) if isinstance(rap_map.get(str(resultado.id)), dict) else {}
+        return {
+            "learning_result_id": str(resultado.id),
+            "codigo_resultado": resultado.codigo_resultado,
+            "descripcion": resultado.descripcion,
+            "actividades_aprendizaje": ra_specific.get("actividades_aprendizaje") or datos.get("actividades_aprendizaje"),
+            "horas_trabajo_directo": ra_specific.get("horas_trabajo_directo") if "horas_trabajo_directo" in ra_specific else datos.get("horas_trabajo_directo"),
+            "horas_trabajo_independiente": ra_specific.get("horas_trabajo_independiente") if "horas_trabajo_independiente" in ra_specific else datos.get("horas_trabajo_independiente"),
+            "duracion_actividad_horas": ra_specific.get("duracion_actividad_horas") if "duracion_actividad_horas" in ra_specific else datos.get("duracion_actividad_horas"),
+            "estrategias_didacticas": ra_specific.get("estrategias_didacticas") or datos.get("estrategias_didacticas"),
+            "descripcion_evidencia_aprendizaje": ra_specific.get("descripcion_evidencia_aprendizaje") or datos.get("descripcion_evidencia_aprendizaje"),
+            "ambiente": ra_specific.get("ambiente") or datos.get("ambiente") or datos.get("ambientes_aprendizaje"),
+            "materiales_formacion": ra_specific.get("materiales_formacion") or datos.get("materiales_formacion") or datos.get("recursos_didacticos"),
+            "instructores": ra_specific.get("instructores") or datos.get("instructores") or datos.get("instructor_responsable"),
+            "observaciones": ra_specific.get("observaciones") or datos.get("observaciones"),
+            "conocimientos_ids": [str(k.id) for k in (planeacion.conocimientos or [])],
+            "criterios_ids": [str(c.id) for c in (planeacion.criterios or [])],
+            "storage_key": planeacion.storage_key,
+            "file_name": planeacion.file_name,
+        }
+
+    async def _to_edit_request_dto(self, req: PlanningEditRequest) -> PlanningEditRequestDTO:
+        programa_nombre = ""
+        codigo_programa = ""
+        proyecto_codigo = ""
+        proyecto_nombre = ""
+        planning_label = None
+        fase_nom = ""
+        act_desc = ""
+
+        if req.planning:
+            act_desc = req.planning.actividad.descripcion if req.planning.actividad else "Actividad"
+            fase_nom = req.planning.fase.nombre_fase if req.planning.fase else "Fase"
+            planning_label = f"{fase_nom} — {act_desc}"
+
+        if req.referencia_id:
+            proc = await self._get_proceso_by_ref(req.referencia_id)
+            if proc:
+                if proc.programa:
+                    programa_nombre = proc.programa.nombre_programa or ""
+                    codigo_programa = proc.programa.codigo_programa or ""
+                if proc.proyecto:
+                    proyecto_nombre = proc.proyecto.nombre_proyecto or ""
+                    proyecto_codigo = getattr(proc.proyecto, "codigo_proyecto", "") or ""
+
+        items_dto = []
+        for item in (req.items or []):
+            lr = item.learning_result
+            ed_st = getattr(lr, "edit_status", EstadoEdicionRA.LOCKED) if lr else EstadoEdicionRA.LOCKED
+            comp = getattr(lr, "competencia", None) if lr else None
+            items_dto.append(
+                PlanningEditRequestItemDTO(
+                    id=item.id,
+                    request_id=item.request_id,
+                    learning_result_id=item.learning_result_id,
+                    codigo_resultado=lr.codigo_resultado if lr else None,
+                    descripcion=lr.descripcion if lr else "",
+                    descripcion_resultado=lr.descripcion if lr else "",
+                    competencia_codigo=getattr(comp, "codigo_competencia", None) if comp else None,
+                    competencia_nombre=getattr(comp, "nombre_competencia", None) if comp else None,
+                    requested=item.requested,
+                    approved=item.approved,
+                    edit_status=ed_st.value if hasattr(ed_st, "value") else str(ed_st),
+                )
+            )
+
+        created_dt = getattr(req, "created_at", None) or getattr(req, "fecha_creacion", None)
+        short_code = (
+            getattr(req, "codigo", None)
+            or (f"REQ-{created_dt.year}-{str(req.id)[:4].upper()}" if created_dt else f"REQ-{str(req.id)[:8].upper()}")
+        )
+        team_label = req.team.nombre if req.team else ""
+        requester_label = f"{req.requester.nombre} {req.requester.apellido}" if req.requester else ""
+        reviewer_label = f"{req.reviewer.nombre} {req.reviewer.apellido}" if req.reviewer else None
+        status_str = req.status.value if hasattr(req.status, "value") else str(req.status)
+
+        return PlanningEditRequestDTO(
+            id=req.id,
+            codigo=short_code,
+            code=short_code,
+            planning_id=req.planning_id,
+            planning_actividad=planning_label,
+            team_id=req.team_id,
+            team_name=team_label,
+            team_nombre=team_label or None,
+            referencia_id=req.referencia_id,
+            programa_codigo=codigo_programa,
+            codigo_programa=codigo_programa or None,
+            programa_nombre=programa_nombre,
+            proyecto_codigo=proyecto_codigo,
+            proyecto_nombre=proyecto_nombre,
+            fase_nombre=fase_nom,
+            actividad_descripcion=act_desc,
+            requested_by=req.requested_by,
+            requested_by_name=requester_label,
+            requested_by_nombre=requester_label or None,
+            requested_by_email=req.requester.email if req.requester else "",
+            reason=req.reason,
+            requested_changes=req.requested_changes,
+            status=status_str,
+            reviewed_by=req.reviewed_by,
+            reviewed_by_name=reviewer_label,
+            reviewed_by_nombre=reviewer_label,
+            admin_response=req.admin_response,
+            version=req.version or 1,
+            created_at=created_dt or datetime.now(UTC),
+            reviewed_at=req.reviewed_at,
+            items=items_dto,
+        )
+
 
     def _require_pedagogical_reviewer(self, actor: Usuario) -> None:
         if not actor.has_role(RolUsuario.SUPERADMIN.value, RolUsuario.ADMIN.value):
@@ -1331,6 +2445,12 @@ class RevisionCurricularService:
                 "version": doc_config.version,
             }
 
+        has_authorized_reopening = any(
+            getattr(p, "approval_status", None) == EstadoAprobacionPlaneacion.PREVIOUS_VERSION_APPROVED
+            or getattr(p, "review_status", None) == EstadoRevisionPlaneacion.CHANGES_ALLOWED
+            for p in plans
+        )
+
         return {
             "planeaciones_count": len(plans),
             "planeaciones_ids": [str(p.id) for p in plans],
@@ -1338,6 +2458,7 @@ class RevisionCurricularService:
             "storage_key_consolidado": doc_config.storage_key if doc_config else None,
             "version_documento_config": doc_config.version if doc_config else 1,
             "configuracion_documental": config_dict,
+            "has_authorized_reopening": has_authorized_reopening,
             "snapshot_timestamp": datetime.now(UTC).isoformat(),
         }
 
@@ -1370,6 +2491,12 @@ class RevisionCurricularService:
             + counts.get(EstadoEntregaRevision.AJUSTES_EN_PROGRESO.value, 0)
         )
 
+        # Count pending edit requests
+        edit_req_stmt = select(func.count()).where(
+            PlanningEditRequest.status == EstadoSolicitudReapertura.PENDING
+        )
+        solicitudes_pendientes = (await self.session.execute(edit_req_stmt)).scalar() or 0
+
         return {
             "pendientes": enviadas + reenviadas,
             "pendientes_revision": enviadas,
@@ -1378,6 +2505,7 @@ class RevisionCurricularService:
             "con_ajustes_solicitados": con_ajustes,
             "aprobadas": counts.get(EstadoEntregaRevision.APROBADO.value, 0),
             "en_revision": counts.get(EstadoEntregaRevision.EN_REVISION.value, 0),
+            "solicitudes_modificacion_pendientes": solicitudes_pendientes,
         }
 
     async def _get_observacion_dto(self, observacion_id: UUID) -> ObservacionDTO:
