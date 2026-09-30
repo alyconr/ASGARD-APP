@@ -1363,13 +1363,19 @@ class RevisionCurricularService:
         rows = (await self.session.execute(stmt)).all()
         counts = {str(getattr(r[0], "value", r[0])): r[1] for r in rows}
 
+        enviadas = counts.get(EstadoEntregaRevision.ENVIADO_REVISION.value, 0)
+        reenviadas = counts.get(EstadoEntregaRevision.REENVIADO.value, 0)
+        con_ajustes = (
+            counts.get(EstadoEntregaRevision.AJUSTES_SOLICITADOS.value, 0)
+            + counts.get(EstadoEntregaRevision.AJUSTES_EN_PROGRESO.value, 0)
+        )
+
         return {
-            "pendientes_revision": counts.get(EstadoEntregaRevision.ENVIADO_REVISION.value, 0),
-            "reenviadas": counts.get(EstadoEntregaRevision.REENVIADO.value, 0),
-            "con_ajustes_solicitados": (
-                counts.get(EstadoEntregaRevision.AJUSTES_SOLICITADOS.value, 0)
-                + counts.get(EstadoEntregaRevision.AJUSTES_EN_PROGRESO.value, 0)
-            ),
+            "pendientes": enviadas + reenviadas,
+            "pendientes_revision": enviadas,
+            "reenviadas": reenviadas,
+            "ajustes_solicitados": con_ajustes,
+            "con_ajustes_solicitados": con_ajustes,
             "aprobadas": counts.get(EstadoEntregaRevision.APROBADO.value, 0),
             "en_revision": counts.get(EstadoEntregaRevision.EN_REVISION.value, 0),
         }

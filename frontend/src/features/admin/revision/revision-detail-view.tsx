@@ -152,8 +152,13 @@ export function RevisionDetailView({ entregaId, onBack }: RevisionDetailViewProp
       const observations = current.observaciones.some((item) => item.id === observation.id)
         ? current.observaciones.map((item) => (item.id === observation.id ? observation : item))
         : [...current.observaciones, observation];
+      const nextEstado =
+        isNew && (current.estado === "ENVIADO_REVISION" || current.estado === "REENVIADO")
+          ? "EN_REVISION"
+          : current.estado;
       return {
         ...current,
+        estado: nextEstado,
         observaciones: observations,
         observaciones_pendientes_count: observations.filter((item) => item.estado === "PENDIENTE").length,
         observaciones_ajustadas_count: observations.filter((item) => item.estado === "AJUSTE_REPORTADO").length,

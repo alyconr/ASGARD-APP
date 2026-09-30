@@ -15,6 +15,7 @@ import {
   type EntregaRevisionResumen,
   type EstadoEntregaRevision,
   fetchBandejaRevision,
+  iniciarRevisionEntrega,
 } from "@/features/planeacion/planeacion-api";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,17 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
   const [loading, setLoading] = useState(false);
   const [selectedEstado, setSelectedEstado] = useState<EstadoEntregaRevision | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const handleRevisarEntrega = async (item: EntregaRevisionResumen) => {
+    if (item.estado === "ENVIADO_REVISION" || item.estado === "REENVIADO") {
+      try {
+        await iniciarRevisionEntrega(item.id);
+      } catch {
+        // Non-blocking: RevisionDetailView will still load and allow manual start if needed
+      }
+    }
+    onSelectEntrega(item.id);
+  };
 
   const loadBandeja = useCallback(async () => {
     setLoading(true);
@@ -80,6 +92,14 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
     );
   });
 
+  const pendientesCount =
+    metricas["pendientes"] ??
+    (metricas["pendientes_revision"] ?? 0) + (metricas["reenviadas"] ?? 0);
+  const enRevisionCount = metricas["en_revision"] ?? 0;
+  const conAjustesCount =
+    metricas["ajustes_solicitados"] ?? metricas["con_ajustes_solicitados"] ?? 0;
+  const aprobadasCount = metricas["aprobadas"] ?? 0;
+
   return (
     <div className="space-y-6">
       {/* Metric Cards */}
@@ -92,7 +112,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
             <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-amber-900 dark:text-amber-300">
-            {metricas["pendientes"] ?? 0}
+            {pendientesCount}
           </p>
           <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-500">
             Enviadas y reenviadas por equipos
@@ -107,7 +127,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
             <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-sky-900 dark:text-sky-300">
-            {metricas["en_revision"] ?? 0}
+            {enRevisionCount}
           </p>
           <p className="mt-0.5 text-xs text-sky-700 dark:text-sky-500">
             Actualmente bajo análisis pedagógico
@@ -122,7 +142,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
             <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-rose-900 dark:text-rose-300">
-            {metricas["ajustes_solicitados"] ?? 0}
+            {conAjustesCount}
           </p>
           <p className="mt-0.5 text-xs text-rose-700 dark:text-rose-500">
             Devueltas al equipo para corrección
@@ -137,7 +157,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-900 dark:text-emerald-300">
-            {metricas["aprobadas"] ?? 0}
+            {aprobadasCount}
           </p>
           <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-500">
             Descarga oficial habilitada
@@ -164,6 +184,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
             <option value="REENVIADO">Reenviados con Ajustes</option>
             <option value="EN_REVISION">En Revisión</option>
             <option value="AJUSTES_SOLICITADOS">Ajustes Solicitados</option>
+            <option value="AJUSTES_EN_PROGRESO">Ajustes en Progreso</option>
             <option value="APROBADO">Aprobados</option>
           </select>
         </div>
@@ -322,7 +343,7 @@ export function RevisionInbox({ onSelectEntrega }: RevisionInboxProps): React.JS
                       <td className="px-6 py-4 text-right whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => onSelectEntrega(item.id)}
+                          onClick={() => void handleRevisarEntrega(item)}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 transition"
                         >
                           <Eye className="h-3.5 w-3.5" />

@@ -784,3 +784,32 @@ async def test_crear_observacion_validates_section_and_whitelist():
 
     obs = await service.crear_observacion(ctx["admin"], entrega.id, good_sec_dto)
     assert obs.section_key == "DESCRIPCION_EVIDENCIA_APRENDIZAJE"
+
+
+@pytest.mark.anyio
+async def test_calculate_inbox_metrics_matches_frontend_card_keys():
+    session = AsyncMock()
+    scope = AsyncMock()
+
+    mock_res = MagicMock()
+    mock_res.all.return_value = [
+        (EstadoEntregaRevision.ENVIADO_REVISION, 2),
+        (EstadoEntregaRevision.REENVIADO, 1),
+        (EstadoEntregaRevision.EN_REVISION, 3),
+        (EstadoEntregaRevision.AJUSTES_SOLICITADOS, 4),
+        (EstadoEntregaRevision.AJUSTES_EN_PROGRESO, 1),
+        (EstadoEntregaRevision.APROBADO, 5),
+    ]
+    session.execute.return_value = mock_res
+
+    service = RevisionCurricularService(session, scope)
+    metricas = await service._calculate_inbox_metrics()
+
+    assert metricas["pendientes"] == 3
+    assert metricas["pendientes_revision"] == 2
+    assert metricas["reenviadas"] == 1
+    assert metricas["en_revision"] == 3
+    assert metricas["ajustes_solicitados"] == 5
+    assert metricas["con_ajustes_solicitados"] == 5
+    assert metricas["aprobadas"] == 5
+
